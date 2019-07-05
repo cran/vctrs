@@ -3,36 +3,45 @@
 \name{vec_size}
 \alias{vec_size}
 \alias{vec_size_common}
+\alias{vec_is_empty}
 \title{Number of observations}
 \usage{
 vec_size(x)
 
-vec_size_common(..., .size = NULL)
+vec_size_common(..., .size = NULL, .absent = 0L)
+
+vec_is_empty(x)
 }
 \arguments{
-\item{x, ...}{Vector inputs}
+\item{x, ...}{Vector inputs or \code{NULL}.}
 
 \item{.size}{If \code{NULL}, the default, the output size is determined by
 recycling the lengths of all elements of \code{...}. Alternatively, you can
 supply \code{.size} to force a known size.}
+
+\item{.absent}{The size used when no input is provided, or when all input
+is \code{NULL}. If left as \code{NULL} when no input is supplied, an error is thrown.}
 }
 \value{
-An integer (or double for long vectors). Will throw an error
-if \code{x} is not a vector.
+An integer (or double for long vectors).
 
-\code{vec_size_common()} will return \code{NULL} if all inputs are \code{NULL} or absent.
+\code{vec_size_common()} returns \code{.absent} if all inputs are \code{NULL} or
+absent, \code{0L} by default.
 }
 \description{
-\code{vec_size(x)} returns the size of a vector. This is distinct from the
-\code{\link[=length]{length()}} of a vector because it generalises to the "number of observations"
-for 2d structures, i.e. it's the number of rows in matrix or a data frame.
-This definition has the important property that every column of a data frame
-(even data frame and matrix columns) have the same size.
+\code{vec_size(x)} returns the size of a vector. \code{vec_is_empty()}
+returns \code{TRUE} if the size is zero, \code{FALSE} otherwise.
+
+The size is distinct from the \code{\link[=length]{length()}} of a vector because it
+generalises to the "number of observations" for 2d structures,
+i.e. it's the number of rows in matrix or a data frame.  This
+definition has the important property that every column of a data
+frame (even data frame and matrix columns) have the same size.
 \code{vec_size_common(...)} returns the common size of multiple vectors.
 }
 \details{
 There is no vctrs helper that retrieves the number of columns: as this
-is a property of the \link[=vec_ptype]{type}.
+is a property of the \link[=vec_ptype_show]{type}.
 
 \code{vec_size()} is equivalent to \code{NROW()} but has a name that is easier to
 pronounce, and throws an error when passed non-vector inputs.
@@ -46,19 +55,33 @@ pronounce, and throws an error when passed non-vector inputs.
 }
 }
 
+\section{The size of NULL}{
+
+
+The size of \code{NULL} is hard-coded to \code{0L} in \code{vec_size()}.
+\code{vec_size_common()} returns \code{.absent} when all inputs are \code{NULL}
+(if only some inputs are \code{NULL}, they are simply ignored).
+
+A default size of 0 makes sense because sizes are most often
+queried in order to compute a total size while assembling a
+collection of vectors. Since we treat \code{NULL} as an absent input by
+principle, we return the identity of sizes under addition to
+reflect that an absent input doesn't take up any size.
+
+Note that other defaults might make sense under different
+circumstances. For instance, a default size of 1 makes sense for
+finding the common size because 1 is the identity of the recycling
+rules.
+}
+
 \examples{
 vec_size(1:100)
 vec_size(mtcars)
 vec_size(array(dim = c(3, 5, 10)))
 
-vec_size(NULL)
-# Because vec_size(vec_c(NULL, x)) ==
-#   vec_size(NULL) + vec_size(x) ==
-#   vec_size(x)
-
 vec_size_common(1:10, 1:10)
 vec_size_common(1:10, 1)
-vec_size_common(1:10, integer())
+vec_size_common(integer(), 1)
 }
 \seealso{
 \code{\link[=vec_slice]{vec_slice()}} for a variation of \code{[} compatible with \code{vec_size()},

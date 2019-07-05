@@ -10,6 +10,8 @@
 #' The common size of two vectors defines the recycling rules, and can be
 #' summarise with the following table:
 #'
+#' \figure{sizes-recycling.png}
+#'
 #' (Note `NULL`s are handled specially; they are treated like empty
 #' arguments and hence don't affect the size)
 #'
@@ -27,38 +29,28 @@
 #' @examples
 #' # Inputs with 1 observation are recycled
 #' vec_recycle_common(1:5, 5)
+#' vec_recycle_common(integer(), 5)
 #' \dontrun{
 #' vec_recycle_common(1:5, 1:2)
 #' }
-#'
-#' # Inputs with 0 observations
-#' vec_recycle_common(1:5, integer())
 #'
 #' # Data frames and matrices are recycled along their rows
 #' vec_recycle_common(data.frame(x = 1), 1:5)
 #' vec_recycle_common(array(1:2, c(1, 2)), 1:5)
 #' vec_recycle_common(array(1:3, c(1, 3, 1)), 1:5)
 vec_recycle <- function(x, size) {
-  if (is.null(x) || is.null(size))
-    return(NULL)
-
-  n_x <- vec_size(x)
-
-  if (n_x == size) {
-    x
-  } else if (size == 0L) {
-    vec_slice(x, 0L)
-  } else if (n_x == 1L) {
-    vec_slice(x, rep(1L, size))
-  } else {
-    stop("Incompatible lengths: ", n_x, ", ", size, call. = FALSE)
-  }
+  .Call(vctrs_recycle, x, size)
 }
 
 #' @export
 #' @rdname vec_recycle
 vec_recycle_common <- function(..., .size = NULL) {
   args <- list2(...)
-  size <- vec_size_common(!!!args, .size = .size)
-  map(args, vec_recycle, size = size)
+  size <- vec_size_common(!!!args, .size = .size, .absent = na_int)
+
+  if (identical(size, na_int)) {
+    args
+  } else {
+    map(args, vec_recycle, size = size)
+  }
 }

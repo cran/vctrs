@@ -5,32 +5,32 @@
 \alias{vec_math_base}
 \title{Mathematical operations}
 \usage{
-vec_math(fun, x, ...)
+vec_math(.fn, .x, ...)
 
-vec_math_base(fun, x, ...)
+vec_math_base(.fn, .x, ...)
 }
 \arguments{
-\item{fun}{An mathematical function as a string}
+\item{.fn}{A mathematical function from the base package, as a string.}
 
-\item{x}{A vector}
+\item{.x}{A vector.}
 
-\item{...}{An additional arguments.}
+\item{...}{Additional arguments passed to \code{.fn}.}
 }
 \description{
 This generic provides a common dispatch mechanism for all regular unary
-mathematical functions. It is used as a common wrapper around the Summary
-group generics, the Math group generics, and a handful of other
+mathematical functions. It is used as a common wrapper around many of the
+Summary group generics, the Math group generics, and a handful of other
 mathematical functions like \code{mean()}.
 }
 \details{
-\code{vec_base_arith()} is provided as a convenience for writing methods. It
-calls the base \code{fun} on the underlying \code{\link[=vec_data]{vec_data()}}.
+\code{vec_math_base()} is provided as a convenience for writing methods. It
+calls the base \code{.fn} on the underlying \code{\link[=vec_data]{vec_data()}}.
 }
 \section{Included functions}{
 
 \itemize{
 \item From the \link{Summary} group generic:
-\code{max()}, \code{min()}, \code{range()}, \code{prod}, \code{sum()}, \code{any()}, \code{all()}.
+\code{prod()}, \code{sum()}, \code{any()}, \code{all()}.
 \item From the \link{Math} group generic:
 \code{abs()}, \code{sign()}, \code{sqrt()}, \code{ceiling()}, \code{floor()}, \code{trunc()}, \code{cummax()},
 \code{cummin()}, \code{cumprod()}, \code{cumsum()}, \code{log()}, \code{log10()}, \code{log2()},

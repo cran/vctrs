@@ -13,6 +13,8 @@
 #' characters where possible.
 #'
 #' @param x A vector.
+#' @inheritParams ellipsis::dots_empty
+#'
 #' @keywords internal
 #' @return A string.
 #' @export
@@ -21,62 +23,71 @@
 #' cat(vec_ptype_full(iris))
 #'
 #' cat(vec_ptype_abbr(1:10))
-vec_ptype_full <- function(x) {
+vec_ptype_full <- function(x, ...) {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
+  }
   UseMethod("vec_ptype_full")
 }
 
 #' @export
 #' @rdname vec_ptype_full
-vec_ptype_abbr <- function(x) {
+vec_ptype_abbr <- function(x, ...) {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
+  }
   UseMethod("vec_ptype_abbr")
 }
 
-vec_ptype_full.NULL <- function(x) "NULL"
-vec_ptype_abbr.NULL <- function(x) "NULL"
+vec_ptype_full.NULL <- function(x, ...) "NULL"
+vec_ptype_abbr.NULL <- function(x, ...) "NULL"
 
 # Default: base types and fallback for S3/S4 ------------------------------
 
 #' @export
-vec_ptype_full.default <- function(x) {
+vec_ptype_full.default <- function(x, ...) {
   if (is.object(x)) {
     class(x)[[1]]
   } else if (is_vector(x)) {
     paste0(typeof(x), vec_ptype_shape(x))
   } else {
-    stop("Not a vector", call. = FALSE)
+    abort("Not a vector.")
   }
 }
 
 #' @export
-vec_ptype_abbr.default <- function(x) {
+vec_ptype_abbr.default <- function(x, ...) {
   if (is.object(x)) {
     unname(abbreviate(vec_ptype_full(x), 8))
+  } else if (is_list(x)) {
+    named <- is_character(names(x))
+    paste0(if (named) "named ", "list", vec_ptype_shape(x))
   } else if (is_vector(x)) {
     abbr <- switch(typeof(x),
       logical = "lgl",
       integer = "int",
       double = "dbl",
       character = "chr",
-      complex = "cplx",
+      complex = "cpl",
       list = "list",
       expression = "expr"
     )
     paste0(abbr, vec_ptype_shape(x))
   } else {
-    stop("Not a vector", call. = FALSE)
+    abort("Not a vector.")
   }
 }
 
 # AsIs --------------------------------------------------------------------
 
 #' @export
-vec_ptype_full.AsIs <- function(x) {
+vec_ptype_full.AsIs <- function(x, ...) {
   class(x) <- setdiff(class(x), "AsIs")
   paste0("I<", vec_ptype_full(x), ">")
 }
 
 #' @export
-vec_ptype_abbr.AsIs <- function(x) {
+vec_ptype_abbr.AsIs <- function(x, ...) {
   class(x) <- setdiff(class(x), "AsIs")
   paste0("I<", vec_ptype_abbr(x), ">")
 }
@@ -84,7 +95,7 @@ vec_ptype_abbr.AsIs <- function(x) {
 # Helpers -----------------------------------------------------------------
 
 vec_ptype_shape <- function(x) {
-  dim <- vec_dim(x)
+  dim <- dim2(x)
   if (length(dim) == 1) {
     ""
   } else {

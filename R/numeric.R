@@ -1,17 +1,17 @@
 #' Mathematical operations
 #'
 #' This generic provides a common dispatch mechanism for all regular unary
-#' mathematical functions. It is used as a common wrapper around the Summary
-#' group generics, the Math group generics, and a handful of other
+#' mathematical functions. It is used as a common wrapper around many of the
+#' Summary group generics, the Math group generics, and a handful of other
 #' mathematical functions like `mean()`.
 #'
-#' `vec_base_arith()` is provided as a convenience for writing methods. It
-#' calls the base `fun` on the underlying [vec_data()].
+#' `vec_math_base()` is provided as a convenience for writing methods. It
+#' calls the base `.fn` on the underlying [vec_data()].
 #'
 #' @section Included functions:
 #'
 #' * From the [Summary] group generic:
-#'   `max()`, `min()`, `range()`, `prod`, `sum()`, `any()`, `all()`.
+#'   `prod()`, `sum()`, `any()`, `all()`.
 #'
 #' * From the [Math] group generic:
 #'   `abs()`, `sign()`, `sqrt()`, `ceiling()`, `floor()`, `trunc()`, `cummax()`,
@@ -24,9 +24,9 @@
 #' * Additional generics: `mean()`, `is.nan()`, `is.finite()`, `is.infinite()`.
 #'
 #' @seealso [vec_arith()] for the equivalent for the arithmetic infix operators.
-#' @param fun An mathematical function as a string
-#' @param x A vector
-#' @param ... An additional arguments.
+#' @param .fn A mathematical function from the base package, as a string.
+#' @param .x A vector.
+#' @param ... Additional arguments passed to `.fn`.
 #' @keywords internal
 #' @export
 #' @examples
@@ -36,22 +36,33 @@
 #' abs(x)
 #' sum(x)
 #' cumsum(x)
-vec_math <- function(fun, x, ...) {
-  UseMethod("vec_math", x)
+vec_math <- function(.fn, .x, ...) {
+  UseMethod("vec_math", .x)
 }
 
 #' @export
-vec_math.default <- function(fun, x, ...) {
-  if (is_double(x)) {
-    vec_restore(vec_math_base(fun, x, ...), x)
-  } else {
-    stop_unimplemented(x, "vec_math")
+vec_math.default <- function(.fn, .x, ...) {
+  if (!is_double(.x) && !is_logical_dispatch(.fn, .x)) {
+    stop_unimplemented(.x, "vec_math")
   }
+
+  out <- vec_math_base(.fn, .x, ...)
+
+  # Don't restore output of logical predicates like `any()`,
+  # `is.finite()`, or `is.nan()`
+  if (is_double(out)) {
+    out <- vec_restore(out, .x)
+  }
+
+  out
+}
+is_logical_dispatch <- function(fn, x) {
+  is_logical(x) && fn %in% c("any", "all")
 }
 
 #' @export
 #' @rdname vec_math
-vec_math_base <- function(fun, x, ...) {
-  fun <- getExportedValue("base", fun)
-  fun(vec_data(x), ...)
+vec_math_base <- function(.fn, .x, ...) {
+  .fn <- getExportedValue("base", .fn)
+  .fn(vec_data(.x), ...)
 }

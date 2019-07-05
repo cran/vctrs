@@ -4,16 +4,18 @@
 #'
 #' @section Invariants:
 #' * `vec_size(vec_c(x, y)) == vec_size(x) + vec_size(y)`
-#' * `vec_type(vec_c(x, y)) == vec_type_common(x, y)`.
+#' * `vec_ptype(vec_c(x, y)) == vec_ptype_common(x, y)`.
 #'
 #' @param ... Vectors to coerce.
+#' @param .name_repair How to repair names, see `repair` options in [vec_as_names()].
 #' @return A vector with class given by `.ptype`, and length equal to the
 #'   sum of the `vec_size()` of the contents of `...`.
 #'
 #'   The vector will have names if the individual components have names
 #'   (inner names) or if the arguments are named (outer names). If both
 #'   inner and outer names are present, they are combined with a `.`.
-#' @inheritParams vec_ptype
+#' @inheritParams vec_ptype_show
+#' @inheritParams name_spec
 #' @seealso [vec_cbind()]/[vec_rbind()] for combining data frames by rows
 #'   or columns.
 #' @export
@@ -31,36 +33,20 @@
 #' # Factors -----------------------------
 #' c(factor("a"), factor("b"))
 #' vec_c(factor("a"), factor("b"))
-vec_c <- function(..., .ptype = NULL) {
-  args <- list2(...)
-
-  ptype <- vec_type_common(!!!args, .ptype = .ptype)
-  if (is.null(ptype))
-    return(NULL)
-
-  ns <- map_int(args, vec_size)
-  out <- vec_na(ptype, sum(ns))
-  if (is.null(names(args))) {
-    names <- NULL
-  } else {
-    names <- vec_na(character(), sum(ns))
-  }
-
-  pos <- 1
-  for (i in seq_along(ns)) {
-    n <- ns[[i]]
-    if (n == 0L)
-      next
-
-    x <- vec_cast(args[[i]], to = ptype)
-
-    names[pos:(pos + n - 1)] <- outer_names(names(args)[[i]], vec_names(args[[i]]), length(x))
-    vec_slice(out, pos:(pos + n - 1)) <- x
-    pos <- pos + n
-  }
-
-  if (!is.null(names))
-    vec_names(out) <- names
-
-  out
+#'
+#'
+#' # By default, named inputs must be length 1:
+#' vec_c(name = 1)
+#' try(vec_c(name = 1:3))
+#'
+#' # Pass a name specification to work around this:
+#' vec_c(name = 1:3, .name_spec = "{outer}_{inner}")
+#'
+#' # See `?name_spec` for more examples of name specifications.
+vec_c <- function(...,
+                  .ptype = NULL,
+                  .name_spec = NULL,
+                  .name_repair = c("minimal", "unique", "check_unique", "universal")) {
+  .External2(vctrs_c, .ptype, .name_spec, .name_repair)
 }
+vec_c <- fn_inline_formals(vec_c, ".name_repair")

@@ -1,9 +1,9 @@
 #' Find the common type for a pair of vector types
 #'
-#' `vec_type2()` finds the common type for a pair of vectors, or dies trying.
+#' `vec_ptype2()` finds the common type for a pair of vectors, or dies trying.
 #' It forms the foundation of the vctrs type system, along with [vec_cast()].
 #' This powers type coercion but should not usually be called directly;
-#' instead call [vec_type_common()].
+#' instead call [vec_ptype_common()].
 #'
 #' @section Coercion rules:
 #' vctrs thinks of the vector types as forming a partially ordered set, or
@@ -17,115 +17,52 @@
 #' \figure{coerce.png}
 #'
 #' @section S3 dispatch:
-#' `vec_type2()` dispatches on both arguments. This is implemented by having
-#' methods of `vec_type2()`, e.g. `vec_type2.integer()` also be S3 generics,
-#' which call e.g. `vec_type2.integer.double()`. `vec_type2.x.y()` must
-#' return the same value as `vec_type2.y.x()`; this is currently not enforced,
+#' `vec_ptype2()` dispatches on both arguments. This is implemented by having
+#' methods of `vec_ptype2()`, e.g. `vec_ptype2.integer()` also be S3 generics,
+#' which call e.g. `vec_ptype2.integer.double()`. `vec_ptype2.x.y()` must
+#' return the same value as `vec_ptype2.y.x()`; this is currently not enforced,
 #' but should be tested.
 #'
-#' Whenever you implemenet a `vec_type2.new_class()` generic/method,
-#' make sure to always provide `vec_type2.new_class.default()` (
-#' which should call [stop_incompatible_cast()]) and
-#' `vec_type2.new_class.vctrs_unspecified()` (which should return `x`).
+#' Whenever you implemenet a `vec_ptype2.new_class()` generic/method,
+#' make sure to always provide `vec_ptype2.new_class.default()`. It
+#' should normally call `vec_default_ptype2()`.
 #'
 #' See `vignette("s3-vector")` for full details.
 #' @keywords internal
-#' @param x,y Either vector types; i.e.
+#' @inheritParams ellipsis::dots_empty
+#' @param x,y Vector types.
+#' @param x_arg,y_arg Argument names for `x` and `y`. These are used
+#'   in error messages to inform the user about the locations of
+#'   incompatible types (see [stop_incompatible_type()]).
 #' @export
-vec_type2 <- function(x, y) {
-  UseMethod("vec_type2")
+vec_ptype2 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
+  }
+  return(.Call(vctrs_type2, x, y, x_arg, y_arg))
+  UseMethod("vec_ptype2")
 }
-
+vec_type2_dispatch <- function(x, y, ..., x_arg = "x", y_arg = "y") {
+  UseMethod("vec_ptype2")
+}
 #' @export
-vec_type2.default <- function(x, y) {
-  if (identical(attributes(x), attributes(y)))
+vec_ptype2.default <- function(x, y, ..., x_arg = "x", y_arg = "y") {
+  if (has_same_type(x, y)) {
     return(x)
-
-  stop_incompatible_type(x, y)
+  }
+  stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg)
+}
+#' @rdname vec_ptype2
+#' @export
+vec_default_ptype2 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
+  if (is_unspecified(y)) {
+    # FIXME: Should `vec_ptype()` make that check?
+    vec_assert(x)
+    return(vec_ptype(x))
+  }
+  stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg)
 }
 
-# Numeric-ish ----------------------------------------------------------
-
-#' @rdname vec_type2
-#' @export vec_type2.logical
-#' @method vec_type2 logical
-#' @export
-vec_type2.logical <- function(x, y) UseMethod("vec_type2.logical", y)
-#' @rdname vec_type2
-#' @export vec_type2.integer
-#' @method vec_type2 integer
-#' @export
-vec_type2.integer <- function(x, y) UseMethod("vec_type2.integer", y)
-#' @rdname vec_type2
-#' @export vec_type2.double
-#' @method vec_type2 double
-#' @export
-vec_type2.double  <- function(x, y) UseMethod("vec_type2.double", y)
-
-#' @method vec_type2.logical logical
-#' @export
-vec_type2.logical.logical <- function(x, y) shape_match(logical(), x, y)
-
-#' @export
-#' @method vec_type2.integer integer
-vec_type2.integer.integer <- function(x, y) shape_match(integer(), x, y)
-#' @export
-#' @method vec_type2.logical integer
-vec_type2.logical.integer <- function(x, y) shape_match(integer(), x, y)
-#' @export
-#' @method vec_type2.integer logical
-vec_type2.integer.logical <- function(x, y) shape_match(integer(), x, y)
-
-#' @export
-#' @method vec_type2.double double
-vec_type2.double.double   <- function(x, y) shape_match(double(), x, y)
-#' @export
-#' @method vec_type2.logical double
-vec_type2.logical.double  <- function(x, y) shape_match(double(), x, y)
-#' @export
-#' @method vec_type2.double logical
-vec_type2.double.logical  <- function(x, y) shape_match(double(), x, y)
-#' @export
-#' @method vec_type2.integer double
-vec_type2.integer.double  <- function(x, y) shape_match(double(), x, y)
-#' @export
-#' @method vec_type2.double integer
-vec_type2.double.integer  <- function(x, y) shape_match(double(), x, y)
-
-#' @method vec_type2.logical default
-#' @export
-vec_type2.logical.default <- function(x, y) stop_incompatible_type(x, y)
-#' @method vec_type2.integer default
-#' @export
-vec_type2.integer.default <- function(x, y) stop_incompatible_type(x, y)
-#' @method vec_type2.double default
-#' @export
-vec_type2.double.default  <- function(x, y) stop_incompatible_type(x, y)
-
-# Character ---------------------------------------------------------------
-
-#' @rdname vec_type2
-#' @export vec_type2.character
-#' @method vec_type2 character
-#' @export
-vec_type2.character <- function(x, y) UseMethod("vec_type2.character", y)
-#' @method vec_type2.character character
-#' @export
-vec_type2.character.character <- function(x, y) shape_match(character(), x, y)
-#' @method vec_type2.character default
-#' @export
-vec_type2.character.default <- function(x, y) stop_incompatible_type(x, y)
-
-# Lists -------------------------------------------------------------------
-
-#' @rdname vec_type2
-#' @export vec_type2.list
-#' @method vec_type2 list
-#' @export
-vec_type2.list    <- function(x, y) UseMethod("vec_type2.list", y)
-#' @method vec_type2.list list
-#' @export
-vec_type2.list.list <- function(x, y) shape_match(list(), x, y)
-#' @method vec_type2.list default
-#' @export
-vec_type2.list.default  <- function(x, y) stop_incompatible_type(x, y)
+vec_typeof2 <- function(x, y) {
+  .Call(vctrs_typeof2, x, y)
+}

@@ -4,10 +4,17 @@
 \alias{vec_proxy_compare}
 \title{Comparison proxy}
 \usage{
-vec_proxy_compare(x)
+vec_proxy_compare(x, ..., relax = FALSE)
 }
 \arguments{
 \item{x}{A vector x.}
+
+\item{...}{These dots are for future extensions and must be empty.}
+
+\item{relax}{If \code{TRUE}, and \code{x} is otherwise non-comparable, will return
+\code{vec_seq_along(x)}. This allows a data frame to be orderable, even if
+one of its components is not. This is experimental and may change in the
+future.}
 }
 \value{
 A 1d atomic vector or a data frame.
@@ -21,9 +28,6 @@ and \code{\link[=min]{min()}}, \code{\link[=max]{max()}}, \code{\link[=median]{m
 \details{
 The default method assumes that all classes built on top of atomic
 vectors or records are orderable. If your class is not, you will need
-to provide a \code{vec_proxy_compare()} method that throws an error. Note
-that the default \code{\link[=vec_proxy_equal]{vec_proxy_equal()}} method calls \code{vec_proxy_compare()} so
-if your object is equal-able but not comparable, you'll need to provide
-methods for both generics.
+to provide a \code{vec_proxy_compare()} method that throws an error.
 }
 \keyword{internal}

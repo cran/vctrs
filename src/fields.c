@@ -36,7 +36,7 @@ int find_offset(SEXP x, SEXP index) {
 
     return val;
   } else if (TYPEOF(index) == REALSXP) {
-    int val = REAL(index)[0];
+    double val = REAL(index)[0];
 
     if (R_IsNA(val))
       Rf_errorcall(R_NilValue, "Invalid index: NA_real_");
@@ -45,9 +45,13 @@ int find_offset(SEXP x, SEXP index) {
     if (val < 0 || val >= n)
       Rf_errorcall(R_NilValue, "Invalid index: out of bounds");
 
-    return val;
+    if (val > R_LEN_T_MAX) {
+      Rf_errorcall(R_NilValue, "Invalid index: too large");
+    }
+
+    return (int) val;
   } else if (TYPEOF(index) == STRSXP) {
-    SEXP names = Rf_getAttrib(x, R_NamesSymbol);
+    SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
     if (names == R_NilValue)
       Rf_errorcall(R_NilValue, "Corrupt x: no names");
 
@@ -64,8 +68,10 @@ int find_offset(SEXP x, SEXP index) {
       if (name_j == NA_STRING)
         Rf_errorcall(R_NilValue, "Corrupt x: element %i is unnamed", j + 1);
 
-      if (equal_string(val_0, &val_0_chr, name_j))
+      if (equal_string(val_0, &val_0_chr, name_j)) {
+        UNPROTECT(1);
         return j;
+      }
     }
     Rf_errorcall(R_NilValue, "Invalid index: field name '%s' not found", val_0_chr);
   } else {
@@ -120,10 +126,13 @@ SEXP vctrs_field_get(SEXP x, SEXP index) {
 SEXP vctrs_field_set(SEXP x, SEXP index, SEXP value) {
   check_rcrd(x);
 
-  if (!Rf_isVector(value))
-    Rf_errorcall(R_NilValue, "Invalid value: not a vector");
-  if (Rf_length(value) != Rf_length(VECTOR_ELT(x, 0)))
-    Rf_errorcall(R_NilValue, "Invalid value: incorrect length");
+  if (!vec_is_vector(value)) {
+    Rf_errorcall(R_NilValue, "Invalid value: not a vector.");
+  }
+
+  if (vec_size(value) != vec_size(x)) {
+    Rf_errorcall(R_NilValue, "Invalid value: incorrect length.");
+  }
 
   return vctrs_list_set(x, index, value);
 }

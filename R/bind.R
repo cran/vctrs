@@ -6,22 +6,56 @@
 #' across all arguments.
 #'
 #' @section Invariants:
+#'
+#' All inputs are first converted to a data frame. The conversion for
+#' 1d vectors depends on the direction of binding:
+#'
+#' * For `vec_rbind()`, each element of the vector becomes a column in
+#'   a single row.
+#' * For `vec_cbind()`, each element of the vector becomes a row in a
+#'   single column.
+#'
+#' Once the inputs have all become data frames, the following
+#' invariants are observed for row-binding:
+#'
 #' * `vec_size(vec_rbind(x, y)) == vec_size(x) + vec_size(y)`
-#' * `vec_type(vec_rbind(x, y)) = vec_type_common(x, y)`
+#' * `vec_ptype(vec_rbind(x, y)) = vec_ptype_common(x, y)`
+#'
+#' Note that if an input is an empty vector, it is first converted to
+#' a 1-row data frame with 0 columns. Despite being empty, its
+#' effective size for the total number of rows is 1.
+#'
+#' For column-binding, the following invariants apply:
 #'
 #' * `vec_size(vec_cbind(x, y)) == vec_size_common(x, y)`
-#' * `vec_type(vec_cbind(x, y)) == vec_cbind(vec_type(x), vec_type(x))`
+#' * `vec_ptype(vec_cbind(x, y)) == vec_cbind(vec_ptype(x), vec_ptype(x))`
 #' @param ... Data frames or vectors.
 #'
-#'   `vec_rbind()` ignores names. `vec_cbind()` preserves outer names,
-#'   combining with inner names if also present.
+#'   `vec_rbind()` ignores names unless `.names_to` is supplied.
+#'   `vec_cbind()` creates packed data frame columns with named
+#'   inputs.
 #'
 #'   `NULL` inputs are silently ignored. Empty (e.g. zero row) inputs
 #'   will not appear in the output, but will affect the derived `.ptype`.
+#' @param .names_to Optionally, the name of a column where the names
+#'   of `...` arguments are copied. These names are useful to identify
+#'   which row comes from which input. If supplied, `...` must be
+#'   named.
+#' @param .name_repair One of `"unique"`, `"universal"`, or
+#'   `"check_unique"`. See [vec_as_names()] for the meaning of these
+#'   options.
+#'
+#'   With `vec_rbind()`, the repair function is applied to all inputs
+#'   separately. This is because `vec_rbind()` needs to align their
+#'   columns before binding the rows, and thus needs all inputs to
+#'   have unique names. On the other hand, `vec_cbind()` applies the
+#'   repair function after all inputs have been concatenated together
+#'   in a final data frame. Hence `vec_cbind()` allows the more
+#'   permissive minimal names repair.
 #' @inheritParams vec_c
 #' @return A data frame, or subclass of data frame.
 #'
-#'   If `...` is a mix of different data frame subclases, `vec_type2()`
+#'   If `...` is a mix of different data frame subclases, `vec_ptype2()`
 #'   will be used to determine the output type. For `vec_rbind()`, this
 #'   will determine the type of the container and the type of each column;
 #'   for `vec_cbind()` it only determines the type of the output container.
@@ -76,11 +110,22 @@
 #'   y = letters[1:3]
 #' )
 #'
-#' # outer names are combined with inner names
-#' vec_cbind(
+#' # if you supply a named data frame, it is packed in a single column
+#' data <- vec_cbind(
 #'   x = data.frame(a = 1, b = 2),
 #'   y = 1
 #' )
+#' data
+#'
+#' # Packed data frames are nested in a single column. This makes it
+#' # possible to access it through a single name:
+#' data$x
+#'
+#' # since the base print method is suboptimal with packed data
+#' # frames, it is recommended to use tibble to work with these:
+#' if (rlang::is_installed("tibble")) {
+#'   vec_cbind(x = tibble::tibble(a = 1, b = 2), y = 1)
+#' }
 #'
 #' # duplicate names are flagged
 #' vec_cbind(x = 1, x = 2)
@@ -90,129 +135,32 @@ NULL
 
 #' @export
 #' @rdname vec_bind
-vec_rbind <- function(..., .ptype = NULL) {
-  args <- list2(...)
-  tbls <- map(args, as_df_row)
-  ptype <- vec_type_common(!!!tbls, .ptype = .ptype)
-
-  if (is.null(ptype))
-    return(data_frame())
-
-  ns <- map_int(tbls, vec_size)
-  # Use list so we can rely on efficient internal [[<-
-  out <- vec_data(vec_na(ptype, sum(ns)))
-
-  pos <- 1
-  for (i in seq_along(ns)) {
-    n <- ns[[i]]
-    if (n == 0L)
-      next
-
-    tbl_i <- vec_data(vec_cast(tbls[[i]], to = ptype))
-    for (j in seq_along(out)) {
-      out[[j]][pos:(pos + n - 1)] <- tbl_i[[j]]
-    }
-    pos <- pos + n
-  }
-
-  vec_restore(out, ptype)
+vec_rbind <- function(...,
+                      .ptype = NULL,
+                      .names_to = NULL,
+                      .name_repair = c("unique", "universal", "check_unique")) {
+  .External2(vctrs_rbind, .ptype, .names_to, .name_repair)
 }
+vec_rbind <- fn_inline_formals(vec_rbind, ".name_repair")
 
 #' @export
 #' @rdname vec_bind
-#' @param .size If, `NULL`, the default, will determing the number of
+#' @param .size If, `NULL`, the default, will determine the number of
 #'   rows in `vec_cbind()` output by using the standard recycling rules.
 #'
 #'   Alternatively, specify the desired number of rows, and any inputs
 #'   of length 1 will be recycled appropriately.
-vec_cbind <- function(..., .ptype = NULL, .size = NULL) {
-  args <- list2(...)
-
-  # container type: common type of all (data frame) inputs
-  # compute early so we can fail fast
-  tbl_empty <- map(args, function(x) {
-    if (is.data.frame(x))
-      x[0]
-  })
-  out <- vec_type_common(!!!tbl_empty, .ptype = .ptype[0])
-  if (is.null(out)) {
-    out <- data_frame()
-  }
-
-  is_null <- map_lgl(args, is_null)
-  args <- args[!is_null]
-
-  # container size: common length of all inputs
-  size <- vec_size_common(!!!args, .size = .size) %||% 0L
-  args <- map(args, vec_recycle, size = size)
-
-  # convert input to columns and prepare output containers
-  tbls <- map2(args, names2(args), as_df_col)
-
-  ps <- map_int(tbls, length)
-  cols <- vec_na(list(), sum(ps))
-  names <- vec_na(character(), sum(ps))
-
-  col <- 1
-  for (j in seq_along(tbls)) {
-    p <- ps[[j]]
-    if (p == 0L)
-      next
-
-    cols[col:(col + p - 1)] <- tbls[[j]]
-    names[col:(col + p - 1)] <- names(tbls[[j]]) %||% rep("", p)
-    col <- col + p
-  }
-
-  # Need to document these assumptions, or better, move into
-  # a generic
-  attr(out, "row.names") <- .set_row_names(size)
-  out[seq_along(cols)] <- cols
-  if (is_installed("tibble")) {
-    names <- tibble::tidy_names(names)
-  }
-  names(out) <- names
-
-  out
+vec_cbind <- function(...,
+                      .ptype = NULL,
+                      .size = NULL,
+                      .name_repair = c("unique", "universal", "check_unique", "minimal")) {
+  .External2(vctrs_cbind, .ptype, .size, .name_repair)
 }
+vec_cbind <- fn_inline_formals(vec_cbind, ".name_repair")
 
-# as_df --------------------------------------------------------------
-
-as_df_row <- function(x) UseMethod("as_df_row")
-
-#' @export
-as_df_row.data.frame <- function(x) x
-
-#' @export
-as_df_row.NULL <- function(x) x
-
-#' @export
-as_df_row.default <- function(x) {
-  if (vec_dims(x) == 1L) {
-    x <- as.list(x)
-    if (is_installed("tibble"))
-      x <- tibble::set_tidy_names(x)
-    new_data_frame(x, n = 1L)
-  } else {
-    as.data.frame(x)
-  }
+as_df_row <- function(x, quiet = FALSE) {
+  .Call(vctrs_as_df_row, x, quiet)
 }
-
-as_df_col <- function(x, outer_name) UseMethod("as_df_col")
-
-#' @export
-as_df_col.data.frame <- function(x, outer_name = NULL) {
-  names(x) <- outer_names(outer_name, names(x), length(x))
-  x
-}
-
-#' @export
-as_df_col.default <- function(x, outer_name = NULL) {
-  if (vec_dims(x) == 1L) {
-    x <- stats::setNames(list(x), outer_name)
-    new_data_frame(x)
-  } else {
-    colnames(x) <- outer_names(outer_name, colnames(x), ncol(x))
-    as.data.frame(x)
-  }
+as_df_col <- function(x, outer_name) {
+  .Call(vctrs_as_df_col, x, outer_name)
 }

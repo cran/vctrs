@@ -42,21 +42,23 @@ vec_count <- function(x, sort = c("count", "key", "location", "none")) {
   sort <- match.arg(sort)
 
   # Returns key-value pair giving index of first occurence value and count
-  kv <- .Call(vctrs_count, vec_proxy_equal(x))
+  kv <- .Call(vctrs_count, vec_proxy(x))
 
-  df <- data.frame(key = 0, count = kv$val)
+  # rep_along() to support zero-length vectors!
+  df <- data_frame(key = rep_along(kv$val, NA), count = kv$val)
   df$key <- vec_slice(x, kv$key) # might be a dataframe
 
-  if (sort == "none")
+  if (sort == "none") {
     return(df)
+  }
 
   idx <- switch(sort,
     location = order(kv$key),
-    key = order(df$key),
+    key = vec_order(df$key),
     count = order(-kv$val)
   )
 
-  df <- df[idx, , drop = FALSE]
+  df <- vec_slice(df, idx)
   reset_rownames(df)
 }
 
@@ -64,7 +66,7 @@ reset_rownames <- function(x) {
   rownames(x) <- NULL
 
   is_df <- map_lgl(x, is.data.frame)
-  x[is_df] <- lapply(x[is_df], `rownames<-`, NULL)
+  x[is_df] <- lapply(x[is_df], reset_rownames)
 
   x
 }
@@ -73,14 +75,14 @@ reset_rownames <- function(x) {
 
 #' Find duplicated values
 #'
-#' * `vec_duplicate_any()`: detects the presence of any duplicated values,
-#'   in the same way as [anyDuplicated()].
+#' * `vec_duplicate_any()`: detects the presence of duplicated values,
+#'   similar to [anyDuplicated()].
 #' * `vec_duplicate_detect()`: returns a logical vector describing if each
 #'   element of the vector is duplicated elsewhere. Unlike [duplicated()], it
 #'   reports all duplicated values, not just the second and subsequent
 #'   repetitions.
-#' * `vec_duplicate_id()`: returns an integer vector given the location of
-#'   the first occurence of the value
+#' * `vec_duplicate_id()`: returns an integer vector giving the location of
+#'   the first occurence of the value.
 #'
 #' @section Missing values:
 #' In most cases, missing values are not considered to be equal, i.e.
@@ -88,18 +90,11 @@ reset_rownames <- function(x) {
 #' so these functions consider all `NAs` to be equal. (Similarly,
 #' all `NaN` are also considered to be equal.)
 #'
-#' @section Performance:
-#' These functions are currently slightly slower than their base equivalents.
-#' This is primarily because they do a little more checking and coercion
-#' in R, which makes them both a litter safer and more generic. Additionally,
-#' the C code underlying vctrs has not yet been implemented: we expect
-#' some performance improvements when that happens.
-#'
 #' @param x A vector (including a data frame).
 #' @return
 #'   * `vec_duplicate_any()`: a logical vector of length 1.
-#'   * `vec_duplicate_detect()`: a logical vector the same length as `x`
-#'   * `vec_duplicate_id()`: an integer vector the same length as `x`
+#'   * `vec_duplicate_detect()`: a logical vector the same length as `x`.
+#'   * `vec_duplicate_id()`: an integer vector the same length as `x`.
 #' @seealso [vec_unique()] for functions that work with the dual of duplicated
 #'   values: unique values.
 #' @name vec_duplicate
@@ -125,21 +120,18 @@ NULL
 #' @rdname vec_duplicate
 #' @export
 vec_duplicate_any <- function(x) {
-  x <- vec_proxy_equal(x)
   .Call(vctrs_duplicated_any, x)
 }
 
 #' @rdname vec_duplicate
 #' @export
 vec_duplicate_detect <- function(x) {
-  x <- vec_proxy_equal(x)
   .Call(vctrs_duplicated, x)
 }
 
 #' @rdname vec_duplicate
 #' @export
 vec_duplicate_id <- function(x) {
-  x <- vec_proxy_equal(x)
   .Call(vctrs_id, x)
 }
 
@@ -179,21 +171,18 @@ vec_duplicate_id <- function(x) {
 #' # But they are for the purposes of considering uniqueness
 #' vec_unique(c(NA, NA, NA, NA, 1, 2, 1))
 vec_unique <- function(x) {
-  px <- vec_proxy_equal(x)
-  vec_slice(x, vec_unique_loc(px))
+  vec_slice(x, vec_unique_loc(x))
 }
 
 #' @rdname vec_unique
 #' @export
 vec_unique_loc <- function(x) {
-  x <- vec_proxy_equal(x)
   .Call(vctrs_unique_loc, x)
 }
 
 #' @rdname vec_unique
 #' @export
 vec_unique_count <- function(x) {
-  x <- vec_proxy_equal(x)
   .Call(vctrs_n_distinct, x)
 }
 
@@ -229,13 +218,58 @@ vec_unique_count <- function(x) {
 #' # Only the first index of duplicates is returned
 #' vec_match(c("a", "b"), c("a", "b", "a", "b"))
 vec_match <- function(needles, haystack) {
-  v <- vec_cast_common(needles = needles, haystack = haystack)
-  .Call(vctrs_match, vec_proxy_equal(v$needles), vec_proxy_equal(v$haystack))
+  .Call(vctrs_match, needles, haystack)
 }
 
 #' @export
 #' @rdname vec_match
 vec_in <- function(needles, haystack) {
-  v <- vec_cast_common(needles = needles, haystack = haystack)
-  .Call(vctrs_in, vec_proxy_equal(v$needles), vec_proxy_equal(v$haystack))
+  .Call(vctrs_in, needles, haystack)
+}
+
+
+# Splitting ---------------------------------------------------------------
+
+#' Split a vector into groups
+#'
+#' This is a generalisation of [split()] that can split by any type of vector,
+#' not just factors. Instead of returning the keys in the character names,
+#' the are returned in a separate parallel vector.
+#'
+#' @param x Vector to divide into groups.
+#' @param by Vector whose unique values defines the groups.
+#' @return A data frame with two columns and size equal to
+#'   `vec_size(vec_unique(by))`. The `key` column has the same type as
+#'   `by`, and the `val` column has type `list_of<vec_ptype(x)>`.
+#'
+#'   Note for complex types, the default `data.frame` print method will be
+#'   suboptimal, and you will want to coerce into a tibble to better
+#'   understand the output.
+#' @export
+#' @examples
+#' vec_split(mtcars$cyl, mtcars$vs)
+#' vec_split(mtcars$cyl, mtcars[c("vs", "am")])
+#'
+#' if (require("tibble")) {
+#'   as_tibble(vec_split(mtcars$cyl, mtcars[c("vs", "am")]))
+#'   as_tibble(vec_split(mtcars, mtcars[c("vs", "am")]))
+#' }
+vec_split <- function(x, by) {
+  if (vec_size(x) != vec_size(by)) {
+    abort("`x` and `by` must have same size")
+  }
+
+  ki <- vec_duplicate_split(by)
+  keys <- vec_slice(by, ki$key)
+  x_split <- map(ki$idx, vec_slice, x = x)
+
+  vals <- new_list_of(x_split, vec_ptype(x))
+
+  new_data_frame(list(key = keys, val = vals), n = vec_size(keys))
+}
+
+# Returns key-index pair giving the index of first key occurence and
+# a list containing the locations of each key
+vec_duplicate_split <- function(x) {
+  .Call(vctrs_duplicate_split, x)
 }

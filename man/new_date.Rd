@@ -4,9 +4,9 @@
 \alias{new_date}
 \alias{new_datetime}
 \alias{new_duration}
-\alias{vec_type2.Date}
-\alias{vec_type2.POSIXt}
-\alias{vec_type2.difftime}
+\alias{vec_ptype2.Date}
+\alias{vec_ptype2.POSIXt}
+\alias{vec_ptype2.difftime}
 \alias{vec_cast.Date}
 \alias{vec_cast.POSIXct}
 \alias{vec_cast.POSIXlt}
@@ -23,25 +23,25 @@ new_datetime(x = double(), tzone = "")
 new_duration(x = double(), units = c("secs", "mins", "hours", "days",
   "weeks"))
 
-\method{vec_type2}{Date}(x, y)
+\method{vec_ptype2}{Date}(x, y, ...)
 
-\method{vec_type2}{POSIXt}(x, y)
+\method{vec_ptype2}{POSIXt}(x, y, ...)
 
-\method{vec_type2}{difftime}(x, y)
+\method{vec_ptype2}{difftime}(x, y, ...)
 
-\method{vec_cast}{Date}(x, to)
+\method{vec_cast}{Date}(x, to, ...)
 
-\method{vec_cast}{POSIXct}(x, to)
+\method{vec_cast}{POSIXct}(x, to, ...)
 
-\method{vec_cast}{POSIXlt}(x, to)
+\method{vec_cast}{POSIXlt}(x, to, ...)
 
-\method{vec_cast}{difftime}(x, to)
+\method{vec_cast}{difftime}(x, to, ...)
 
-\method{vec_arith}{Date}(op, x, y)
+\method{vec_arith}{Date}(op, x, y, ...)
 
-\method{vec_arith}{POSIXct}(op, x, y)
+\method{vec_arith}{POSIXct}(op, x, y, ...)
 
-\method{vec_arith}{difftime}(op, x, y)
+\method{vec_arith}{difftime}(op, x, y, ...)
 }
 \arguments{
 \item{x}{A double vector representing the number of days since UNIX

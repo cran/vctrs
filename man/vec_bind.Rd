@@ -6,15 +6,18 @@
 \alias{vec_cbind}
 \title{Combine many data frames into one data frame}
 \usage{
-vec_rbind(..., .ptype = NULL)
+vec_rbind(..., .ptype = NULL, .names_to = NULL,
+  .name_repair = c("unique", "universal", "check_unique"))
 
-vec_cbind(..., .ptype = NULL, .size = NULL)
+vec_cbind(..., .ptype = NULL, .size = NULL,
+  .name_repair = c("unique", "universal", "check_unique", "minimal"))
 }
 \arguments{
 \item{...}{Data frames or vectors.
 
-\code{vec_rbind()} ignores names. \code{vec_cbind()} preserves outer names,
-combining with inner names if also present.
+\code{vec_rbind()} ignores names unless \code{.names_to} is supplied.
+\code{vec_cbind()} creates packed data frame columns with named
+inputs.
 
 \code{NULL} inputs are silently ignored. Empty (e.g. zero row) inputs
 will not appear in the output, but will affect the derived \code{.ptype}.}
@@ -26,7 +29,24 @@ Alternatively, you can supply \code{.ptype} to give the output known type.
 If \code{getOption("vctrs.no_guessing")} is \code{TRUE} you must supply this value:
 this is a convenient way to make production code demand fixed types.}
 
-\item{.size}{If, \code{NULL}, the default, will determing the number of
+\item{.names_to}{Optionally, the name of a column where the names
+of \code{...} arguments are copied. These names are useful to identify
+which row comes from which input. If supplied, \code{...} must be
+named.}
+
+\item{.name_repair}{One of \code{"unique"}, \code{"universal"}, or
+\code{"check_unique"}. See \code{\link[=vec_as_names]{vec_as_names()}} for the meaning of these
+options.
+
+With \code{vec_rbind()}, the repair function is applied to all inputs
+separately. This is because \code{vec_rbind()} needs to align their
+columns before binding the rows, and thus needs all inputs to
+have unique names. On the other hand, \code{vec_cbind()} applies the
+repair function after all inputs have been concatenated together
+in a final data frame. Hence \code{vec_cbind()} allows the more
+permissive minimal names repair.}
+
+\item{.size}{If, \code{NULL}, the default, will determine the number of
 rows in \code{vec_cbind()} output by using the standard recycling rules.
 
 Alternatively, specify the desired number of rows, and any inputs
@@ -35,7 +55,7 @@ of length 1 will be recycled appropriately.}
 \value{
 A data frame, or subclass of data frame.
 
-If \code{...} is a mix of different data frame subclases, \code{vec_type2()}
+If \code{...} is a mix of different data frame subclases, \code{vec_ptype2()}
 will be used to determine the output type. For \code{vec_rbind()}, this
 will determine the type of the container and the type of each column;
 for \code{vec_cbind()} it only determines the type of the output container.
@@ -49,11 +69,31 @@ across all arguments.
 }
 \section{Invariants}{
 
+
+All inputs are first converted to a data frame. The conversion for
+1d vectors depends on the direction of binding:
+\itemize{
+\item For \code{vec_rbind()}, each element of the vector becomes a column in
+a single row.
+\item For \code{vec_cbind()}, each element of the vector becomes a row in a
+single column.
+}
+
+Once the inputs have all become data frames, the following
+invariants are observed for row-binding:
 \itemize{
 \item \code{vec_size(vec_rbind(x, y)) == vec_size(x) + vec_size(y)}
-\item \code{vec_type(vec_rbind(x, y)) = vec_type_common(x, y)}
+\item \code{vec_ptype(vec_rbind(x, y)) = vec_ptype_common(x, y)}
+}
+
+Note that if an input is an empty vector, it is first converted to
+a 1-row data frame with 0 columns. Despite being empty, its
+effective size for the total number of rows is 1.
+
+For column-binding, the following invariants apply:
+\itemize{
 \item \code{vec_size(vec_cbind(x, y)) == vec_size_common(x, y)}
-\item \code{vec_type(vec_cbind(x, y)) == vec_cbind(vec_type(x), vec_type(x))}
+\item \code{vec_ptype(vec_cbind(x, y)) == vec_cbind(vec_ptype(x), vec_ptype(x))}
 }
 }
 
@@ -106,11 +146,22 @@ vec_cbind(
   y = letters[1:3]
 )
 
-# outer names are combined with inner names
-vec_cbind(
+# if you supply a named data frame, it is packed in a single column
+data <- vec_cbind(
   x = data.frame(a = 1, b = 2),
   y = 1
 )
+data
+
+# Packed data frames are nested in a single column. This makes it
+# possible to access it through a single name:
+data$x
+
+# since the base print method is suboptimal with packed data
+# frames, it is recommended to use tibble to work with these:
+if (rlang::is_installed("tibble")) {
+  vec_cbind(x = tibble::tibble(a = 1, b = 2), y = 1)
+}
 
 # duplicate names are flagged
 vec_cbind(x = 1, x = 2)

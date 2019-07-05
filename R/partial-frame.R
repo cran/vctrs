@@ -16,15 +16,20 @@
 #' )
 partial_frame <- function(...) {
   args <- list2(...)
-  args <- lapply(args, vec_type)
+  args <- lapply(args, vec_ptype)
 
   partial <- new_data_frame(args, n = 0L)
   new_partial_frame(partial)
 }
 
 new_partial_frame <- function(partial = data.frame(), learned = data.frame()) {
-  stopifnot(is.data.frame(partial))
-  stopifnot(is.data.frame(learned))
+  stopifnot(
+    is.data.frame(partial),
+    is.data.frame(learned)
+  )
+
+  # Fails if `learned` is not compatible with `partial`
+  vec_ptype2(partial, learned)
 
   new_partial(
     partial = partial,
@@ -34,7 +39,7 @@ new_partial_frame <- function(partial = data.frame(), learned = data.frame()) {
 }
 
 #' @export
-vec_ptype_full.vctrs_partial_frame <- function(x) {
+vec_ptype_full.vctrs_partial_frame <- function(x, ...) {
   both <- c(as.list(x$partial), as.list(x$learned))
 
   types <- map_chr(both, vec_ptype_full)
@@ -52,28 +57,38 @@ vec_ptype_full.vctrs_partial_frame <- function(x) {
 }
 
 #' @export
-vec_ptype_abbr.vctrs_partial_frame <- function(x) {
-  "<partial_frame>"
+vec_ptype_abbr.vctrs_partial_frame <- function(x, ...) {
+  "prtl"
 }
 
-vec_type2.vctrs_partial_frame <- function(x, y) {
-  UseMethod("vec_type2.vctrs_partial_frame", y)
-}
-
-#' @method vec_type2.vctrs_partial_frame data.frame
+#' @method vec_ptype2 vctrs_partial_frame
 #' @export
-vec_type2.vctrs_partial_frame.data.frame <- function(x, y) {
-  new_partial_frame(x$partial, vec_type2(x$learned, y))
+vec_ptype2.vctrs_partial_frame <- function(x, y, ...) {
+  UseMethod("vec_ptype2.vctrs_partial_frame", y)
 }
 
-#' @method vec_type2.data.frame vctrs_partial_frame
+#' @method vec_ptype2.vctrs_partial_frame vctrs_partial_frame
 #' @export
-vec_type2.data.frame.vctrs_partial_frame <- function(x, y) {
-  new_partial_frame(y$partial, vec_type2(y$learned, x))
+vec_ptype2.vctrs_partial_frame.vctrs_partial_frame <- function(x, y, ...) {
+  partial <- vec_ptype2(x$partial, y$partial)
+  learned <- vec_ptype2(x$learned, y$learned)
+  new_partial_frame(partial, learned)
+}
+
+#' @method vec_ptype2.vctrs_partial_frame data.frame
+#' @export
+vec_ptype2.vctrs_partial_frame.data.frame <- function(x, y, ...) {
+  new_partial_frame(x$partial, vec_ptype2(x$learned, y))
+}
+
+#' @method vec_ptype2.data.frame vctrs_partial_frame
+#' @export
+vec_ptype2.data.frame.vctrs_partial_frame <- function(x, y, ...) {
+  new_partial_frame(y$partial, vec_ptype2(y$learned, x))
 }
 
 #' @export
-vec_type_finalise.vctrs_partial_frame <- function(x) {
+vec_ptype_finalise.vctrs_partial_frame <- function(x, ...) {
   out <- x$learned
   out[names(x$partial)] <- x$partial
 

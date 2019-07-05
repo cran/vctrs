@@ -4,10 +4,12 @@
 \alias{vec_proxy_equal}
 \title{Equality proxy}
 \usage{
-vec_proxy_equal(x)
+vec_proxy_equal(x, ...)
 }
 \arguments{
 \item{x}{A vector x.}
+
+\item{...}{These dots are for future extensions and must be empty.}
 }
 \value{
 A 1d atomic vector or a data frame.
@@ -20,8 +22,9 @@ vectors). For \link{vctr}s, this determines the behaviour of \code{==} and
 (via \code{\link[=vec_equal_na]{vec_equal_na()}}).
 }
 \details{
-The default method calls \link{vec_proxy_compare}, which makes all vector classes
-equal-able by default. If your object is not, provide a
-\code{vec_proxy_equal()} method that throws an error.
+The default method calls \code{\link[=vec_proxy]{vec_proxy()}}, as the default underlying
+vector data should be equal-able in most cases. If your class is
+not equal-able, provide a \code{vec_proxy_equal()} method that throws an
+error.
 }
 \keyword{internal}

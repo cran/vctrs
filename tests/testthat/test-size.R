@@ -3,7 +3,7 @@ context("test-size")
 # vec_size -----------------------------------------------------------------
 
 test_that("vec_size must be called with vector", {
-  expect_error(vec_size(mean), "not a vector")
+  expect_error(vec_size(mean), class = "vctrs_error_scalar_type")
 })
 
 test_that("length is number of rows", {
@@ -33,88 +33,69 @@ test_that("handles three types of data frame rownames", {
   expect_equal(vec_size(df3), 3)
 })
 
-# vec_slice --------------------------------------------------------------
-
-test_that("can subset object of any dimensionality", {
-  x0 <- c(1, 1)
-  x1 <- ones(2)
-  x2 <- ones(2, 3)
-  x3 <- ones(2, 3, 4)
-  x4 <- ones(2, 3, 4, 5)
-
-  expect_equal(vec_slice(x0, 1L), 1)
-  expect_equal(vec_slice(x1, 1L), ones(1))
-  expect_equal(vec_slice(x2, 1L), ones(1, 3))
-  expect_equal(vec_slice(x3, 1L), ones(1, 3, 4))
-  expect_equal(vec_slice(x4, 1L), ones(1, 3, 4, 5))
+test_that("handles positive short row names (#220)", {
+  data <- structure(mtcars, row.names = c(NA, 32))
+  expect_identical(vec_size(data), 32L)
 })
 
-test_that("can modify subset", {
-  x1 <- c(2, 1)
-  vec_slice(x1, 1L) <- 1
-  expect_equal(x1, c(1, 1))
-
-  x2 <- array(c(2, 1, 2, 1), c(2, 2))
-  vec_slice(x2, 1L) <- 1
-  expect_equal(x2, array(1, c(2, 2)))
-
-  x3 <- array(c(2, 1, 2, 1, 2, 1, 2, 1), c(2, 2, 2))
-  vec_slice(x3, 1L) <- 1
-  expect_equal(x3, array(1, c(2, 2, 2)))
+test_that("size is proxied", {
+  scoped_env_proxy()
+  expect_size(new_proxy(1:3), 3)
+  expect_size(new_proxy(list(1, 2, 3)), 3)
+  expect_size(new_proxy(foobar(list(1, 2, 3))), 3)
 })
 
-test_that("ignores NA in logical subsetting", {
-  x <- c(NA, 1, 2)
-  expect_equal(vec_slice(x, x > 0), c(1, 2))
-  expect_equal(`vec_slice<-`(x, x > 0, 1), c(NA, 1, 1))
-  expect_equal(`vec_slice<-`(x, x > 0, 2:1), c(NA, 2, 1))
+test_that("`NULL` has size zero", {
+  expect_identical(vec_size(NULL), 0L)
 })
 
-# vec_na ------------------------------------------------------------------
+# vec_size_common ---------------------------------------------------------
 
-test_that("vec_slice throws error with non-vector inputs", {
-  expect_error(vec_slice(environment(), 1L), "a vector")
-
-  x <- environment()
-  expect_error(vec_slice(x, 1L) <- 1L, "a vector")
+test_that("vec_size_common with no input is 0L unless `.absent` is provided", {
+  expect_identical(vec_size_common(), 0L)
+  expect_identical(vec_size_common(NULL), 0L)
+  expect_equal(vec_size_common(.absent = na_int), na_int)
 })
 
-test_that("na of atomic vectors is as expected", {
-  expect_equal(vec_na(TRUE), NA)
-  expect_equal(vec_na(1L), NA_integer_)
-  expect_equal(vec_na(1), NA_real_)
-  expect_equal(vec_na("x"), NA_character_)
-  expect_equal(vec_na(1i), NA_complex_)
+test_that("`.absent` must be a length 1 integer if provided", {
+  expect_error(vec_size_common(.absent = 1), "must be a single integer")
+  expect_error(vec_size_common(.absent = c(1L, 2L)), "must be a single integer")
 })
 
-test_that("na of factor preserves levels", {
-  f1 <- factor("a", levels = c("a", "b"))
-  f2 <- vec_na(f1)
-
-  expect_equal(levels(f1), levels(f2))
+test_that("`NULL` is treated as the absence of input", {
+  expect_equal(vec_size_common(1:5, NULL), vec_size_common(1:5))
 })
 
-test_that("na of POSIXct preserves tz", {
-  dt1 <- as.POSIXct("2010-01-01", tz = "America/New_York")
-  dt2 <- vec_na(dt1)
-  expect_equal(attr(dt2, "tzone"), "America/New_York")
+test_that("size 1 is overshadowed by any other size", {
+  expect_equal(vec_size_common(1, integer()), 0)
+  expect_equal(vec_size_common(1, 1:5), 5)
 })
 
-test_that("na of list is list(NULL)", {
-  expect_equal(vec_na(list()), list(NULL))
+test_that("if not size 1, sizes must be identical", {
+  expect_equal(vec_size_common(integer(), integer()), 0)
+  expect_error(vec_size_common(1:2, integer()), class = "vctrs_error_incompatible_size")
+  expect_error(vec_size_common(1:2, 1:3), class = "vctrs_error_incompatible_size")
 })
 
-test_that("na of array is 1d slice", {
-  x1 <- array(1:12, c(2, 3, 4))
-  x2 <- vec_na(x1)
-
-  expect_equal(x2, array(NA_integer_, c(1, 3, 4)))
+test_that("argument tags are forwarded", {
+  expect_known_output_nobang(file = test_path("test-type-vec-size-common-error.txt"), {
+    try2(vec_size_common(1:2, 1, 1:4))
+    try2(vec_size_common(foo = 1:2, 1, bar = 1:4))
+  })
 })
 
-test_that("na of list-array is 1d slice", {
-  x1 <- array(as.list(1:12), c(2, 3, 4))
-  x2 <- vec_na(x1)
-
-  expect_equal(x2, array(list(), c(1, 3, 4)))
+test_that("can pass size", {
+  expect_identical(vec_size_common(1:2, 1:3, .size = 5L), 5L)
 })
 
+
+# sequences ---------------------------------------------------------------
+
+test_that("vec_seq_along returns size-0 output for size-0 input", {
+  expect_equal(vec_seq_along(character()), integer())
+  expect_equal(vec_seq_along(data.frame()), integer())
+})
+
+test_that("vec_init_along can be called with single argument", {
+  expect_equal(vec_init_along(1:3), rep(NA_integer_, 3))
+})

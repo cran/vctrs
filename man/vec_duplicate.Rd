@@ -19,20 +19,20 @@ vec_duplicate_id(x)
 \value{
 \itemize{
 \item \code{vec_duplicate_any()}: a logical vector of length 1.
-\item \code{vec_duplicate_detect()}: a logical vector the same length as \code{x}
-\item \code{vec_duplicate_id()}: an integer vector the same length as \code{x}
+\item \code{vec_duplicate_detect()}: a logical vector the same length as \code{x}.
+\item \code{vec_duplicate_id()}: an integer vector the same length as \code{x}.
 }
 }
 \description{
 \itemize{
-\item \code{vec_duplicate_any()}: detects the presence of any duplicated values,
-in the same way as \code{\link[=anyDuplicated]{anyDuplicated()}}.
+\item \code{vec_duplicate_any()}: detects the presence of duplicated values,
+similar to \code{\link[=anyDuplicated]{anyDuplicated()}}.
 \item \code{vec_duplicate_detect()}: returns a logical vector describing if each
 element of the vector is duplicated elsewhere. Unlike \code{\link[=duplicated]{duplicated()}}, it
 reports all duplicated values, not just the second and subsequent
 repetitions.
-\item \code{vec_duplicate_id()}: returns an integer vector given the location of
-the first occurence of the value
+\item \code{vec_duplicate_id()}: returns an integer vector giving the location of
+the first occurence of the value.
 }
 }
 \section{Missing values}{
@@ -41,15 +41,6 @@ In most cases, missing values are not considered to be equal, i.e.
 \code{NA == NA} is not \code{TRUE}. This behaviour would be unappealing here,
 so these functions consider all \code{NAs} to be equal. (Similarly,
 all \code{NaN} are also considered to be equal.)
-}
-
-\section{Performance}{
-
-These functions are currently slightly slower than their base equivalents.
-This is primarily because they do a little more checking and coercion
-in R, which makes them both a litter safer and more generic. Additionally,
-the C code underlying vctrs has not yet been implemented: we expect
-some performance improvements when that happens.
 }
 
 \examples{

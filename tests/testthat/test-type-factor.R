@@ -4,7 +4,7 @@ test_that("ptype methods are descriptive", {
   f <- factor()
   o <- ordered(character())
 
-  expect_equal(vec_ptype_abbr(f), "fctr")
+  expect_equal(vec_ptype_abbr(f), "fct")
   expect_equal(vec_ptype_abbr(o), "ord")
 
   expect_equal(vec_ptype_full(f), "factor<>")
@@ -13,7 +13,7 @@ test_that("ptype methods are descriptive", {
 
 # Coercion ----------------------------------------------------------------
 
-test_that("factor/character coercions are symmetric and unnchanging", {
+test_that("factor/character coercions are symmetric and unchanging", {
   types <- list(
     ordered(character()),
     factor(),
@@ -36,8 +36,15 @@ test_that("factors level are unioned", {
   fa <- factor(levels = "a")
   fb <- factor(levels = "b")
 
-  expect_equal(vec_type_common(fa, fb), factor(levels = c("a", "b")))
-  expect_equal(vec_type_common(fb, fa), factor(levels = c("b", "a")))
+  expect_equal(vec_ptype_common(fa, fb), factor(levels = c("a", "b")))
+  expect_equal(vec_ptype_common(fb, fa), factor(levels = c("b", "a")))
+})
+
+test_that("coercion errors with factors", {
+  f <- factor(levels = "a")
+
+  expect_error(vec_ptype_common(f, logical()), class = "vctrs_error_incompatible_type")
+  expect_error(vec_ptype_common(logical(), f), class = "vctrs_error_incompatible_type")
 })
 
 # Casting -----------------------------------------------------------------
@@ -63,21 +70,27 @@ test_that("can cast to character", {
   expect_equal(vec_cast(ordered("X"), character()), "X")
 })
 
-test_that("can cast NA to factor", {
-  expect_equal(vec_cast(NA, new_factor()), factor(NA))
-  expect_equal(vec_cast(NA, new_ordered()), ordered(NA))
+test_that("can cast NA and unspecified to factor", {
+  expect_identical(vec_cast(NA, new_factor()), factor(NA))
+  expect_identical(vec_cast(NA, new_ordered()), ordered(NA))
+  expect_identical(vec_cast(unspecified(2), new_factor()), factor(c(NA, NA)))
+  expect_identical(vec_cast(unspecified(2), new_ordered()), ordered(c(NA, NA)))
 })
 
-test_that("lossy casts generate warning", {
+test_that("lossy factor casts fail", {
   fa <- factor("a")
   fb <- factor("b")
 
-  expect_condition(vec_cast(fa, fb), class = "warning_lossy_cast")
-  expect_condition(vec_cast("a", fb), class = "warning_lossy_cast")
+  expect_lossy(vec_cast(fa, fb), factor(NA, levels = "b"), x = fa, to = fb)
+  expect_lossy(vec_cast("a", fb), factor(NA, levels = "b"), x = chr(), to = fb)
 })
 
 test_that("invalid casts generate error", {
-  expect_error(vec_cast(double(), factor("a")), class = "error_incompatible_cast")
+  expect_error(vec_cast(double(), factor("a")), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(factor("a"), logical()), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(ordered("a"), logical()), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(logical(), factor("a")), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(logical(), ordered("a")), class = "vctrs_error_incompatible_cast")
 })
 
 test_that("orderedness of factor is preserved", {
@@ -97,6 +110,6 @@ test_that("NA are not considered lossy in factor cast (#109)", {
 
 test_that("factors don't support math or arthimetic", {
   f <- factor("x")
-  expect_error(vec_math("sum", f), class = "error_unsupported")
-  expect_error(vec_arith("+", f, f), class = "error_unsupported")
+  expect_error(vec_math("sum", f), class = "vctrs_error_unsupported")
+  expect_error(vec_arith("+", f, f), class = "vctrs_error_unsupported")
 })

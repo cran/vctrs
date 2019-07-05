@@ -27,6 +27,12 @@
 #' @param method Optionally, the implementation of the method. By default,
 #'   this will be found by looking for a function called `generic.class`
 #'   in the package environment.
+#'
+#'   Note that providing `method` can be dangerous if you use
+#'   devtools. When the namespace of the method is reloaded by
+#'   `devtools::load_all()`, the function will keep inheriting from
+#'   the old namespace. This might cause crashes because of dangling
+#'   `.Call()` pointers.
 #' @export
 #' @examples
 #' # A typical use case is to dynamically register tibble/pillar methods
@@ -49,22 +55,53 @@ s3_register <- function(generic, class, method = NULL) {
   package <- pieces[[1]]
   generic <- pieces[[2]]
 
-  if (is.null(method)) {
-    method <- get(paste0(generic, ".", class), envir = parent.frame())
-  }
-  stopifnot(is.function(method))
+  caller <- parent.frame()
 
-  if (package %in% loadedNamespaces()) {
-    registerS3method(generic, class, method, envir = asNamespace(package))
+  get_method_env <- function() {
+    top <- topenv(caller)
+    if (isNamespace(top)) {
+      asNamespace(environmentName(top))
+    } else {
+      caller
+    }
   }
+  get_method <- function(method, env) {
+    if (is.null(method)) {
+      get(paste0(generic, ".", class), envir = get_method_env())
+    } else {
+      method
+    }
+  }
+
+  method_fn <- get_method(method)
+  stopifnot(is.function(method_fn))
 
   # Always register hook in case package is later unloaded & reloaded
   setHook(
     packageEvent(package, "onLoad"),
     function(...) {
-      registerS3method(generic, class, method, envir = asNamespace(package))
+      ns <- asNamespace(package)
+
+      # Refresh the method, it might have been updated by `devtools::load_all()`
+      method_fn <- get_method(method)
+
+      registerS3method(generic, class, method_fn, envir = ns)
     }
   )
+
+  # Avoid registration failures during loading (pkgload or regular)
+  if (!isNamespaceLoaded(package)) {
+    return(invisible())
+  }
+
+  envir <- asNamespace(package)
+
+  # Only register if generic can be accessed
+  if (exists(generic, envir)) {
+    registerS3method(generic, class, method_fn, envir = envir)
+  }
+
+  invisible()
 }
 
 # nocov end
