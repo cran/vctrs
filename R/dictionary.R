@@ -41,7 +41,7 @@
 vec_count <- function(x, sort = c("count", "key", "location", "none")) {
   sort <- match.arg(sort)
 
-  # Returns key-value pair giving index of first occurence value and count
+  # Returns key-value pair giving index of first occurrence value and count
   kv <- .Call(vctrs_count, vec_proxy(x))
 
   # rep_along() to support zero-length vectors!
@@ -82,7 +82,7 @@ reset_rownames <- function(x) {
 #'   reports all duplicated values, not just the second and subsequent
 #'   repetitions.
 #' * `vec_duplicate_id()`: returns an integer vector giving the location of
-#'   the first occurence of the value.
+#'   the first occurrence of the value.
 #'
 #' @section Missing values:
 #' In most cases, missing values are not considered to be equal, i.e.
@@ -146,7 +146,7 @@ vec_duplicate_id <- function(x) {
 #' @inherit vec_duplicate sections
 #' @param x A vector (including a data frame).
 #' @return
-#' * `vec_unique()`: a vector the same type as `x` containining only unique
+#' * `vec_unique()`: a vector the same type as `x` containing only unique
 #'    values.
 #' * `vec_unique_loc()`: an integer vector, giving locations of unique values.
 #' * `vec_unique_count()`: an integer vector of length 1, giving the
@@ -195,7 +195,7 @@ vec_unique_count <- function(x) {
 #' haystack. `vec_match()` returns an integer vector giving location of
 #' `needle` in `haystack`, or `NA` if it's not found.
 #'
-#' `vec_in()` is equivalent to [%in%]; `vec_match()` is equivalen to `match()`.
+#' `vec_in()` is equivalent to [%in%]; `vec_match()` is equivalent to `match()`.
 #'
 #' @inherit vec_duplicate sections
 #' @param needles,haystack Vector of `needles` to search for in vector haystack.
@@ -225,51 +225,4 @@ vec_match <- function(needles, haystack) {
 #' @rdname vec_match
 vec_in <- function(needles, haystack) {
   .Call(vctrs_in, needles, haystack)
-}
-
-
-# Splitting ---------------------------------------------------------------
-
-#' Split a vector into groups
-#'
-#' This is a generalisation of [split()] that can split by any type of vector,
-#' not just factors. Instead of returning the keys in the character names,
-#' the are returned in a separate parallel vector.
-#'
-#' @param x Vector to divide into groups.
-#' @param by Vector whose unique values defines the groups.
-#' @return A data frame with two columns and size equal to
-#'   `vec_size(vec_unique(by))`. The `key` column has the same type as
-#'   `by`, and the `val` column has type `list_of<vec_ptype(x)>`.
-#'
-#'   Note for complex types, the default `data.frame` print method will be
-#'   suboptimal, and you will want to coerce into a tibble to better
-#'   understand the output.
-#' @export
-#' @examples
-#' vec_split(mtcars$cyl, mtcars$vs)
-#' vec_split(mtcars$cyl, mtcars[c("vs", "am")])
-#'
-#' if (require("tibble")) {
-#'   as_tibble(vec_split(mtcars$cyl, mtcars[c("vs", "am")]))
-#'   as_tibble(vec_split(mtcars, mtcars[c("vs", "am")]))
-#' }
-vec_split <- function(x, by) {
-  if (vec_size(x) != vec_size(by)) {
-    abort("`x` and `by` must have same size")
-  }
-
-  ki <- vec_duplicate_split(by)
-  keys <- vec_slice(by, ki$key)
-  x_split <- map(ki$idx, vec_slice, x = x)
-
-  vals <- new_list_of(x_split, vec_ptype(x))
-
-  new_data_frame(list(key = keys, val = vals), n = vec_size(keys))
-}
-
-# Returns key-index pair giving the index of first key occurence and
-# a list containing the locations of each key
-vec_duplicate_split <- function(x) {
-  .Call(vctrs_duplicate_split, x)
 }

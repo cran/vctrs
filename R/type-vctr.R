@@ -26,7 +26,7 @@
 #' * `as.factor()`, `as.ordered()` and `as.difftime()` are not generic functions
 #'   in base R, but have been reimplemented as generics in the `generics`
 #'   package. `vctrs` extends these and calls `vec_cast()`. To inherit this
-#'   behavior in a package, import and re-export the generic of interest
+#'   behaviour in a package, import and re-export the generic of interest
 #'   from `generics`.
 #'
 #' * `==`, `!=`, `unique()`, `anyDuplicated()`, and `is.na()` use
@@ -49,16 +49,24 @@
 #' @param .data Foundation of class. Must be a vector
 #' @param ... Name-value pairs defining attributes
 #' @param class Name of subclass.
+#' @param inherit_base_type \Sexpr[results=rd, stage=render]{vctrs:::lifecycle("experimental")}
+#'   Does this class extend the base type of `.data`?  i.e. does the
+#'   resulting object extend the behaviour the underlying type?
 #' @export
 #' @keywords internal
 #' @aliases vctr
-new_vctr <- function(.data, ..., class = character()) {
+new_vctr <- function(.data,
+                     ...,
+                     class = character(),
+                     inherit_base_type = FALSE) {
   if (!is_vector(.data)) {
     abort("`.data` must be a vector type.")
   }
 
   nms <- validate_names(.data)
-  attrib <- list(names = nms, ..., class = c(class, "vctrs_vctr"))
+
+  class <- c(class, "vctrs_vctr", if (inherit_base_type) typeof(.data))
+  attrib <- list(names = nms, ..., class = class)
 
   vec_set_attributes(.data, attrib)
 }
@@ -118,6 +126,14 @@ vec_cast.vctrs_vctr.default <- function(x, to, ...) {
   }
 
   vec_restore(x, to)
+}
+
+#' @export
+#' @method vec_cast.list vctrs_vctr
+vec_cast.list.vctrs_vctr <- function(x, to, ...) {
+  # FIXME: Coercion to list should be disallowed. Current
+  # implementation can be achieved with `vec_chop()`.
+  vec_cast_list_default(x, to, ...)
 }
 
 #' @export
@@ -265,12 +281,18 @@ as.list.vctrs_vctr <- function(x, ...) {
 
 #' @export
 as.Date.vctrs_vctr <- function(x, ...) {
-  vec_cast(x, date())
+  vec_cast(x, new_date())
 }
 
 #' @export
 as.POSIXct.vctrs_vctr <- function(x, tz = "", ...) {
   vec_cast(x, new_datetime(tzone = tz))
+}
+
+#' @export
+as.POSIXlt.vctrs_vctr <- function(x, tz = "", ...) {
+  to <- as.POSIXlt(new_datetime(), tz = tz)
+  vec_cast(x, to)
 }
 
 # Work around inconsistencies in as.data.frame() for 1D arrays
@@ -617,12 +639,12 @@ levels.vctrs_vctr <- function(x) {
 # nocov start
 new_hidden <- function(x = double()) {
   stopifnot(is.numeric(x))
-  new_vctr(vec_cast(x, double()), class = "hidden")
+  new_vctr(vec_cast(x, double()), class = "hidden", inherit_base_type = FALSE)
 }
 format.hidden <- function(x, ...) rep("xxx", length(x))
 
-scoped_hidden <- function(frame = caller_env()) {
-  scoped_bindings(.env = global_env(), .frame = frame,
+local_hidden <- function(frame = caller_env()) {
+  local_bindings(.env = global_env(), .frame = frame,
     vec_ptype2.hidden         = function(x, y, ...) UseMethod("vec_ptype2.hidden", y),
     vec_ptype2.hidden.default = function(x, y, ...) stop_incompatible_type(x, y, ...),
     vec_ptype2.hidden.hidden  = function(x, y, ...) new_hidden(),

@@ -4,6 +4,7 @@
 \alias{vec_ptype2.logical}
 \alias{vec_ptype2.integer}
 \alias{vec_ptype2.double}
+\alias{vec_ptype2.complex}
 \alias{vec_ptype2.character}
 \alias{vec_ptype2.raw}
 \alias{vec_ptype2.list}
@@ -11,17 +12,19 @@
 \alias{vec_default_ptype2}
 \title{Find the common type for a pair of vector types}
 \usage{
-\method{vec_ptype2}{logical}(x, y, ...)
+\method{vec_ptype2}{logical}(x, y, ..., x_arg = "x", y_arg = "y")
 
-\method{vec_ptype2}{integer}(x, y, ...)
+\method{vec_ptype2}{integer}(x, y, ..., x_arg = "x", y_arg = "y")
 
-\method{vec_ptype2}{double}(x, y, ...)
+\method{vec_ptype2}{double}(x, y, ..., x_arg = "x", y_arg = "y")
 
-\method{vec_ptype2}{character}(x, y, ...)
+\method{vec_ptype2}{complex}(x, y, ..., x_arg = "x", y_arg = "y")
 
-\method{vec_ptype2}{raw}(x, y, ...)
+\method{vec_ptype2}{character}(x, y, ..., x_arg = "x", y_arg = "y")
 
-\method{vec_ptype2}{list}(x, y, ...)
+\method{vec_ptype2}{raw}(x, y, ..., x_arg = "x", y_arg = "y")
+
+\method{vec_ptype2}{list}(x, y, ..., x_arg = "x", y_arg = "y")
 
 vec_ptype2(x, y, ..., x_arg = "x", y_arg = "y")
 
@@ -63,7 +66,7 @@ which call e.g. \code{vec_ptype2.integer.double()}. \code{vec_ptype2.x.y()} must
 return the same value as \code{vec_ptype2.y.x()}; this is currently not enforced,
 but should be tested.
 
-Whenever you implemenet a \code{vec_ptype2.new_class()} generic/method,
+Whenever you implement a \code{vec_ptype2.new_class()} generic/method,
 make sure to always provide \code{vec_ptype2.new_class.default()}. It
 should normally call \code{vec_default_ptype2()}.
 

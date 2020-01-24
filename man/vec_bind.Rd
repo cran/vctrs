@@ -6,11 +6,19 @@
 \alias{vec_cbind}
 \title{Combine many data frames into one data frame}
 \usage{
-vec_rbind(..., .ptype = NULL, .names_to = NULL,
-  .name_repair = c("unique", "universal", "check_unique"))
+vec_rbind(
+  ...,
+  .ptype = NULL,
+  .names_to = NULL,
+  .name_repair = c("unique", "universal", "check_unique")
+)
 
-vec_cbind(..., .ptype = NULL, .size = NULL,
-  .name_repair = c("unique", "universal", "check_unique", "minimal"))
+vec_cbind(
+  ...,
+  .ptype = NULL,
+  .size = NULL,
+  .name_repair = c("unique", "universal", "check_unique", "minimal")
+)
 }
 \arguments{
 \item{...}{Data frames or vectors.
@@ -31,8 +39,8 @@ this is a convenient way to make production code demand fixed types.}
 
 \item{.names_to}{Optionally, the name of a column where the names
 of \code{...} arguments are copied. These names are useful to identify
-which row comes from which input. If supplied, \code{...} must be
-named.}
+which row comes from which input. If supplied and \code{...} is not named,
+an integer column is used to identify the rows.}
 
 \item{.name_repair}{One of \code{"unique"}, \code{"universal"}, or
 \code{"check_unique"}. See \code{\link[=vec_as_names]{vec_as_names()}} for the meaning of these
@@ -55,7 +63,7 @@ of length 1 will be recycled appropriately.}
 \value{
 A data frame, or subclass of data frame.
 
-If \code{...} is a mix of different data frame subclases, \code{vec_ptype2()}
+If \code{...} is a mix of different data frame subclasses, \code{vec_ptype2()}
 will be used to determine the output type. For \code{vec_rbind()}, this
 will determine the type of the container and the type of each column;
 for \code{vec_cbind()} it only determines the type of the output container.

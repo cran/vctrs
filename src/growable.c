@@ -1,22 +1,18 @@
 #include "vctrs.h"
+#include "utils.h"
 
-void growable_init(growable* g, SEXPTYPE type, int capacity) {
-  g->x = Rf_allocVector(type, capacity);
-  g->n = 0;
-  g->capacity = capacity;
+struct growable new_growable(SEXPTYPE type, int capacity) {
+  struct growable g;
+
+  g.x = Rf_allocVector(type, capacity);
+  g.type = type;
+  g.array = r_vec_unwrap(type, g.x);
+  g.n = 0;
+  g.capacity = capacity;
+
+  return g;
 }
 
-void growable_push_int(growable* g, int i) {
-  if (g->n == g->capacity) {
-    g->capacity *= 2;
-    g->x = Rf_lengthgets(g->x, g->capacity);
-    REPROTECT(g->x, g->idx);
-  }
-
-  INTEGER(g->x)[g->n] = i;
-  g->n++;
-}
-
-SEXP growable_values(growable* g) {
+SEXP growable_values(struct growable* g) {
   return Rf_lengthgets(g->x, g->n);
 }

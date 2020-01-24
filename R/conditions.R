@@ -8,7 +8,7 @@
 #' @param x,y Vectors
 #' @param details Any additional human readable details
 #' @param subclass Use if you want to further customise the class
-#' @param ...,message,.subclass Only use these fields when creating a subclass.
+#' @param ...,message,class Only use these fields when creating a subclass.
 #'
 #' @section Lossy cast errors:
 #'
@@ -40,14 +40,14 @@
 #' @name vctrs-conditions
 NULL
 
-stop_vctrs <- function(message = NULL, .subclass = NULL, ...) {
-  abort(message, .subclass = c(.subclass, "vctrs_error"), ...)
+stop_vctrs <- function(message = NULL, class = NULL, ...) {
+  abort(message, class = c(class, "vctrs_error"), ...)
 }
 
-stop_incompatible <- function(x, y, details = NULL, ..., message = NULL, .subclass = NULL) {
+stop_incompatible <- function(x, y, details = NULL, ..., message = NULL, class = NULL) {
   stop_vctrs(
     message,
-    .subclass = c(.subclass, "vctrs_error_incompatible"),
+    class = c(class, "vctrs_error_incompatible"),
     x = x,
     y = y,
     details = details,
@@ -67,7 +67,7 @@ stop_incompatible_type <- function(x, y,
                                    details = NULL,
                                    ...,
                                    message = NULL,
-                                   .subclass = NULL) {
+                                   class = NULL) {
   vec_assert(x)
   vec_assert(y)
 
@@ -96,7 +96,7 @@ stop_incompatible_type <- function(x, y,
     details = details,
     ...,
     message = message,
-    .subclass = c(.subclass, "vctrs_error_incompatible_type")
+    class = c(class, "vctrs_error_incompatible_type")
   )
 }
 
@@ -109,7 +109,7 @@ stop_incompatible_cast <- function(x,
                                    x_arg = "",
                                    to_arg = "",
                                    message = NULL,
-                                   .subclass = NULL) {
+                                   class = NULL) {
   if (is_null(message)) {
     x_label <- format_arg_label(vec_ptype_full(x), x_arg)
     to_label <- format_arg_label(vec_ptype_full(y), to_arg)
@@ -127,13 +127,13 @@ stop_incompatible_cast <- function(x,
     x_arg = x_arg,
     y_arg = to_arg,
     message = message,
-    .subclass = c(.subclass, "vctrs_error_incompatible_cast")
+    class = c(class, "vctrs_error_incompatible_cast")
   )
 }
 
 #' @rdname vctrs-conditions
 #' @export
-stop_incompatible_op <- function(op, x, y, details = NULL, ..., message = NULL, .subclass = NULL) {
+stop_incompatible_op <- function(op, x, y, details = NULL, ..., message = NULL, class = NULL) {
 
   message <- message %||% glue_lines(
     "<{vec_ptype_full(x)}> {op} <{vec_ptype_full(y)}> is not permitted",
@@ -146,7 +146,7 @@ stop_incompatible_op <- function(op, x, y, details = NULL, ..., message = NULL, 
     details = details,
     ...,
     message = message,
-    .subclass = c(.subclass, "vctrs_error_incompatible_op")
+    class = c(class, "vctrs_error_incompatible_op")
   )
 }
 
@@ -158,7 +158,7 @@ stop_incompatible_size <- function(x, y,
                                    details = NULL,
                                    ...,
                                    message = NULL,
-                                   .subclass = NULL) {
+                                   class = NULL) {
   vec_assert(x)
   vec_assert(y)
 
@@ -192,7 +192,7 @@ stop_incompatible_size <- function(x, y,
     details = details,
     ...,
     message = message,
-    .subclass = c(.subclass, "vctrs_error_incompatible_size")
+    class = c(class, "vctrs_error_incompatible_size")
   )
 }
 
@@ -220,7 +220,7 @@ maybe_lossy_cast <- function(result, x, to,
                              x_arg = "",
                              to_arg = "",
                              message = NULL,
-                             .subclass = NULL,
+                             class = NULL,
                              .deprecation = FALSE) {
   if (!any(lossy)) {
     return(result)
@@ -244,7 +244,7 @@ maybe_lossy_cast <- function(result, x, to,
       x_arg = x_arg,
       to_arg = to_arg,
       message = message,
-      .subclass = .subclass
+      class = class
     )
   )
 }
@@ -255,34 +255,61 @@ stop_lossy_cast <- function(x, to, result,
                             x_arg = "",
                             to_arg = "",
                             message = NULL,
-                            .subclass = NULL) {
-  if (length(locations)) {
-    locations <- inline_list("Locations: ", locations)
-  }
-
-  if (is_null(message)) {
-    x_label <- format_arg_label(vec_ptype_full(x), x_arg)
-    to_label <- format_arg_label(vec_ptype_full(to), to_arg)
-
-    message <- glue_lines(
-      "Lossy cast from {x_label} to {to_label}.",
-      locations,
-      details
-    )
-  }
-
+                            class = NULL) {
   stop_vctrs(
     message,
     x = x,
     y = to,
     to = to,
     result = result,
+    x_arg = x_arg,
+    to_arg = to_arg,
     locations = locations,
     details = details,
     ...,
-    .subclass = c(.subclass, "vctrs_error_cast_lossy")
+    class = c(class, "vctrs_error_cast_lossy")
   )
 }
+
+#' @export
+conditionMessage.vctrs_error_cast_lossy <- function(c) {
+  # FIXME: Remove `message` argument
+  if (is_string(c$message) && nzchar(c$message)) {
+    return(c$message)
+  }
+
+  # FIXME: Add `cnd_details()`?
+  glue_lines(
+    cnd_message(c),
+    c$details
+  )
+}
+#' @export
+cnd_header.vctrs_error_cast_lossy <- function(cnd, ...) {
+  x_label <- format_arg_label(vec_ptype_full(cnd$x), cnd$x_arg)
+  to_label <- format_arg_label(vec_ptype_full(cnd$to), cnd$to_arg)
+  glue::glue("Lossy cast from {x_label} to {to_label}.")
+}
+#' @export
+cnd_body.vctrs_error_cast_lossy <- function(cnd, ...) {
+  if (length(cnd$locations)) {
+    format_error_bullets(inline_list("Locations: ", cnd$locations))
+  } else {
+    character()
+  }
+}
+
+# Used in maybe_warn_deprecated_lossy_cast()
+new_error_cast_lossy <- function(x, to, x_arg = "", to_arg = "") {
+  error_cnd(
+    "vctrs_error_cast_lossy",
+    x = x,
+    to = to,
+    x_arg = x_arg,
+    to_arg = to_arg
+  )
+}
+
 #' @rdname vctrs-conditions
 #' @param x_ptype,to_ptype Suppress only the casting errors where `x`
 #'   or `to` match these [prototypes][vec_ptype].
@@ -309,7 +336,11 @@ maybe_warn_deprecated_lossy_cast <- function(x, to, x_arg, to_arg) {
   handled <- withRestarts(
     vctrs_restart_error_cast_lossy = function() TRUE,
     {
-      cnd_signal(cnd("vctrs_error_cast_lossy", x = x, to = to))
+      # Signal fully formed condition but strip the error classes in
+      # case someone is catching: This is not an abortive condition.
+      cnd <- new_error_cast_lossy(x, to, x_arg = x_arg, to_arg = to_arg)
+      class(cnd) <- setdiff(class(cnd), c("error", "rlang_error"))
+      signalCondition(cnd)
       FALSE
     }
   )
@@ -367,13 +398,34 @@ stop_scalar_type <- function(x, arg = NULL) {
   stop_vctrs(msg, "vctrs_error_scalar_type", actual = x)
 }
 
+stop_recycle_incompatible_size <- function(x_size, size, x_arg = "x") {
+  stop_vctrs(
+    x_size = x_size,
+    size = size,
+    x_arg = x_arg,
+    class = "vctrs_error_recycle_incompatible_size"
+  )
+}
+
+#' @export
+cnd_header.vctrs_error_recycle_incompatible_size <- function(cnd, ...) {
+  glue::glue_data(cnd, "`{x_arg}` can't be recycled to size {size}.")
+}
+#' @export
+cnd_body.vctrs_error_recycle_incompatible_size <- function(cnd, ...) {
+  glue_data_bullets(
+    cnd,
+    x = "It must be size {size} or 1, not {x_size}.",
+  )
+}
+
 
 # Names -------------------------------------------------------------------
 
-stop_names <- function(message, .subclass, locations, ...) {
+stop_names <- function(message, class, locations, ...) {
   stop_vctrs(
     message,
-    .subclass = c(.subclass, "vctrs_error_names"),
+    class = c(class, "vctrs_error_names"),
     locations = locations,
     ...
   )
@@ -382,7 +434,7 @@ stop_names <- function(message, .subclass, locations, ...) {
 stop_names_cannot_be_empty <- function(locations) {
   stop_names(
     "Names must not be empty.",
-    .subclass = "vctrs_error_names_cannot_be_empty",
+    class = "vctrs_error_names_cannot_be_empty",
     locations = locations
   )
 }
@@ -390,7 +442,7 @@ stop_names_cannot_be_empty <- function(locations) {
 stop_names_cannot_be_dot_dot <- function(locations) {
   stop_names(
     "Names must not be of the form `...` or `..j`.",
-    .subclass = "vctrs_error_names_cannot_be_dot_dot",
+    class = "vctrs_error_names_cannot_be_dot_dot",
     locations = locations
   )
 }
@@ -398,17 +450,42 @@ stop_names_cannot_be_dot_dot <- function(locations) {
 stop_names_must_be_unique <- function(locations) {
   stop_names(
     "Names must be unique.",
-    .subclass = "vctrs_error_names_must_be_unique",
+    class = "vctrs_error_names_must_be_unique",
     locations = locations
   )
 }
 
+enumerate <- function(x, max = 5L, allow_empty = FALSE) {
+  n <- length(x)
+
+  if (n == 0L && !allow_empty) {
+    abort("Internal error: Enumeration can't be empty.")
+  }
+  if (n > max) {
+    paste0(glue::glue_collapse(x[seq2(1, max)], ", "), ", etc.")
+  } else {
+    if (n == 2) {
+      last <- " and "
+    } else {
+      last <- ", and "
+    }
+    glue::glue_collapse(x, ", ", last = last)
+  }
+}
+
+ensure_full_stop <- function(x) {
+  n <- nchar(x)
+  if (substr(x, n, n) == ".") {
+    x
+  } else {
+    paste0(x, ".")
+  }
+}
 
 # Helpers -----------------------------------------------------------------
 
 glue_lines <- function(..., env = parent.frame()) {
-  lines <- c(...)
-  out <- map_chr(lines, glue::glue, .envir = env)
+  out <- map_chr(chr(...), glue::glue, .envir = env)
   paste(out, collapse = "\n")
 }
 
@@ -418,5 +495,21 @@ format_arg_label <- function(type, arg = "") {
     paste0("`", arg, "` ", type)
   } else {
     type
+  }
+}
+
+arg_as_string <- function(arg) {
+  if (is_string(arg)) {
+    arg
+  } else {
+    as_label(arg)
+  }
+}
+append_arg <- function(x, arg) {
+  if (is_null(arg)) {
+    x
+  } else {
+    arg <- arg_as_string(arg)
+    glue::glue("{x} `{arg}`")
   }
 }

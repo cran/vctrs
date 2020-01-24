@@ -73,7 +73,7 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, enum name_repair_arg n
   }
 
   SEXP out = PROTECT_N(vec_init(ptype, nrow), &nprot);
-  SEXP idx = PROTECT_N(compact_seq(0, 0), &nprot);
+  SEXP idx = PROTECT_N(compact_seq(0, 0, true), &nprot);
   int* idx_ptr = INTEGER(idx);
 
   SEXP names_to_col = R_NilValue;
@@ -104,7 +104,7 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, enum name_repair_arg n
     }
 
     SEXP tbl = PROTECT(vec_cast(VECTOR_ELT(xs, i), ptype, args_empty, args_empty));
-    init_compact_seq(idx_ptr, counter, counter + size);
+    init_compact_seq(idx_ptr, counter, size, true);
     df_assign(out, idx, tbl, false);
 
     // Assign current name to group vector, if supplied
@@ -141,31 +141,41 @@ static SEXP as_df_row_impl(SEXP x, enum name_repair_arg name_repair, bool quiet)
     return x;
   }
 
+  int nprot = 0;
+
   R_len_t ndim = vec_dim_n(x);
   if (ndim > 2) {
     Rf_errorcall(R_NilValue, "Can't bind arrays.");
   }
   if (ndim == 2) {
-    SEXP names = PROTECT(vec_unique_colnames(x, false));
-    SEXP out = PROTECT(r_as_data_frame(x));
+    SEXP names = PROTECT_N(vec_unique_colnames(x, false), &nprot);
+    SEXP out = PROTECT_N(r_as_data_frame(x), &nprot);
     r_poke_names(out, names);
-    UNPROTECT(2);
+    UNPROTECT(nprot);
     return out;
   }
 
-  x = PROTECT(r_as_list(x));
+  SEXP nms = PROTECT_N(vec_names(x), &nprot);
 
-  SEXP nms = PROTECT(r_names(x));
-  if (nms == R_NilValue) {
-    nms = PROTECT(vec_unique_names(x, quiet));
-  } else {
-    nms = PROTECT(vec_as_names(nms, name_repair, quiet));
+  // Remove names as they are promoted to data frame column names
+  if (nms != R_NilValue) {
+    x = PROTECT_N(r_maybe_duplicate(x), &nprot);
+    r_poke_names(x, R_NilValue);
   }
 
-  Rf_setAttrib(x, R_NamesSymbol, nms);
+  if (nms == R_NilValue) {
+    nms = PROTECT_N(vec_unique_names(x, quiet), &nprot);
+  } else {
+    nms = PROTECT_N(vec_as_names(nms, name_repair, quiet), &nprot);
+  }
+
+  x = PROTECT_N(vec_chop(x, R_NilValue), &nprot);
+
+  r_poke_names(x, nms);
+
   x = new_data_frame(x, 1);
 
-  UNPROTECT(3);
+  UNPROTECT(nprot);
   return x;
 }
 
@@ -232,7 +242,7 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, enum name_repair_arg name_
       continue;
     }
 
-    x = PROTECT(vec_recycle(x, nrow));
+    x = PROTECT(vec_recycle(x, nrow, args_empty));
 
     SEXP outer_name = has_names ? xs_names_p[i] : strings_empty;
     bool allow_packing;
@@ -256,7 +266,7 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, enum name_repair_arg name_
   SEXP out = PROTECT(Rf_allocVector(VECSXP, ncol));
   SEXP names = PROTECT(Rf_allocVector(STRSXP, ncol));
 
-  SEXP idx = PROTECT(compact_seq(0, 0));
+  SEXP idx = PROTECT(compact_seq(0, 0, true));
   int* idx_ptr = INTEGER(idx);
 
   R_len_t counter = 0;
@@ -277,7 +287,7 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, enum name_repair_arg name_
     }
 
     R_len_t xn = Rf_length(x);
-    init_compact_seq(idx_ptr, counter, counter + xn);
+    init_compact_seq(idx_ptr, counter, xn, true);
     list_assign(out, idx, x, false);
 
     SEXP xnms = PROTECT(r_names(x));

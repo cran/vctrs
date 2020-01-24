@@ -15,9 +15,9 @@ test_that("vec_recycle recycles size 1 to any other size", {
 test_that("incompatible lengths get error messages", {
   x2 <- c(1, 2)
 
-  expect_error(vec_recycle(x2, 1), "2, 1")
-  expect_error(vec_recycle(x2, 0), "2, 0")
-  expect_error(vec_recycle(x2, 3), "2, 3")
+  expect_error(vec_recycle(x2, 1), class = "vctrs_error_recycle_incompatible_size")
+  expect_error(vec_recycle(x2, 0), class = "vctrs_error_recycle_incompatible_size")
+  expect_error(vec_recycle(x2, 3), class = "vctrs_error_recycle_incompatible_size")
 })
 
 test_that("can recycle arrays", {
@@ -142,4 +142,12 @@ test_that("recycling data frames with matrices respects incompatible sizes", {
     vec_recycle_common(mt, vec_slice(df, 0L)),
     class = "vctrs_error_incompatible_size"
   )
+})
+
+test_that("recycling has informative errors", {
+  verify_output(test_path("error", "test-recycle.txt"), {
+    "# incompatible recycling size has informative error"
+    vec_recycle(1:2, 4)
+    vec_recycle(1:2, 4, x_arg = "foo")
+  })
 })

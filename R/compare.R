@@ -1,7 +1,7 @@
 #' Comparison proxy
 #'
 #' Returns a proxy object (i.e. an atomic vector or data frame of atomic
-#' vectors). For [vctr]s, this determins the behaviour of [order()] and
+#' vectors). For [vctr]s, this determines the behaviour of [order()] and
 #' [sort()] (via [xtfrm()]); `<`, `>`, `>=` and `<=` (via [vec_compare()]);
 #' and [min()], [max()], [median()], and [quantile()].
 #'
@@ -75,6 +75,7 @@ vec_proxy_compare_default <- function(x, relax = FALSE) {
 vec_compare <- function(x, y, na_equal = FALSE, .ptype = NULL) {
   vec_assert(x)
   vec_assert(y)
+  vec_assert(na_equal, ptype = logical(), size = 1L)
 
   args <- vec_recycle_common(x, y)
   args <- vec_cast_common(!!!args, .to = .ptype)
@@ -139,7 +140,12 @@ order_proxy <- function(proxy, direction = "asc", na_value = "largest") {
     if (vec_size(proxy) == 0L) {
       return(integer(0L))
     }
-    args <- unname(proxy)
+    args <- map(unname(proxy), function(.x) {
+      if (is.data.frame(.x)) {
+        .x <- order(vec_order(.x, direction = direction, na_value = na_value))
+      }
+      .x
+    })
     exec("order", !!!args, decreasing = decreasing, na.last = na.last)
   } else if (is_character(proxy) || is_logical(proxy) || is_integer(proxy) || is_double(proxy)) {
     order(proxy, decreasing = decreasing, na.last = na.last)

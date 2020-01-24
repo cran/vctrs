@@ -119,7 +119,6 @@
 #'
 #' # Cast to common type
 #' vec_cast_common(factor("a"), factor(c("a", "b")))
-#' vec_cast_common(factor("a"), Sys.Date(), .to = list())
 vec_cast <- function(x, to, ..., x_arg = "x", to_arg = "to") {
   if (!missing(...)) {
     ellipsis::check_dots_empty()
@@ -174,22 +173,4 @@ vec_default_cast <- function(x, to, x_arg = "x", to_arg = "to") {
   } else {
     stop_incompatible_cast(x, to, x_arg = x_arg, to_arg = to_arg)
   }
-}
-
-
-#' @export
-#' @rdname vec_cast
-vec_restore <- function(x, to, ..., n = NULL) {
-  if (!missing(...)) {
-    ellipsis::check_dots_empty()
-  }
-  return(.Call(vctrs_restore, x, to, n))
-  UseMethod("vec_restore", to)
-}
-vec_restore_dispatch <- function(x, to, ..., n = NULL) {
-  UseMethod("vec_restore", to)
-}
-#' @export
-vec_restore.default <- function(x, to, ..., n = NULL) {
-  .Call(vctrs_restore_default, x, to)
 }

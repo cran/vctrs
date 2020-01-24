@@ -10,21 +10,65 @@
 \alias{allow_lossy_cast}
 \title{Custom conditions for vctrs package}
 \usage{
-stop_incompatible_type(x, y, x_arg = "", y_arg = "", details = NULL,
-  ..., message = NULL, .subclass = NULL)
+stop_incompatible_type(
+  x,
+  y,
+  x_arg = "",
+  y_arg = "",
+  details = NULL,
+  ...,
+  message = NULL,
+  class = NULL
+)
 
-stop_incompatible_cast(x, y, details = NULL, ..., x_arg = "",
-  to_arg = "", message = NULL, .subclass = NULL)
+stop_incompatible_cast(
+  x,
+  y,
+  details = NULL,
+  ...,
+  x_arg = "",
+  to_arg = "",
+  message = NULL,
+  class = NULL
+)
 
-stop_incompatible_op(op, x, y, details = NULL, ..., message = NULL,
-  .subclass = NULL)
+stop_incompatible_op(
+  op,
+  x,
+  y,
+  details = NULL,
+  ...,
+  message = NULL,
+  class = NULL
+)
 
-stop_incompatible_size(x, y, x_size, y_size, x_arg = "", y_arg = "",
-  details = NULL, ..., message = NULL, .subclass = NULL)
+stop_incompatible_size(
+  x,
+  y,
+  x_size,
+  y_size,
+  x_arg = "",
+  y_arg = "",
+  details = NULL,
+  ...,
+  message = NULL,
+  class = NULL
+)
 
-maybe_lossy_cast(result, x, to, lossy = NULL, locations = NULL,
-  details = NULL, ..., x_arg = "", to_arg = "", message = NULL,
-  .subclass = NULL, .deprecation = FALSE)
+maybe_lossy_cast(
+  result,
+  x,
+  to,
+  lossy = NULL,
+  locations = NULL,
+  details = NULL,
+  ...,
+  x_arg = "",
+  to_arg = "",
+  message = NULL,
+  class = NULL,
+  .deprecation = FALSE
+)
 
 allow_lossy_cast(expr, x_ptype = NULL, to_ptype = NULL)
 }
@@ -33,7 +77,7 @@ allow_lossy_cast(expr, x_ptype = NULL, to_ptype = NULL)
 
 \item{details}{Any additional human readable details}
 
-\item{..., message, .subclass}{Only use these fields when creating a subclass.}
+\item{..., message, class}{Only use these fields when creating a subclass.}
 
 \item{result}{The result of a potentially lossy cast.}
 
@@ -60,7 +104,7 @@ or \code{to} match these \link[=vec_ptype]{prototypes}.}
 \item{subclass}{Use if you want to further customise the class}
 }
 \value{
-\code{stop_incompatible_*()} unconditionally raise an error of class
+\verb{stop_incompatible_*()} unconditionally raise an error of class
 \code{"vctrs_error_incompatible_*"} and \code{"vctrs_error_incompatible"}.
 }
 \description{

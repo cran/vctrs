@@ -138,14 +138,12 @@ test_that("can slice-assign using logical index", {
   expect_equal(x, c(4, 3))
 
   expect_error(
-    vec_slice(x, c(TRUE, FALSE, TRUE)) <- 5,
-    "has size 2 whereas the index has size 3",
-    fixed = TRUE
+    vec_assign(x, c(TRUE, FALSE, TRUE), 5),
+    class = "vctrs_error_subscript_size"
   )
-
   expect_error(
-    vec_slice(mtcars, c(TRUE, FALSE)) <- mtcars[1, ],
-    "has size 32 whereas the index has size 2"
+    vec_assign(mtcars, c(TRUE, FALSE), mtcars[1, ]),
+    class = "vctrs_error_subscript_size"
   )
 })
 
@@ -224,7 +222,7 @@ test_that("a coercible RHS is cast to LHS before assignment (#140)", {
 })
 
 test_that("slice-assign takes the proxy", {
-  scoped_proxy()
+  local_proxy()
 
   x <- new_proxy(1:3)
   y <- new_proxy(20:21)
@@ -250,12 +248,12 @@ test_that("can use names to vec_slice<-() a named object", {
 
   expect_error(
     vec_slice(x0, letters[1]) <- 4L,
-    "Can't use character to index an unnamed vector.",
+    "Can't use character names to index an unnamed vector.",
     fixed = TRUE
   )
   expect_error(
     vec_slice(x0, letters[25:27]) <- 5L,
-    "Can't use character to index an unnamed vector.",
+    "Can't use character names to index an unnamed vector.",
     fixed = TRUE
   )
 })
@@ -270,7 +268,7 @@ test_that("slice-assign falls back to `[<-` when proxy is not implemented", {
   vec_cast(foobar(""), foobar(""))
   #> Error: Can't cast <vctrs_foobar> to <vctrs_foobar>
 
-  scoped_global_bindings(
+  local_methods(
     `[<-.vctrs_foobar` = function(x, i, value) {
       x <- unclass(x)
       x[i] <- "dispatched"
@@ -289,7 +287,7 @@ test_that("slice-assign falls back to `[<-` when proxy is not implemented", {
 test_that("slice-assign restores value before falling back to `[<-` (#443)", {
   called <- FALSE
 
-  scoped_global_bindings(
+  local_methods(
     vec_proxy.vctrs_proxy = proxy_deref,
     vec_restore.vctrs_proxy = function(x, to, ...) new_proxy(x),
     vec_ptype2.vctrs_proxy = function(...) new_proxy(NA),
@@ -321,8 +319,81 @@ test_that("can assign to data frame", {
 })
 
 test_that("can slice-assign unspecified vectors with default type2 method", {
-  scoped_rational_class()
+  local_rational_class()
   x <- rational(1:2, 2:3)
   x[[1]] <- NA
   expect_identical(x, rational(c(NA, 2L), c(NA, 3L)))
+})
+
+test_that("`vec_assign()` requires recyclable value", {
+  verify_errors({
+    expect_error(
+      vec_assign(1:3, 1:3, 1:2),
+      class = "vctrs_error_recycle_incompatible_size"
+    )
+  })
+})
+
+test_that("logical subscripts must match size of indexed vector", {
+  verify_errors({
+    expect_error(
+      vec_assign(1:2, c(TRUE, FALSE, TRUE), 5),
+      class = "vctrs_error_subscript_size"
+    )
+  })
+})
+
+test_that("must assign existing elements", {
+  verify_errors({
+    expect_error(
+      vec_assign(1:3, 5, 10),
+      class = "vctrs_error_subscript_oob"
+    )
+    expect_error(
+      vec_assign(1:3, "foo", 10),
+      "unnamed vector"
+    )
+    expect_error(
+      vec_slice(letters, -100) <- "foo",
+      class = "vctrs_error_subscript_oob"
+    )
+    expect_error(
+      vec_assign(set_names(letters), "foo", "bar"),
+      class = "vctrs_error_subscript_oob"
+    )
+  })
+})
+
+test_that("must assign with proper negative locations", {
+  verify_errors({
+    expect_error(
+      vec_assign(1:3, c(-1, 1), 1:2),
+      class = "vctrs_error_subscript_type"
+    )
+    expect_error(
+      vec_assign(1:3, c(-1, NA), 1:2),
+      class = "vctrs_error_subscript_type"
+    )
+  })
+})
+
+test_that("slice and assign have informative errors", {
+  verify_output(test_path("error", "test-slice-assign.txt"), {
+    "# `vec_assign()` requires recyclable value"
+    vec_assign(1:3, 1:3, 1:2)
+
+    "# logical subscripts must match size of indexed vector"
+    vec_assign(1:2, c(TRUE, FALSE, TRUE), 5)
+    vec_assign(mtcars, c(TRUE, FALSE), mtcars[1, ])
+
+    "# must assign existing elements"
+    vec_assign(1:3, 5, 10)
+    vec_assign(1:3, "foo", 10)
+    vec_slice(letters, -100) <- "foo"
+    vec_assign(set_names(letters), "foo", "bar")
+
+    "# must assign with proper negative locations"
+    vec_assign(1:3, c(-1, 1), 1:2)
+    vec_assign(1:3, c(-1, NA), 1:2)
+  })
 })

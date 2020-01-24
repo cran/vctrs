@@ -1,4 +1,5 @@
 #include "vctrs.h"
+#include "subscript-loc.h"
 #include "utils.h"
 
 // Initialised at load time
@@ -6,7 +7,7 @@ SEXP syms_vec_assign_fallback = NULL;
 SEXP fns_vec_assign_fallback = NULL;
 
 // Defined in slice.c
-SEXP vec_as_index(SEXP i, R_len_t n, SEXP names);
+SEXP vec_as_location(SEXP i, R_len_t n, SEXP names);
 
 static SEXP vec_assign_fallback(SEXP x, SEXP index, SEXP value);
 SEXP vec_assign_impl(SEXP x, SEXP index, SEXP value, bool clone);
@@ -18,7 +19,6 @@ SEXP chr_assign(SEXP x, SEXP index, SEXP value, bool clone);
 static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone);
 SEXP list_assign(SEXP x, SEXP index, SEXP value, bool clone);
 SEXP df_assign(SEXP x, SEXP index, SEXP value, bool clone);
-
 
 // [[ register(); include("vctrs.h") ]]
 SEXP vec_assign(SEXP x, SEXP index, SEXP value) {
@@ -37,13 +37,16 @@ SEXP vec_assign(SEXP x, SEXP index, SEXP value) {
   SEXP value_proxy = PROTECT(vec_proxy(value));
 
   // Recycle the proxy of `value`
-  index = PROTECT(vec_as_index(index, vec_size(x), PROTECT(vec_names(x))));
-  value_proxy = PROTECT(vec_recycle(value_proxy, vec_size(index)));
+  index = PROTECT(vec_as_location_opts(index,
+                                       vec_size(x),
+                                       PROTECT(vec_names(x)),
+                                       vec_as_location_default_assign_opts));
+  value_proxy = PROTECT(vec_recycle(value_proxy, vec_size(index), &value_arg));
 
   struct vctrs_proxy_info info = vec_proxy_info(x);
 
   SEXP out;
-  if ((OBJECT(x) && info.proxy_method == R_NilValue) || has_dim(x)) {
+  if (vec_requires_fallback(x, info) || has_dim(x)) {
     // Restore the value before falling back to `[<-`
     value = PROTECT(vec_restore(value_proxy, value_orig, R_NilValue));
     out = vec_assign_fallback(x, index, value);
@@ -107,9 +110,9 @@ SEXP vec_assign_impl(SEXP proxy, SEXP index, SEXP value, bool clone) {
 
 #define ASSIGN_COMPACT(CTYPE, DEREF, CONST_DEREF)               \
   int* index_data = INTEGER(index);                             \
-  R_len_t from = index_data[0];                                 \
-  R_len_t to = index_data[1];                                   \
-  R_len_t n = to - from;                                        \
+  R_len_t start = index_data[0];                                \
+  R_len_t n = index_data[1];                                    \
+  R_len_t step = index_data[2];                                 \
                                                                 \
   if (n != Rf_length(value)) {                                  \
     Rf_error("Internal error in `vec_assign()`: "               \
@@ -118,9 +121,11 @@ SEXP vec_assign_impl(SEXP proxy, SEXP index, SEXP value, bool clone) {
                                                                 \
   const CTYPE* value_data = CONST_DEREF(value);                 \
   SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);      \
-  CTYPE* out_data = DEREF(out);                                 \
+  CTYPE* out_data = DEREF(out) + start;                         \
                                                                 \
-  memcpy(out_data + from, value_data, sizeof(CTYPE) * n);       \
+  for (int i = 0; i < n; ++i, out_data += step, ++value_data) { \
+    *out_data = *value_data;                                    \
+  }                                                             \
                                                                 \
   UNPROTECT(1);                                                 \
   return out
@@ -179,9 +184,9 @@ static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone) {
 
 #define ASSIGN_BARRIER_COMPACT(GET, SET)                        \
   int* index_data = INTEGER(index);                             \
-  R_len_t from = index_data[0];                                 \
-  R_len_t to = index_data[1];                                   \
-  R_len_t n = to - from;                                        \
+  R_len_t start = index_data[0];                                \
+  R_len_t n = index_data[1];                                    \
+  R_len_t step = index_data[2];                                 \
                                                                 \
   if (n != Rf_length(value)) {                                  \
     Rf_error("Internal error in `vec_assign()`: "               \
@@ -190,8 +195,8 @@ static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone) {
                                                                 \
   SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);      \
                                                                 \
-  for (R_len_t i = 0, j = from; i < n; ++i, ++j) {              \
-    SET(out, j, GET(value, i));                                 \
+  for (R_len_t i = 0; i < n; ++i, start += step) {              \
+    SET(out, start, GET(value, i));                             \
   }                                                             \
                                                                 \
   UNPROTECT(1);                                                 \

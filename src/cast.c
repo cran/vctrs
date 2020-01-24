@@ -3,10 +3,8 @@
 
 // Initialised at load time
 static SEXP syms_vec_cast_dispatch = NULL;
-static SEXP syms_vec_restore_dispatch = NULL;
 static SEXP syms_df_lossy_cast = NULL;
 static SEXP fns_vec_cast_dispatch = NULL;
-static SEXP fns_vec_restore_dispatch = NULL;
 static SEXP fns_df_lossy_cast = NULL;
 
 
@@ -390,149 +388,6 @@ SEXP vec_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg
   return out;
 }
 
-// Copy attributes except names and dim. This duplicates `x` if needed.
-SEXP vec_restore_default(SEXP x, SEXP to) {
-  int n_protect = 0;
-
-  SEXP attrib = PROTECT(Rf_shallow_duplicate(ATTRIB(to)));
-  ++n_protect;
-
-  if (attrib == R_NilValue) {
-    UNPROTECT(n_protect);
-    return x;
-  }
-
-  if (MAYBE_REFERENCED(x)) {
-    x = PROTECT(Rf_shallow_duplicate(x));
-    ++n_protect;
-  }
-
-  // Remove vectorised attributes which might be incongruent after reshaping.
-  // Shouldn't matter for GNU R but other R implementations might have checks.
-  // Also record class to set it later with `Rf_setAttrib()`. This restores
-  // the OBJECT bit and is likely more compatible with other implementations.
-  SEXP class = R_NilValue;
-
-  {
-    SEXP node = attrib;
-    SEXP prev = R_NilValue;
-
-    while (node != R_NilValue) {
-      SEXP tag = TAG(node);
-
-      if (tag == R_NamesSymbol || tag == R_DimSymbol ||
-          tag == R_DimNamesSymbol || tag == R_ClassSymbol ||
-          tag == R_RowNamesSymbol) {
-        if (tag == R_ClassSymbol) {
-          class = CAR(node);
-        }
-        if (prev == R_NilValue) {
-          attrib = CDR(attrib);
-          node = CDR(node);
-          continue;
-        }
-
-        SETCDR(prev, CDR(node));
-      }
-
-      prev = node;
-      node = CDR(node);
-    }
-  }
-
-  // Copy attributes but keep names and dims. Don't restore names for
-  // shaped objects since those are generated from dimnames.
-  SEXP dim = PROTECT(Rf_getAttrib(x, R_DimSymbol));
-  ++n_protect;
-
-  if (dim == R_NilValue) {
-    SEXP nms = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
-    SEXP rownms = PROTECT(Rf_getAttrib(x, R_RowNamesSymbol));
-
-    SET_ATTRIB(x, attrib);
-
-    Rf_setAttrib(x, R_NamesSymbol, nms);
-    Rf_setAttrib(x, R_RowNamesSymbol, rownms);
-    UNPROTECT(2);
-  } else {
-    SEXP dimnames = PROTECT(Rf_getAttrib(x, R_DimNamesSymbol));
-
-    SET_ATTRIB(x, attrib);
-
-    Rf_setAttrib(x, R_DimSymbol, dim);
-    Rf_setAttrib(x, R_DimNamesSymbol, dimnames);
-    UNPROTECT(1);
-  }
-
-  if (class != R_NilValue) {
-    Rf_setAttrib(x, R_ClassSymbol, class);
-  }
-
-  UNPROTECT(n_protect);
-  return x;
-}
-
-SEXP vctrs_df_restore(SEXP x, SEXP to, SEXP n) {
-  if (TYPEOF(x) != VECSXP) {
-    Rf_errorcall(R_NilValue, "Internal error: Attempt to restore data frame from a %s.",
-                 Rf_type2char(TYPEOF(x)));
-  }
-
-  R_len_t size = (n == R_NilValue) ? df_raw_size(x) : r_int_get(n, 0);
-  return df_restore_impl(x, to, size);
-}
-
-SEXP df_restore_impl(SEXP x, SEXP to, R_len_t size) {
-  x = PROTECT(r_maybe_duplicate(x));
-  x = PROTECT(vec_restore_default(x, to));
-
-  if (Rf_getAttrib(x, R_NamesSymbol) == R_NilValue) {
-    Rf_setAttrib(x, R_NamesSymbol, vctrs_shared_empty_chr);
-  }
-
-  SEXP rownames = PROTECT(Rf_getAttrib(x, R_RowNamesSymbol));
-  if (rownames == R_NilValue) {
-    rownames = PROTECT(Rf_allocVector(INTSXP, 2));
-
-    INTEGER(rownames)[0] = NA_INTEGER;
-    INTEGER(rownames)[1] = -size;
-
-    Rf_setAttrib(x, R_RowNamesSymbol, rownames);
-    UNPROTECT(1);
-  }
-
-  UNPROTECT(3);
-  return x;
-}
-
-
-static SEXP vec_restore_dispatch(SEXP x, SEXP to, SEXP n);
-
-SEXP vec_restore(SEXP x, SEXP to, SEXP n) {
-  switch (class_type(to)) {
-  default: return vec_restore_dispatch(x, to, n);
-  case vctrs_class_none: return vec_restore_default(x, to);
-  case vctrs_class_bare_data_frame:
-  case vctrs_class_bare_tibble: return vctrs_df_restore(x, to, n);
-  case vctrs_class_data_frame: {
-    // Restore methods are passed the original atomic type back, so we
-    // first restore data frames as such before calling the restore
-    // method, if any
-    SEXP out = PROTECT(vctrs_df_restore(x, to, n));
-    out = vec_restore_dispatch(x, to, n);
-    UNPROTECT(1);
-    return out;
-  }}
-}
-
-static SEXP vec_restore_dispatch(SEXP x, SEXP to, SEXP n) {
-  return vctrs_dispatch3(syms_vec_restore_dispatch, fns_vec_restore_dispatch,
-                         syms_x, x,
-                         syms_to, to,
-                         syms_n, n);
-}
-
-
 // [[ include("vctrs.h") ]]
 SEXP vec_coercible_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg) {
   // Called for the side effect of generating an error if there is no
@@ -545,12 +400,8 @@ SEXP vec_coercible_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_a
 
 // [[ register() ]]
 SEXP vctrs_coercible_cast(SEXP x, SEXP to, SEXP x_arg_, SEXP to_arg_) {
-  if (!r_is_string(x_arg_)) {
-    Rf_errorcall(R_NilValue, "`x_arg` must be a string");
-  }
-  if (!r_is_string(to_arg_)) {
-    Rf_errorcall(R_NilValue, "`to_arg` must be a string");
-  }
+  x_arg_ = arg_validate(x_arg_, "x_arg");
+  to_arg_ = arg_validate(to_arg_, "to_arg");
 
   struct vctrs_arg x_arg = new_wrapper_arg(NULL, r_chr_get_c_string(x_arg_, 0));
   struct vctrs_arg to_arg = new_wrapper_arg(NULL, r_chr_get_c_string(to_arg_, 0));
@@ -597,10 +448,8 @@ SEXP vctrs_cast_common(SEXP call, SEXP op, SEXP args, SEXP env) {
 
 void vctrs_init_cast(SEXP ns) {
   syms_vec_cast_dispatch = Rf_install("vec_cast_dispatch");
-  syms_vec_restore_dispatch = Rf_install("vec_restore_dispatch");
   syms_df_lossy_cast = Rf_install("df_lossy_cast");
 
   fns_vec_cast_dispatch = Rf_findVar(syms_vec_cast_dispatch, ns);
-  fns_vec_restore_dispatch = Rf_findVar(syms_vec_restore_dispatch, ns);
   fns_df_lossy_cast = Rf_findVar(syms_df_lossy_cast, ns);
 }

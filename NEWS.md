@@ -1,4 +1,100 @@
 
+# vctrs 0.2.2
+
+* New `vec_as_subscript()` function to cast inputs to the base type
+  of a subscript (logical, numeric, or character). `vec_as_index()`
+  has been renamed to `vec_as_location()`. Use `num_as_location()` if
+  you need more options to control how numeric subscripts are
+  converted to a vector of locations.
+
+* New `vec_as_subscript2()`, `vec_as_location2()`, and
+  `num_as_location2()` variants for validating scalar subscripts and
+  locations (e.g. for indexing with `[[`).
+
+* `vec_as_location()` now preserves names of its inputs if possible.
+
+* `vec_ptype2()` methods for base classes now prevent
+  inheritance. This makes sense because the subtyping graph created by
+  `vec_ptype2()` methods is generally not the same as the inheritance
+  relationships defined by S3 classes. For instance, subclasses are
+  often a richer type than their superclasses, and should often be
+  declared as supertypes (e.g. `vec_ptype2()` should return the
+  subclass).
+
+  We introduced this breaking change in a patch release because
+  `new_vctr()` now adds the base type to the class vector by default,
+  which caused `vec_ptype2()` to dispatch erroneously to the methods
+  for base types. We'll finish switching to this approach in vctrs
+  0.3.0 for the rest of the base S3 classes (dates, data frames, ...).
+
+* `vec_equal_na()` now works with complex vectors.
+
+* `vctrs_vctr` class gains an `as.POSIXlt()` method (#717).
+
+* `vec_is()` now ignores names and row names (#707).
+
+* `vec_slice()` now support Altvec vectors (@jimhester, #696).
+
+* `vec_proxy_equal()` is now applied recursively across the columns of
+  data frames (#641).
+
+* `vec_split()` no longer returns the `val` column as a `list_of`. It is now
+  returned as a bare list (#660).
+
+* Complex numbers are now coercible with integer and double (#564).
+
+* zeallot has been moved from Imports to Suggests, meaning that `%<-%` is no
+  longer re-exported from vctrs.
+
+* `vec_equal()` no longer propagates missing values when comparing list
+  elements. This means that `vec_equal(list(NULL), list(NULL))` will continue to
+  return `NA` because `NULL` is the missing element for a list, but now
+  `vec_equal(list(NA), list(NA))` returns `TRUE` because the `NA` values are
+  compared directly without checking for missingness.
+
+* Lists of expressions are now supported in `vec_equal()` and functions that
+  compare elements, such as `vec_unique()` and `vec_match()`. This ensures that
+  they work with the result of modeling functions like `glm()` and `mgcv::gam()`
+  which store "family" objects containing expressions (#643).
+
+* `new_vctr()` gains an experimental `inherit_base_type` argument
+  which determines whether or not the class of the underlying type
+  will be included in the class.
+
+* `list_of()` now inherits explicitly from "list" (#593).
+
+* `vec_ptype()` has relaxed default behaviour for base types; now if two
+  vectors both inherit from (e.g.) "character", the common type is also
+  "character" (#497).
+
+* `vec_equal()` now correctly treats `NULL` as the missing value element for
+  lists (#653).
+
+* `vec_cast()` now casts data frames to lists rowwise, i.e. to a list of
+  data frames of size 1. This preserves the invariant of
+  `vec_size(vec_cast(x, to)) == vec_size(x)` (#639).
+
+* Positive and negative 0 are now considered equivalent by all functions that
+  check for equality or uniqueness (#637).
+
+* New experimental functions `vec_group_rle()` for returning run
+  length encoded groups; `vec_group_id()` for constructing group
+  identifiers from a vector; `vec_group_loc()` for computing the
+  locations of unique groups in a vector (#514).
+
+* New `vec_chop()` for repeatedly slicing a vector. It efficiently captures
+  the pattern of `map(indices, vec_slice, x = x)`.
+
+* Support for multiple character encodings has been added to functions that
+  compare elements within a single vector, such as `vec_unique()`, and across
+  multiple vectors, such as `vec_match()`. When multiple encodings are
+  encountered, a translation to UTF-8 is performed before any comparisons are
+  made (#600, #553).
+
+* Equality and ordering methods are now implemented for raw and
+  complex vectors (@romainfrancois).
+
+
 # vctrs 0.2.1
 
 Maintenance release for CRAN checks.

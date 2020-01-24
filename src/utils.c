@@ -17,55 +17,110 @@ SEXP strings_vctrs_rcrd = NULL;
 SEXP strings_posixt = NULL;
 SEXP strings_posixlt = NULL;
 SEXP strings_vctrs_vctr = NULL;
+SEXP strings_vctrs_list_of = NULL;
+SEXP strings_list = NULL;
 
 SEXP classes_data_frame = NULL;
 SEXP classes_tibble = NULL;
+SEXP classes_list_of = NULL;
+SEXP classes_vctrs_group_rle = NULL;
 
-static SEXP syms_as_list = NULL;
 static SEXP syms_as_data_frame2 = NULL;
-static SEXP fns_as_list = NULL;
 static SEXP fns_as_data_frame2 = NULL;
 
 
-bool is_bool(SEXP x) {
-  return
-    TYPEOF(x) == LGLSXP &&
-    Rf_length(x) == 1 &&
-    LOGICAL(x)[0] != NA_LOGICAL;
+static SEXP vctrs_eval_mask_n_impl(SEXP fn, SEXP* syms, SEXP* args, SEXP mask);
+
+/**
+ * Evaluate with masked arguments
+ *
+ * This takes two arrays of argument (`args`) and argument names
+ * `syms`). The names should correspond to formal arguments of `fn`.
+ * Elements of `args` are assigned to their corresponding name in
+ * `syms` in a child of `env`. A call to `fn` is constructed with the
+ * CARs and TAGs assigned symmetrically to the elements of
+ * `syms`. This way the arguments are masked by symbols corresponding
+ * to the formal parameters.
+ *
+ * @param fn The function to call.
+ * @param syms A null-terminated array of symbols. The arguments
+ *   `args` are assigned to these symbols. The assignment occurs in a
+ *   child of `env` and the dispatch call refers to these symbols.
+ * @param args A null-terminated array of arguments passed to the method.
+ * @param env The environment in which to evaluate.
+ */
+SEXP vctrs_eval_mask_n(SEXP fn, SEXP* syms, SEXP* args, SEXP env) {
+  SEXP mask = PROTECT(r_new_environment(env, 4));
+  SEXP out = vctrs_eval_mask_n_impl(fn, syms, args, mask);
+
+  UNPROTECT(1);
+  return out;
+}
+SEXP vctrs_eval_mask1(SEXP fn,
+                      SEXP x_sym, SEXP x,
+                      SEXP env) {
+  SEXP syms[2] = { x_sym, NULL };
+  SEXP args[2] = { x, NULL };
+  return vctrs_eval_mask_n(fn, syms, args, env);
+}
+SEXP vctrs_eval_mask2(SEXP fn,
+                      SEXP x_sym, SEXP x,
+                      SEXP y_sym, SEXP y,
+                      SEXP env) {
+  SEXP syms[3] = { x_sym, y_sym, NULL };
+  SEXP args[3] = { x, y, NULL };
+  return vctrs_eval_mask_n(fn, syms, args, env);
+}
+SEXP vctrs_eval_mask3(SEXP fn,
+                      SEXP x_sym, SEXP x,
+                      SEXP y_sym, SEXP y,
+                      SEXP z_sym, SEXP z,
+                      SEXP env) {
+  SEXP syms[4] = { x_sym, y_sym, z_sym, NULL };
+  SEXP args[4] = { x, y, z, NULL };
+  return vctrs_eval_mask_n(fn, syms, args, env);
+}
+SEXP vctrs_eval_mask4(SEXP fn,
+                      SEXP x1_sym, SEXP x1,
+                      SEXP x2_sym, SEXP x2,
+                      SEXP x3_sym, SEXP x3,
+                      SEXP x4_sym, SEXP x4,
+                      SEXP env) {
+  SEXP syms[5] = { x1_sym, x2_sym, x3_sym, x4_sym, NULL };
+  SEXP args[5] = { x1, x2, x3, x4, NULL };
+  return vctrs_eval_mask_n(fn, syms, args, env);
+}
+SEXP vctrs_eval_mask5(SEXP fn,
+                      SEXP x1_sym, SEXP x1,
+                      SEXP x2_sym, SEXP x2,
+                      SEXP x3_sym, SEXP x3,
+                      SEXP x4_sym, SEXP x4,
+                      SEXP x5_sym, SEXP x5,
+                      SEXP env) {
+  SEXP syms[6] = { x1_sym, x2_sym, x3_sym, x4_sym, x5_sym, NULL };
+  SEXP args[6] = { x1, x2, x3, x4, x5, NULL };
+  return vctrs_eval_mask_n(fn, syms, args, env);
 }
 
 /**
- * Dispatch with two arguments
+ * Dispatch in the global environment
  *
- * @param fn The method to call.
- * @param syms A null-terminated array of symbols. The arguments `args`
- *   are assigned to these symbols. The assignment occurs in `env` and
- *   the dispatch call refers to these symbols.
- * @param args A null-terminated array of arguments passed to the method.
- * @param env The environment in which to dispatch. Should be the
- *   global environment or inherit from it so methods defined there
- *   are picked up. If the global environment, a child is created so
- *   the call components can be masked.
+ * Like `vctrs_eval_mask_n()`, the arguments `args` are are assigned
+ * to the symbols `syms`. In addition, the function `fn` is assigned
+ * to `fn_sym`. The mask is a direct child of the global environment
+ * so that method dispatch finds globally defined methods.
  *
- *   If `env` contains dots, the dispatch call forwards dots.
+ * @param fn_sym A symbol to which `fn` is assigned.
+ * @inheritParams vctrs_eval_mask_n
  */
 SEXP vctrs_dispatch_n(SEXP fn_sym, SEXP fn, SEXP* syms, SEXP* args) {
-  // Create a child so we can mask the call components
-  SEXP env = PROTECT(r_new_environment(R_GlobalEnv, 4));
+  // Mask `fn` with `fn_sym`. We dispatch in the global environment.
+  SEXP mask = PROTECT(r_new_environment(R_GlobalEnv, 4));
+  Rf_defineVar(fn_sym, fn, mask);
 
-  // Forward new values in the dispatch environment
-  Rf_defineVar(fn_sym, fn, env);
+  SEXP out = vctrs_eval_mask_n_impl(fn_sym, syms, args, mask);
 
-  SEXP dispatch_call = PROTECT(r_call(fn_sym, syms, syms));
-
-  while (*syms) {
-    Rf_defineVar(*syms, *args, env);
-    ++syms; ++args;
-  }
-
-  SEXP out = Rf_eval(dispatch_call, env);
-
-  UNPROTECT(2);
+  UNPROTECT(1);
   return out;
 }
 SEXP vctrs_dispatch1(SEXP fn_sym, SEXP fn,
@@ -97,6 +152,20 @@ SEXP vctrs_dispatch4(SEXP fn_sym, SEXP fn,
   SEXP syms[5] = { w_sym, x_sym, y_sym, z_sym, NULL };
   SEXP args[5] = { w, x, y, z, NULL };
   return vctrs_dispatch_n(fn_sym, fn, syms, args);
+}
+
+static SEXP vctrs_eval_mask_n_impl(SEXP fn, SEXP* syms, SEXP* args, SEXP mask) {
+  SEXP call = PROTECT(r_call(fn, syms, syms));
+
+  while (*syms) {
+    Rf_defineVar(*syms, *args, mask);
+    ++syms; ++args;
+  }
+
+  SEXP out = Rf_eval(call, mask);
+
+  UNPROTECT(1);
+  return out;
 }
 
 // An alternative to `attributes(x) <- attrib`, which makes
@@ -247,33 +316,84 @@ SEXP s3_find_method(const char* generic, SEXP x) {
   return R_NilValue;
 }
 
+// [[ include("vctrs.h") ]]
+enum vctrs_dbl_class dbl_classify(double x) {
+  if (!isnan(x)) {
+    return vctrs_dbl_number;
+  }
+
+  union vctrs_dbl_indicator indicator;
+  indicator.value = x;
+
+  if (indicator.key[vctrs_indicator_pos] == 1954) {
+    return vctrs_dbl_missing;
+  } else {
+    return vctrs_dbl_nan;
+  }
+}
 
 // Initialised at load time
 SEXP compact_seq_attrib = NULL;
 
-void init_compact_seq(int* p, R_len_t from, R_len_t to) {
-  p[0] = from;
-  p[1] = to;
+// p[0] = Start value
+// p[1] = Sequence size. Always >= 1.
+// p[2] = Step size to increment/decrement `start` with
+void init_compact_seq(int* p, R_len_t start, R_len_t size, bool increasing) {
+  int step = increasing ? 1 : -1;
+
+  p[0] = start;
+  p[1] = size;
+  p[2] = step;
 }
 
 // Returns a compact sequence that `vec_slice()` understands
-SEXP compact_seq(R_len_t from, R_len_t to) {
-  if (to < from) {
-    Rf_error("Internal error: Negative length in `compact_seq()`");
+// The sequence is generally generated as `[start, start +/- size)`
+// If `size == 0` a 0-length sequence is generated
+// `start` is 0-based
+SEXP compact_seq(R_len_t start, R_len_t size, bool increasing) {
+  if (start < 0) {
+    Rf_error("Internal error: `start` must not be negative in `compact_seq()`.");
   }
 
-  SEXP seq = PROTECT(Rf_allocVector(INTSXP, 2));
+  if (size < 0) {
+    Rf_error("Internal error: `size` must not be negative in `compact_seq()`.");
+  }
 
-  int* p = INTEGER(seq);
-  init_compact_seq(p, from, to);
+  if (!increasing && size > start + 1) {
+    Rf_error("Internal error: If constructing a decreasing sequence, `size` must not be larger than `start` in `compact_seq()`.");
+  }
 
-  SET_ATTRIB(seq, compact_seq_attrib);
+  SEXP info = PROTECT(Rf_allocVector(INTSXP, 3));
+
+  int* p = INTEGER(info);
+  init_compact_seq(p, start, size, increasing);
+
+  SET_ATTRIB(info, compact_seq_attrib);
 
   UNPROTECT(1);
-  return seq;
+  return info;
 }
+
 bool is_compact_seq(SEXP x) {
   return ATTRIB(x) == compact_seq_attrib;
+}
+
+// Materialize a 1-based sequence
+SEXP compact_seq_materialize(SEXP x) {
+  int* p = INTEGER(x);
+  R_len_t start = p[0] + 1;
+  R_len_t size = p[1];
+  R_len_t step = p[2];
+
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, size));
+  int* out_data = INTEGER(out);
+
+  for (R_len_t i = 0; i < size; ++i, ++out_data, start += step) {
+    *out_data = start;
+  }
+
+  UNPROTECT(1);
+  return out;
 }
 
 // Initialised at load time
@@ -317,11 +437,25 @@ SEXP compact_rep_materialize(SEXP x) {
   return out;
 }
 
-R_len_t vec_index_size(SEXP x) {
+bool is_compact(SEXP x) {
+  return is_compact_rep(x) || is_compact_seq(x);
+}
+
+SEXP compact_materialize(SEXP x) {
+  if (is_compact_rep(x)) {
+    return compact_rep_materialize(x);
+  } else if (is_compact_seq(x)) {
+    return compact_seq_materialize(x);
+  } else {
+    return x;
+  }
+}
+
+R_len_t vec_subscript_size(SEXP x) {
   if (is_compact_rep(x)) {
     return r_int_get(x, 1);
   } else if (is_compact_seq(x)) {
-    return r_int_get(x, 1) - r_int_get(x, 0);
+    return r_int_get(x, 1);
   } else {
     return vec_size(x);
   }
@@ -334,6 +468,17 @@ static SEXP fns_colnames = NULL;
 SEXP colnames(SEXP x) {
   return vctrs_dispatch1(syms_colnames, fns_colnames,
                          syms_x, x);
+}
+
+// [[ include("utils.h") ]]
+SEXP arg_validate(SEXP arg, const char* arg_nm) {
+  if (arg == R_NilValue) {
+    return chrs_empty;
+  } else if (r_is_string(arg)) {
+    return arg;
+  } else {
+    Rf_errorcall(R_NilValue, "`%s` tag must be a string", arg_nm);
+  }
 }
 
 
@@ -632,8 +777,10 @@ SEXP r_protect(SEXP x) {
   return Rf_lang2(fns_quote, x);
 }
 
+// [[ include("utils.h") ]]
 bool r_is_bool(SEXP x) {
-  return TYPEOF(x) == LGLSXP &&
+  return
+    TYPEOF(x) == LGLSXP &&
     Rf_length(x) == 1 &&
     LOGICAL(x)[0] != NA_LOGICAL;
 }
@@ -816,13 +963,6 @@ bool r_chr_has_string(SEXP x, SEXP str) {
   return false;
 }
 
-SEXP r_as_list(SEXP x) {
-  if (OBJECT(x)) {
-    return vctrs_dispatch1(syms_as_list, fns_as_list, syms_x, x);
-  } else {
-    return Rf_coerceVector(x, VECSXP);
-  }
-}
 SEXP r_as_data_frame(SEXP x) {
   if (is_bare_data_frame(x)) {
     return x;
@@ -883,6 +1023,21 @@ SEXP strings_minimal = NULL;
 SEXP strings_unique = NULL;
 SEXP strings_universal = NULL;
 SEXP strings_check_unique = NULL;
+SEXP strings_key = NULL;
+SEXP strings_loc = NULL;
+SEXP strings_val = NULL;
+SEXP strings_group = NULL;
+SEXP strings_length = NULL;
+
+SEXP chrs_subset = NULL;
+SEXP chrs_extract = NULL;
+SEXP chrs_assign = NULL;
+SEXP chrs_rename = NULL;
+SEXP chrs_remove = NULL;
+SEXP chrs_negate = NULL;
+SEXP chrs_numeric = NULL;
+SEXP chrs_character = NULL;
+SEXP chrs_empty = NULL;
 
 SEXP syms_i = NULL;
 SEXP syms_n = NULL;
@@ -891,9 +1046,11 @@ SEXP syms_y = NULL;
 SEXP syms_to = NULL;
 SEXP syms_dots = NULL;
 SEXP syms_bracket = NULL;
+SEXP syms_arg = NULL;
 SEXP syms_x_arg = NULL;
 SEXP syms_y_arg = NULL;
 SEXP syms_to_arg = NULL;
+SEXP syms_subscript_arg = NULL;
 SEXP syms_out = NULL;
 SEXP syms_value = NULL;
 SEXP syms_quiet = NULL;
@@ -902,7 +1059,11 @@ SEXP syms_outer = NULL;
 SEXP syms_inner = NULL;
 SEXP syms_tilde = NULL;
 SEXP syms_dot_environment = NULL;
+SEXP syms_ptype = NULL;
 SEXP syms_missing = NULL;
+SEXP syms_size = NULL;
+SEXP syms_subscript_action = NULL;
+SEXP syms_subscript_type = NULL;
 
 SEXP fns_bracket = NULL;
 SEXP fns_quote = NULL;
@@ -921,7 +1082,7 @@ void vctrs_init_utils(SEXP ns) {
 
   // Holds the CHARSXP objects because unlike symbols they can be
   // garbage collected
-  strings = Rf_allocVector(STRSXP, 11);
+  strings = Rf_allocVector(STRSXP, 16);
   R_PreserveObject(strings);
 
   strings_dots = Rf_mkChar("...");
@@ -957,12 +1118,55 @@ void vctrs_init_utils(SEXP ns) {
   strings_check_unique = Rf_mkChar("check_unique");
   SET_STRING_ELT(strings, 10, strings_check_unique);
 
+  strings_key = Rf_mkChar("key");
+  SET_STRING_ELT(strings, 11, strings_key);
+
+  strings_loc = Rf_mkChar("loc");
+  SET_STRING_ELT(strings, 12, strings_loc);
+
+  strings_val = Rf_mkChar("val");
+  SET_STRING_ELT(strings, 13, strings_val);
+
+  strings_group = Rf_mkChar("group");
+  SET_STRING_ELT(strings, 14, strings_group);
+
+  strings_length = Rf_mkChar("length");
+  SET_STRING_ELT(strings, 15, strings_length);
+
 
   classes_data_frame = Rf_allocVector(STRSXP, 1);
   R_PreserveObject(classes_data_frame);
 
   strings_data_frame = Rf_mkChar("data.frame");
   SET_STRING_ELT(classes_data_frame, 0, strings_data_frame);
+
+
+  chrs_subset = Rf_mkString("subset");
+  R_PreserveObject(chrs_subset);
+
+  chrs_extract = Rf_mkString("extract");
+  R_PreserveObject(chrs_extract);
+
+  chrs_assign = Rf_mkString("assign");
+  R_PreserveObject(chrs_assign);
+
+  chrs_rename = Rf_mkString("rename");
+  R_PreserveObject(chrs_rename);
+
+  chrs_remove = Rf_mkString("remove");
+  R_PreserveObject(chrs_remove);
+
+  chrs_negate = Rf_mkString("negate");
+  R_PreserveObject(chrs_negate);
+
+  chrs_numeric = Rf_mkString("numeric");
+  R_PreserveObject(chrs_numeric);
+
+  chrs_character = Rf_mkString("character");
+  R_PreserveObject(chrs_character);
+
+  chrs_empty = Rf_mkString("");
+  R_PreserveObject(chrs_empty);
 
 
   classes_tibble = Rf_allocVector(STRSXP, 3);
@@ -975,6 +1179,23 @@ void vctrs_init_utils(SEXP ns) {
   SET_STRING_ELT(classes_tibble, 1, strings_tbl);
 
   SET_STRING_ELT(classes_tibble, 2, strings_data_frame);
+
+
+  classes_list_of = Rf_allocVector(STRSXP, 3);
+  R_PreserveObject(classes_list_of);
+
+  strings_vctrs_list_of = Rf_mkChar("vctrs_list_of");
+  SET_STRING_ELT(classes_list_of, 0, strings_vctrs_list_of);
+  SET_STRING_ELT(classes_list_of, 1, strings_vctrs_vctr);
+  SET_STRING_ELT(classes_list_of, 2, Rf_mkChar("list"));
+
+
+  classes_vctrs_group_rle = Rf_allocVector(STRSXP, 3);
+  R_PreserveObject(classes_vctrs_group_rle);
+
+  SET_STRING_ELT(classes_vctrs_group_rle, 0, Rf_mkChar("vctrs_group_rle"));
+  SET_STRING_ELT(classes_vctrs_group_rle, 1, strings_vctrs_rcrd);
+  SET_STRING_ELT(classes_vctrs_group_rle, 2, strings_vctrs_vctr);
 
 
   vctrs_shared_empty_lgl = Rf_allocVector(LGLSXP, 0);
@@ -1036,9 +1257,11 @@ void vctrs_init_utils(SEXP ns) {
   syms_to = Rf_install("to");
   syms_dots = Rf_install("...");
   syms_bracket = Rf_install("[");
+  syms_arg = Rf_install("arg");
   syms_x_arg = Rf_install("x_arg");
   syms_y_arg = Rf_install("y_arg");
   syms_to_arg = Rf_install("to_arg");
+  syms_subscript_arg = Rf_install("subscript_arg");
   syms_out = Rf_install("out");
   syms_value = Rf_install("value");
   syms_quiet = Rf_install("quiet");
@@ -1047,7 +1270,11 @@ void vctrs_init_utils(SEXP ns) {
   syms_inner = Rf_install("inner");
   syms_tilde = Rf_install("~");
   syms_dot_environment = Rf_install(".Environment");
+  syms_ptype = Rf_install("ptype");
   syms_missing = R_MissingArg;
+  syms_size = Rf_install("size");
+  syms_subscript_action = Rf_install("subscript_action");
+  syms_subscript_type = Rf_install("subscript_type");
 
   fns_bracket = Rf_findVar(syms_bracket, R_BaseEnv);
   fns_quote = Rf_findVar(Rf_install("quote"), R_BaseEnv);
@@ -1078,11 +1305,9 @@ void vctrs_init_utils(SEXP ns) {
   rlang_env_dots_values = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_env_dots_values");
   rlang_env_dots_list = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_env_dots_list");
 
-  syms_as_list = Rf_install("as.list");
   syms_as_data_frame2 = Rf_install("as.data.frame2");
   syms_colnames = Rf_install("colnames");
 
-  fns_as_list = r_env_get(R_BaseEnv, syms_as_list);
   fns_as_data_frame2 = r_env_get(ns, syms_as_data_frame2);
   fns_colnames = r_env_get(R_BaseEnv, syms_colnames);
 
@@ -1093,4 +1318,8 @@ void vctrs_init_utils(SEXP ns) {
   compact_rep_attrib = Rf_cons(R_NilValue, R_NilValue);
   R_PreserveObject(compact_rep_attrib);
   SET_TAG(compact_rep_attrib, Rf_install("vctrs_compact_rep"));
+
+  // We assume the following in `union vctrs_dbl_indicator`
+  VCTRS_ASSERT(sizeof(double) == sizeof(int64_t));
+  VCTRS_ASSERT(sizeof(double) == 2 * sizeof(int));
 }

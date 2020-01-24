@@ -105,3 +105,55 @@ test_that("vec_ptype2() returns empty prototype when other input is NULL", {
   expect_identical(vec_ptype2(1:5, NULL), int())
   expect_identical(vec_ptype2(NULL, 1:5), int())
 })
+
+test_that("Subclasses of data.frame dispatch to `vec_ptype2()` methods", {
+  local_methods(
+    vec_ptype2.quuxframe = function(x, y, ...) UseMethod("vec_ptype2.quuxframe"),
+    vec_ptype2.quuxframe.data.frame = function(x, y, ...) "dispatched!",
+    vec_ptype2.data.frame.quuxframe = function(x, y, ...) "dispatched!"
+  )
+
+  quux <- structure(data.frame(), class = c("quuxframe", "data.frame"))
+
+  expect_identical(vec_ptype2(quux, mtcars), "dispatched!")
+  expect_identical(vec_ptype2(mtcars, quux), "dispatched!")
+
+  quux <- structure(data.frame(), class = c("quuxframe", "tbl_df", "data.frame"))
+
+  expect_identical(vec_ptype2(quux, mtcars), "dispatched!")
+  expect_identical(vec_ptype2(mtcars, quux), "dispatched!")
+})
+
+test_that("Subclasses of `tbl_df` have `tbl_df` common type (#481)", {
+  quux <- tibble()
+  quux <- structure(quux, class = c("quux", class(quux)))
+  expect_identical(vec_ptype2(quux, tibble()), tibble())
+  expect_identical(vec_ptype2(tibble(), quux), tibble())
+})
+
+test_that("Column name encodings are handled correctly in the common type (#553)", {
+  encs <- encodings()
+
+  data <- list(chr())
+
+  df_utf8 <- tibble::as_tibble(set_names(data, encs$utf8))
+  df_unknown <- tibble::as_tibble(set_names(data, encs$unknown))
+
+  expect_identical(vec_ptype2(df_utf8, df_unknown), df_utf8)
+})
+
+test_that("vec_is_subtype() determines subtyping relationship", {
+  expect_true(vec_is_subtype(lgl(), int()))
+  expect_false(vec_is_subtype(int(), lgl()))
+
+  expect_false(vec_is_subtype(lgl(), chr()))
+  expect_false(vec_is_subtype(chr(), lgl()))
+
+  local_methods(
+    vec_ptype2.vctrs_foobar = function(x, y, ...) UseMethod("vec_ptype2.vctrs_foobar", y),
+    vec_ptype2.vctrs_foobar.logical = function(x, y, ...) logical(),
+    vec_ptype2.logical.vctrs_foobar = function(x, y, ...) logical()
+  )
+  expect_true(vec_is_subtype(foobar(TRUE), lgl()))
+  expect_false(vec_is_subtype(lgl(), foobar(TRUE)))
+})

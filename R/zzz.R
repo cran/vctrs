@@ -1,18 +1,28 @@
 # nocov start
-.onLoad <- function(libname, pkgname) {
-  backports::import(pkgname, "strrep")
 
+on_package_load <- function(pkg, expr) {
+  if (isNamespaceLoaded(pkg)) {
+    expr
+  } else {
+    thunk <- function(...) expr
+    setHook(packageEvent(pkg, "onLoad"), thunk)
+  }
+}
+
+.onLoad <- function(libname, pkgname) {
   s3_register("generics::as.factor", "vctrs_vctr")
   s3_register("generics::as.ordered", "vctrs_vctr")
   s3_register("generics::as.difftime", "vctrs_vctr")
 
-  # Remove once tibble has implemented the methods
-  if (is_installed("tibble") && !env_has(ns_env("tibble"), "vec_ptype2.tbl_df")) {
-    s3_register("vctrs::vec_ptype2", "tbl_df")
-    s3_register("vctrs::vec_ptype2.tbl_df", "default")
-    s3_register("vctrs::vec_ptype2.tbl_df", "data.frame")
-    s3_register("vctrs::vec_ptype2.data.frame", "tbl_df")
-  }
+  on_package_load("tibble", {
+    # Remove once tibble has implemented the methods
+    if (!env_has(ns_env("tibble"), "vec_ptype2.tbl_df")) {
+      s3_register("vctrs::vec_ptype2", "tbl_df")
+      s3_register("vctrs::vec_ptype2.tbl_df", "default")
+      s3_register("vctrs::vec_ptype2.tbl_df", "data.frame")
+      s3_register("vctrs::vec_ptype2.data.frame", "tbl_df")
+    }
+  })
 
   utils::globalVariables("vec_set_attributes")
 
@@ -31,7 +41,7 @@
   ns <- ns_env("vctrs")
   env_bind(ns, vec_set_attributes = vec_set_attributes)
 
-  .Call(vctrs_init, ns_env())
+  .Call(vctrs_init_library, ns_env())
 }
 
 # nocov end

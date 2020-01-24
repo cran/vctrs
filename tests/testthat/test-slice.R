@@ -1,7 +1,11 @@
-context("test-slice")
 
 test_that("vec_slice throws error with non-vector inputs", {
   expect_error(vec_slice(environment(), 1L), class = "vctrs_error_scalar_type")
+})
+
+test_that("vec_slice throws error with non-vector subscripts", {
+  expect_error(vec_slice(1:3, Sys.Date()), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_slice(1:3, matrix(TRUE, nrow = 1)), "must have one dimension")
 })
 
 test_that("can subset base vectors", {
@@ -52,6 +56,7 @@ test_that("can subset with a recycled TRUE", {
   expect_identical(vec_slice(1:3, TRUE), 1:3)
   expect_identical(vec_slice(mtcars, TRUE), mtcars)
   expect_identical(vec_slice(new_vctr(1:3), TRUE), new_vctr(1:3))
+  expect_identical(vec_as_location(TRUE, 2), 1:2)
 })
 
 test_that("can subset with a recycled FALSE", {
@@ -61,16 +66,15 @@ test_that("can subset with a recycled FALSE", {
 })
 
 test_that("can't index beyond the end of a vector", {
-  expect_error(vec_slice(1:2, 3L), glue::glue(
-    "Can't index beyond the end of a vector.\n",
-    "The vector has length 2 and you've tried to subset element 3."
-  ))
-  expect_error(vec_slice(1:2, -3L), "Can't index beyond the end of a vector.")
+  verify_errors({
+    expect_error(vec_slice(1:2, 3L), class = "vctrs_error_subscript_oob")
+    expect_error(vec_slice(1:2, -3L), class = "vctrs_error_subscript_oob")
+  })
 })
 
 test_that("slicing non existing elements fails", {
-  expect_error(vec_as_index("foo", 1L, "f"), "non-existing")
-  expect_error(vec_slice(c(f = 1), "foo"), "non-existing")
+  expect_error(vec_as_location("foo", 1L, "f"), class = "vctrs_error_subscript_oob")
+  expect_error(vec_slice(c(f = 1), "foo"), class = "vctrs_error_subscript_oob")
 })
 
 test_that("can subset object of any dimensionality", {
@@ -87,7 +91,7 @@ test_that("can subset object of any dimensionality", {
   expect_identical(vec_slice(x4, 1L), ones(1, 3, 4, 5))
 })
 
-test_that("can subset using logical index", {
+test_that("can subset using logical subscript", {
   x0 <- c(1, 1)
 
   expect_identical(vec_slice(x0, TRUE), x0)
@@ -95,19 +99,17 @@ test_that("can subset using logical index", {
 
   expect_error(
     vec_slice(x0, c(TRUE, FALSE, TRUE)),
-    "has size 2 whereas the index has size 3",
-    fixed = TRUE
+    class = "vctrs_error_subscript_size"
   )
 
   expect_error(
     vec_slice(x0, lgl()),
-    "has size 2 whereas the index has size 0",
-    fixed = TRUE
+    class = "vctrs_error_subscript_size"
   )
 
   expect_error(
     vec_slice(mtcars, c(TRUE, FALSE)),
-    "has size 32 whereas the index has size 2"
+    class = "vctrs_error_subscript_size"
   )
 })
 
@@ -160,8 +162,8 @@ test_that("can slice with negative indices", {
   expect_identical(vec_slice(1:3, -c(1L, 3L)), 2L)
   expect_identical(vec_slice(mtcars, -(1:30)), vec_slice(mtcars, 31:32))
 
-  expect_error(vec_slice(1:3, -c(1L, NA)), "mix of negative indices and missing values")
-  expect_error(vec_slice(1:3, c(-1L, 1L)), "mix of negative and positive indices")
+  expect_error(vec_slice(1:3, -c(1L, NA)), class = "vctrs_error_subscript_type")
+  expect_error(vec_slice(1:3, c(-1L, 1L)), class = "vctrs_error_subscript_type")
 })
 
 test_that("0 is ignored in negative indices", {
@@ -177,13 +179,19 @@ test_that("0 is ignored in positive indices", {
 
 test_that("can slice with double indices", {
   expect_identical(vec_slice(1:3, dbl(2, 3)), 2:3)
-  expect_lossy(vec_as_index(2^31, 3L), na_int, x = dbl(), to = int())
+  err <- expect_error(vec_as_location(2^31, 3L), class = "vctrs_error_subscript_type")
+  expect_is(err$parent, "vctrs_error_cast_lossy")
 })
 
-test_that("vec_as_index() checks type", {
-  expect_error(vec_as_index(quote(foo), 1L), "must be an integer, character, or logical vector, not a symbol")
-  expect_error(vec_as_index("foo", "bar"), class = "vctrs_error_assert_ptype")
-  expect_error(vec_as_index("foo", 1L, names = 1L), "must be a character vector")
+test_that("can slice with symbols", {
+  expect_identical(vec_as_location(quote(b), 26, letters), 2L)
+})
+
+test_that("vec_as_location() checks type", {
+  expect_error(vec_as_location("foo", "bar"), class = "vctrs_error_incompatible_type")
+  expect_error(vec_as_location("foo", 1L, names = 1L), "must be a character vector")
+  expect_error(vec_as_location(Sys.Date(), 3L), class = "vctrs_error_subscript_type")
+  expect_error(vec_as_location(matrix(TRUE, nrow = 1), 3L), "must have one dimension")
 })
 
 test_that("can `vec_slice()` S3 objects without dispatch infloop", {
@@ -200,7 +208,7 @@ test_that("can `vec_slice()` records", {
 })
 
 test_that("vec_restore() is called after proxied slicing", {
-  scoped_global_bindings(
+  local_methods(
     vec_proxy.vctrs_foobar = identity,
     vec_restore.vctrs_foobar = function(x, to, ...) "dispatch"
   )
@@ -208,7 +216,7 @@ test_that("vec_restore() is called after proxied slicing", {
 })
 
 test_that("vec_slice() is proxied", {
-  scoped_proxy()
+  local_proxy()
   x <- vec_slice(new_proxy(1:3), 2:3)
   expect_identical(proxy_deref(x), 2:3)
 })
@@ -216,7 +224,7 @@ test_that("vec_slice() is proxied", {
 test_that("dimensions are preserved by vec_slice()", {
   attrib <- NULL
 
-  scoped_global_bindings(
+  local_methods(
     vec_restore.vctrs_foobar = function(x, ...) attrib <<- attributes(x)
   )
 
@@ -238,12 +246,12 @@ test_that("can slice shaped objects by name", {
   dimnames(x) <- list(c("foo", "bar"))
 
   expect_equal(vec_slice(x, "foo"), vec_slice(x, 1L))
-  expect_error(vec_slice(x, "baz"), "non-existing")
+  expect_error(vec_slice(x, "baz"), class = "vctrs_error_subscript_oob")
 })
 
 test_that("vec_slice() unclasses input before calling `vec_restore()`", {
   oo <- NULL
-  scoped_global_bindings(
+  local_methods(
     vec_proxy.vctrs_foobar = identity,
     vec_restore.vctrs_foobar = function(x, ...) oo <<- is.object(x)
   )
@@ -256,7 +264,7 @@ test_that("vec_slice() unclasses input before calling `vec_restore()`", {
 })
 
 test_that("can call `vec_slice()` from `[` methods with shaped objects without infloop", {
-  scoped_global_bindings(
+  local_methods(
     `[.vctrs_foobar` = function(x, i, ...) vec_slice(x, i)
   )
 
@@ -269,20 +277,20 @@ test_that("can call `vec_slice()` from `[` methods with shaped objects without i
 })
 
 test_that("vec_slice() falls back to `[` with S3 objects", {
-  scoped_global_bindings(
+  local_methods(
     `[.vctrs_foobar` = function(x, i, ...) "dispatched"
   )
   expect_identical(vec_slice(foobar(NA), 1), foobar("dispatched"))
 
   expect_error(vec_slice(foobar(list(NA)), 1), class = "vctrs_error_scalar_type")
-  scoped_global_bindings(
+  local_methods(
     vec_proxy.vctrs_foobar = identity
   )
   expect_identical(vec_slice(foobar(list(NA)), 1), foobar(list(NA)))
 })
 
 test_that("vec_slice() doesn't restore when attributes have already been restored", {
-  scoped_global_bindings(
+  local_methods(
     `[.vctrs_foobar` = function(x, i, ...) structure("dispatched", foo = "bar"),
     vec_restore.vctrs_foobar = function(...) stop("not called")
   )
@@ -290,7 +298,7 @@ test_that("vec_slice() doesn't restore when attributes have already been restore
 })
 
 test_that("can vec_slice() without inflooping when restore calls math generics", {
-  scoped_global_bindings(
+  local_methods(
     new_foobar = function(x) {
       new_vctr(as.double(x), class = "vctrs_foobar")
     },
@@ -308,7 +316,7 @@ test_that("can vec_slice() without inflooping when restore calls math generics",
 })
 
 test_that("vec_restore() is called after slicing data frames", {
-  scoped_global_bindings(
+  local_methods(
     vec_restore.vctrs_tabble = function(...) "dispatched"
   )
   df <- structure(mtcars, class = c("vctrs_tabble", "data.frame"))
@@ -316,7 +324,7 @@ test_that("vec_restore() is called after slicing data frames", {
 })
 
 test_that("additional subscripts are forwarded to `[`", {
-  scoped_global_bindings(
+  local_methods(
     `[.vctrs_foobar` = function(x, i, ...) vec_index(x, i, ...)
   )
 
@@ -337,29 +345,32 @@ test_that("can use names to vec_slice() a named object", {
   expect_identical(vec_slice(x0, letters[2:1]), c(b = 2, a = 1))
   expect_identical(vec_slice(x1, letters[1]), c(a = 1))
 
-  expect_error(vec_slice(x0, letters[3:1]), "non-existing")
-  expect_error(vec_slice(x1, letters[2]), "non-existing")
+  expect_error(vec_slice(x0, letters[3:1]), class = "vctrs_error_subscript_oob")
+  expect_error(vec_slice(x1, letters[2]), class = "vctrs_error_subscript_oob")
 })
 
 test_that("can't use names to vec_slice() an unnamed object", {
-  x0 <- 1:3
-
   expect_error(
-    vec_slice(x0, letters[1]),
-    "Can't use character to index an unnamed vector.",
+    vec_slice(1:3, letters[1]),
+    "Can't use character names to index an unnamed vector.",
     fixed = TRUE
   )
   expect_error(
-    vec_slice(x0, letters[25:27]),
-    "Can't use character to index an unnamed vector.",
+    vec_slice(1:3, letters[25:27]),
+    "Can't use character names to index an unnamed vector.",
     fixed = TRUE
   )
 })
 
 test_that("can slice with missing character indices (#244)", {
-  expect_identical(vec_as_index(na_chr, 2L, c("x", "")), na_int)
+  expect_identical(vec_as_location(na_chr, 2L, c("x", "")), na_int)
   expect_identical(vec_slice(c(x = 1), na_chr), set_names(na_dbl, ""))
   expect_identical(vec_slice(c(x = "foo"), na_chr), set_names(na_chr, ""))
+})
+
+test_that("can slice with numerics (#577)", {
+  expect_identical(vec_as_location(1:2, 3), 1:2)
+  expect_error(vec_as_location(1:2, 3.5), class = "vctrs_error_cast_lossy")
 })
 
 test_that("missing indices don't create NA names", {
@@ -423,5 +434,413 @@ test_that("na of list-array is 1d slice", {
 })
 
 test_that("vec_init() asserts vectorness (#301)", {
-  expect_error(vec_init(NULL), class = "vctrs_error_scalar_type")
+  expect_error(vec_init(NULL, 1L), class = "vctrs_error_scalar_type")
+})
+
+test_that("vec_init() works with Altrep classes", {
+  skip_if(getRversion() < "3.5")
+
+  x <- .Call(vctrs_rle, c(foo = 1L, bar = 2L))
+
+  expect_equal(vec_init(x, 2), rep(NA_character_, 2))
+})
+
+# vec_chop ----------------------------------------------------------------
+
+test_that("vec_chop() throws error with non-vector inputs", {
+  expect_error(vec_chop(NULL), class = "vctrs_error_scalar_type")
+  expect_error(vec_chop(environment()), class = "vctrs_error_scalar_type")
+})
+
+test_that("atomics are split into a list", {
+  x <- 1:5
+  expect_equal(vec_chop(x), as.list(x))
+
+  x <- letters[1:5]
+  expect_equal(vec_chop(x), as.list(x))
+})
+
+test_that("atomic names are kept", {
+  x <- set_names(1:5)
+  result <- lapply(vec_chop(x), names)
+  expect_equal(result, as.list(names(x)))
+})
+
+test_that("base R classed objects are split into a list", {
+  fctr <- factor(c("a", "b"))
+  expect <- lapply(vec_seq_along(fctr), vec_slice, x = fctr)
+  expect_equal(vec_chop(fctr), expect)
+
+  date <- new_date(c(0, 1))
+  expect <- lapply(vec_seq_along(date), vec_slice, x = date)
+  expect_equal(vec_chop(date), expect)
+})
+
+test_that("base R classed object names are kept", {
+  fctr <- set_names(factor(c("a", "b")))
+  result <- lapply(vec_chop(fctr), names)
+  expect_equal(result, as.list(names(fctr)))
+})
+
+test_that("list elements are split", {
+  x <- list(1, 2)
+  result <- list(vec_slice(x, 1), vec_slice(x, 2))
+  expect_equal(vec_chop(x), result)
+})
+
+test_that("data frames are split rowwise", {
+  x <- data_frame(x = 1:2, y = c("a", "b"))
+  result <- list(vec_slice(x, 1), vec_slice(x, 2))
+  expect_equal(vec_chop(x), result)
+})
+
+test_that("data frame row names are kept", {
+  x <- data_frame(x = 1:2, y = c("a", "b"))
+  rownames(x) <- c("r1", "r2")
+  result <- lapply(vec_chop(x), rownames)
+  expect_equal(result, list("r1", "r2"))
+})
+
+test_that("matrices / arrays are split rowwise", {
+  x <- array(1:12, c(2, 2, 2))
+  result <- list(vec_slice(x, 1), vec_slice(x, 2))
+  expect_equal(vec_chop(x), result)
+})
+
+test_that("matrix / array row names are kept", {
+  x <- array(1:12, c(2, 2, 2), dimnames = list(c("r1", "r2"), c("c1", "c2")))
+  result <- lapply(vec_chop(x), rownames)
+  expect_equal(result, list("r1", "r2"))
+})
+
+test_that("matrices / arrays without row names have other dimension names kept", {
+  x <- array(1:12, c(2, 2, 2), dimnames = list(NULL, c("c1", "c2")))
+  result <- lapply(vec_chop(x), colnames)
+  expect_equal(result, list(c("c1", "c2"), c("c1", "c2")))
+})
+
+test_that("vec_chop() doesn't restore when attributes have already been restored", {
+  local_methods(
+    `[.vctrs_foobar` = function(x, i, ...) structure("dispatched", foo = "bar"),
+    vec_restore.vctrs_foobar = function(...) structure("dispatched-and-restored", foo = "bar")
+  )
+
+  result <- vec_chop(foobar(NA))[[1]]
+  expect_equal(result, structure("dispatched", foo = "bar"))
+})
+
+test_that("vec_chop() restores when attributes have not been restored by `[`", {
+  local_methods(
+    `[.vctrs_foobar` = function(x, i, ...) "dispatched",
+    vec_restore.vctrs_foobar = function(...) "dispatched-and-restored"
+  )
+
+  result <- vec_chop(foobar(NA))[[1]]
+  expect_equal(result, "dispatched-and-restored")
+})
+
+test_that("vec_chop() falls back to `[` for shaped objects with no proxy", {
+  x <- foobar(1)
+  dim(x) <- c(1, 1)
+  result <- vec_chop(x)[[1]]
+  expect_equal(result, x)
+})
+
+test_that("`indices` are validated", {
+  expect_error(vec_chop(1, 1), "`indices` must be a list of index values, or `NULL`")
+  expect_error(vec_chop(1, list(1.5)), class = "vctrs_error_cast_lossy")
+  expect_error(vec_chop(1, list(2)), class = "vctrs_error_subscript_oob")
+})
+
+test_that("size 0 `indices` list is allowed", {
+  expect_equal(vec_chop(1, list()), list())
+})
+
+test_that("individual index values of size 0 are allowed", {
+  expect_equal(vec_chop(1, list(integer())), list(numeric()))
+
+  df <- data.frame(a = 1, b = "1")
+  expect_equal(vec_chop(df, list(integer())), list(vec_ptype(df)))
+})
+
+test_that("data frame row names are kept when `indices` are used", {
+  x <- data_frame(x = 1:2, y = c("a", "b"))
+  rownames(x) <- c("r1", "r2")
+  result <- lapply(vec_chop(x, list(1, 1:2)), rownames)
+  expect_equal(result, list("r1", c("r1", "r2")))
+})
+
+test_that("vec_chop(<atomic>, indices =) can be equivalent to the default", {
+  x <- 1:5
+  indices <- as.list(vec_seq_along(x))
+  expect_equal(vec_chop(x, indices), vec_chop(x))
+})
+
+test_that("vec_chop(<data.frame>, indices =) can be equivalent to the default", {
+  x <- data.frame(x = 1:5)
+  indices <- as.list(vec_seq_along(x))
+  expect_equal(vec_chop(x, indices), vec_chop(x))
+})
+
+test_that("vec_chop(<array>, indices =) can be equivalent to the default", {
+  x <- array(1:8, c(2, 2, 2))
+  indices <- as.list(vec_seq_along(x))
+  expect_equal(vec_chop(x, indices), vec_chop(x))
+})
+
+test_that("`indices` can use names", {
+  x <- set_names(1:3, c("a", "b", "c"))
+
+  expect_equal(
+    vec_chop(x, list(1, 2:3)),
+    vec_chop(x, list("a", c("b", "c")))
+  )
+})
+
+test_that("`indices` can use array row names", {
+  x <- array(1:4, c(2, 2), dimnames = list(c("r1", "r2")))
+
+  expect_equal(
+    vec_chop(x, list("r1")),
+    vec_chop(x, list(1))
+  )
+})
+
+test_that("`indices` cannot use data frame row names", {
+  df <- data.frame(x = 1, row.names = "r1")
+  expect_error(vec_chop(df, list("r1")), "Can't use character")
+})
+
+test_that("fallback method with `indices` works", {
+  fctr <- factor(c("a", "b"))
+  indices <- list(1, c(1, 2))
+
+  expect_equal(
+    vec_chop(fctr, indices),
+    map(indices, vec_slice, x = fctr)
+  )
+})
+
+test_that("vec_chop() falls back to `[` for shaped objects with no proxy when indices are provided", {
+  x <- foobar(1)
+  dim(x) <- c(1, 1)
+  result <- vec_chop(x, list(1))[[1]]
+  expect_equal(result, x)
+})
+
+# vec_slice + compact_rep -------------------------------------------------
+
+# `i` is 1-based
+
+test_that("names are repaired correctly with compact reps and `NA_integer_`", {
+  x <- list(a = 1L, b = 2L)
+  expect <- set_names(list(NULL, NULL), c("", ""))
+
+  expect_equal(vec_slice_rep(x, NA_integer_, 2L), expect)
+})
+
+test_that("vec_slice() with compact_reps work with Altrep classes", {
+  skip_if(getRversion() < "3.5")
+
+  x <- .Call(vctrs_rle, c(foo = 10L, bar = 5L))
+
+  expect_equal(vec_slice_rep(x, 10L, 3L), rep("foo", 3))
+})
+
+# vec_slice + compact_seq -------------------------------------------------
+
+# `start` is 0-based
+
+test_that("can subset base vectors with compact seqs", {
+  start <- 1L
+  size <- 2L
+  increasing <- TRUE
+  expect_identical(vec_slice_seq(lgl(1, 0, 1), start, size, increasing), lgl(0, 1))
+  expect_identical(vec_slice_seq(int(1, 2, 3), start, size, increasing), int(2, 3))
+  expect_identical(vec_slice_seq(dbl(1, 2, 3), start, size, increasing), dbl(2, 3))
+  expect_identical(vec_slice_seq(cpl(1, 2, 3), start, size, increasing), cpl(2, 3))
+  expect_identical(vec_slice_seq(chr("1", "2", "3"), start, size, increasing), chr("2", "3"))
+  expect_identical(vec_slice_seq(bytes(1, 2, 3), start, size, increasing), bytes(2, 3))
+  expect_identical(vec_slice_seq(list(1, 2, 3), start, size, increasing), list(2, 3))
+})
+
+test_that("can subset base vectors with decreasing compact seqs", {
+  start <- 2L
+  size <- 2L
+  increasing <- FALSE
+  expect_identical(vec_slice_seq(lgl(1, 0, 1), start, size, increasing), lgl(1, 0))
+  expect_identical(vec_slice_seq(int(1, 2, 3), start, size, increasing), int(3, 2))
+  expect_identical(vec_slice_seq(dbl(1, 2, 3), start, size, increasing), dbl(3, 2))
+  expect_identical(vec_slice_seq(cpl(1, 2, 3), start, size, increasing), cpl(3, 2))
+  expect_identical(vec_slice_seq(chr("1", "2", "3"), start, size, increasing), chr("3", "2"))
+  expect_identical(vec_slice_seq(bytes(1, 2, 3), start, size, increasing), bytes(3, 2))
+  expect_identical(vec_slice_seq(list(1, 2, 3), start, size, increasing), list(3, 2))
+})
+
+test_that("can subset base vectors with size 0 compact seqs", {
+  start <- 1L
+  size <- 0L
+  increasing <- TRUE
+  expect_identical(vec_slice_seq(lgl(1, 0, 1), start, size, increasing), lgl())
+  expect_identical(vec_slice_seq(int(1, 2, 3), start, size, increasing), int())
+  expect_identical(vec_slice_seq(dbl(1, 2, 3), start, size, increasing), dbl())
+  expect_identical(vec_slice_seq(cpl(1, 2, 3), start, size, increasing), cpl())
+  expect_identical(vec_slice_seq(chr("1", "2", "3"), start, size, increasing), chr())
+  expect_identical(vec_slice_seq(bytes(1, 2, 3), start, size, increasing), bytes())
+  expect_identical(vec_slice_seq(list(1, 2, 3), start, size, increasing), list())
+})
+
+test_that("can subset shaped base vectors with compact seqs", {
+  start <- 1L
+  size <- 2L
+  increasing <- TRUE
+  mat <- as.matrix
+  expect_identical(vec_slice_seq(mat(lgl(1, 0, 1)), start, size, increasing), mat(lgl(0, 1)))
+  expect_identical(vec_slice_seq(mat(int(1, 2, 3)), start, size, increasing), mat(int(2, 3)))
+  expect_identical(vec_slice_seq(mat(dbl(1, 2, 3)), start, size, increasing), mat(dbl(2, 3)))
+  expect_identical(vec_slice_seq(mat(cpl(1, 2, 3)), start, size, increasing), mat(cpl(2, 3)))
+  expect_identical(vec_slice_seq(mat(chr("1", "2", "3")), start, size, increasing), mat(chr("2", "3")))
+  expect_identical(vec_slice_seq(mat(bytes(1, 2, 3)), start, size, increasing), mat(bytes(2, 3)))
+  expect_identical(vec_slice_seq(mat(list(1, 2, 3)), start, size, increasing), mat(list(2, 3)))
+})
+
+test_that("can subset shaped base vectors with decreasing compact seqs", {
+  start <- 2L
+  size <- 2L
+  increasing <- FALSE
+  mat <- as.matrix
+  expect_identical(vec_slice_seq(mat(lgl(1, 0, 1)), start, size, increasing), mat(lgl(1, 0)))
+  expect_identical(vec_slice_seq(mat(int(1, 2, 3)), start, size, increasing), mat(int(3, 2)))
+  expect_identical(vec_slice_seq(mat(dbl(1, 2, 3)), start, size, increasing), mat(dbl(3, 2)))
+  expect_identical(vec_slice_seq(mat(cpl(1, 2, 3)), start, size, increasing), mat(cpl(3, 2)))
+  expect_identical(vec_slice_seq(mat(chr("1", "2", "3")), start, size, increasing), mat(chr("3", "2")))
+  expect_identical(vec_slice_seq(mat(bytes(1, 2, 3)), start, size, increasing), mat(bytes(3, 2)))
+  expect_identical(vec_slice_seq(mat(list(1, 2, 3)), start, size, increasing), mat(list(3, 2)))
+})
+
+test_that("can subset shaped base vectors with size 0 compact seqs", {
+  start <- 1L
+  size <- 0L
+  increasing <- TRUE
+  mat <- as.matrix
+  expect_identical(vec_slice_seq(mat(lgl(1, 0, 1)), start, size, increasing), mat(lgl()))
+  expect_identical(vec_slice_seq(mat(int(1, 2, 3)), start, size, increasing), mat(int()))
+  expect_identical(vec_slice_seq(mat(dbl(1, 2, 3)), start, size, increasing), mat(dbl()))
+  expect_identical(vec_slice_seq(mat(cpl(1, 2, 3)), start, size, increasing), mat(cpl()))
+  expect_identical(vec_slice_seq(mat(chr("1", "2", "3")), start, size, increasing), mat(chr()))
+  expect_identical(vec_slice_seq(mat(bytes(1, 2, 3)), start, size, increasing), mat(bytes()))
+  expect_identical(vec_slice_seq(mat(list(1, 2, 3)), start, size, increasing), mat(list()))
+})
+
+test_that("can subset object of any dimensionality with compact seqs", {
+  x0 <- c(1, 1)
+  x1 <- ones(2)
+  x2 <- ones(2, 3)
+  x3 <- ones(2, 3, 4)
+  x4 <- ones(2, 3, 4, 5)
+
+  expect_equal(vec_slice_seq(x0, 0L, 1L), 1)
+  expect_identical(vec_slice_seq(x1, 0L, 1L), ones(1))
+  expect_identical(vec_slice_seq(x2, 0L, 1L), ones(1, 3))
+  expect_identical(vec_slice_seq(x3, 0L, 1L), ones(1, 3, 4))
+  expect_identical(vec_slice_seq(x4, 0L, 1L), ones(1, 3, 4, 5))
+})
+
+test_that("can subset data frames with compact seqs", {
+  df <- data_frame(x = 1:5, y = letters[1:5])
+  expect_equal(vec_slice_seq(df, 0L, 0L), vec_slice(df, integer()))
+  expect_equal(vec_slice_seq(df, 0L, 1L), vec_slice(df, 1L))
+  expect_equal(vec_slice_seq(df, 0L, 3L), vec_slice(df, 1:3))
+  expect_equal(vec_slice_seq(df, 2L, 3L, FALSE), vec_slice(df, 3:1))
+
+  df$df <- df
+  expect_equal(vec_slice_seq(df, 0L, 0L), vec_slice(df, integer()))
+  expect_equal(vec_slice_seq(df, 0L, 1L), vec_slice(df, 1L))
+  expect_equal(vec_slice_seq(df, 0L, 3L), vec_slice(df, 1:3))
+  expect_equal(vec_slice_seq(df, 2L, 3L, FALSE), vec_slice(df, 3:1))
+})
+
+test_that("can subset S3 objects using the fallback method with compact seqs", {
+  x <- factor(c("a", "b", "c", "d"))
+  expect_equal(vec_slice_seq(x, 0L, 0L), vec_slice(x, integer()))
+  expect_equal(vec_slice_seq(x, 0L, 1L), vec_slice(x, 1L))
+  expect_equal(vec_slice_seq(x, 2L, 2L), vec_slice(x, 3:4))
+  expect_equal(vec_slice_seq(x, 3L, 2L, FALSE), vec_slice(x, 4:3))
+})
+
+test_that("vec_slice() with compact_seqs work with Altrep classes", {
+  skip_if(getRversion() < "3.5")
+
+  x <- .Call(vctrs_rle, c(foo = 2L, bar = 3L))
+
+  expect_equal(vec_slice_seq(x, 1L, 3L), c("foo", "bar", "bar"))
+})
+
+# vec_chop + compact_seq --------------------------------------------------
+
+# `start` is 0-based
+
+test_that("can chop base vectors with compact seqs", {
+  start <- 1L
+  size <- 2L
+  expect_identical(vec_chop_seq(lgl(1, 0, 1), start, size), list(lgl(0, 1)))
+  expect_identical(vec_chop_seq(int(1, 2, 3), start, size), list(int(2, 3)))
+  expect_identical(vec_chop_seq(dbl(1, 2, 3), start, size), list(dbl(2, 3)))
+  expect_identical(vec_chop_seq(cpl(1, 2, 3), start, size), list(cpl(2, 3)))
+  expect_identical(vec_chop_seq(chr("1", "2", "3"), start, size), list(chr("2", "3")))
+  expect_identical(vec_chop_seq(bytes(1, 2, 3), start, size), list(bytes(2, 3)))
+  expect_identical(vec_chop_seq(list(1, 2, 3), start, size), list(list(2, 3)))
+})
+
+test_that("can chop with a decreasing compact seq", {
+  expect_equal(vec_chop_seq(int(1, 2, 3), 1L, 2L, FALSE), list(int(2, 1)))
+})
+
+test_that("can chop with multiple compact seqs", {
+  start <- c(1L, 0L)
+  size <- c(1L, 3L)
+
+  expect_equal(
+    vec_chop_seq(int(1, 2, 3), start, size),
+    list(int(2), int(1, 2, 3))
+  )
+})
+
+test_that("can chop S3 objects using the fallback method with compact seqs", {
+  x <- factor(c("a", "b", "c", "d"))
+  expect_equal(vec_chop_seq(x, 0L, 0L), list(vec_slice(x, integer())))
+  expect_equal(vec_chop_seq(x, 0L, 1L), list(vec_slice(x, 1L)))
+  expect_equal(vec_chop_seq(x, 2L, 2L), list(vec_slice(x, 3:4)))
+})
+
+test_that("vec_slice() works with Altrep classes with custom extract methods", {
+  skip_if(getRversion() < "3.5")
+
+  x <- .Call(vctrs_rle, c(foo = 10L, bar = 5L))
+
+  idx <- c(9, 10, 11)
+  expect_equal(vec_slice(x, idx), c("foo", "foo", "bar"))
+})
+
+test_that("slice has informative error messages", {
+  verify_output(test_path("error", "test-slice.txt"), {
+    "# Unnamed vector with character subscript"
+    vec_slice(1:3, letters[1])
+
+    "# Negative subscripts are checked"
+    vec_slice(1:3, -c(1L, NA))
+    vec_slice(1:3, c(-1L, 1L))
+
+    "# oob error messages are properly constructed"
+    vec_slice(c(bar = 1), "foo")
+    "Multiple OOB indices"
+    vec_slice(letters, c(100, 1000))
+    vec_slice(letters, c(1, 100:103, 2, 104:110))
+    vec_slice(set_names(letters), c("foo", "bar"))
+    vec_slice(set_names(letters), toupper(letters))
+
+    "# Can't index beyond the end of a vector"
+    vec_slice(1:2, 3L)
+    vec_slice(1:2, -3L)
+  })
 })

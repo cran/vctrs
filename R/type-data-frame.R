@@ -16,9 +16,15 @@
 #' @examples
 #' new_data_frame(list(x = 1:10, y = 10:1))
 new_data_frame <- function(x = list(), n = NULL, ..., class = character()) {
-  stopifnot(is.list(x))
-  n <- n %||% df_size(x)
-  stopifnot(is.integer(n), length(n) == 1L)
+  if (!is.list(x)) {
+    abort("`x` must be a list.")
+  }
+
+  if (is.null(n)) {
+    n <- df_size(x)
+  } else if (!is.integer(n) || length(n) != 1L) {
+    abort("`n` must be an integer of size 1.")
+  }
 
   # names() should always be a character vector, but we can't enforce that
   # because as.data.frame() returns a data frame with NULL names to indicate
@@ -27,12 +33,16 @@ new_data_frame <- function(x = list(), n = NULL, ..., class = character()) {
     names(x) <- character()
   }
 
-  structure(
-    x,
+  new_attributes <- list(
+    names = names(x),
     ...,
     class = c(class, "data.frame"),
     row.names = .set_row_names(n)
   )
+
+  attributes(x) <- new_attributes
+
+  x
 }
 
 # Light weight constructor used for tests - avoids having to repeatedly do
@@ -71,13 +81,9 @@ vec_ptype_abbr.data.frame <- function(x, ...) {
 }
 
 #' @export
-vec_proxy.data.frame <- function(x, ...) {
-  x
-}
-#' @export
 vec_proxy_compare.data.frame <- function(x, ..., relax = FALSE) {
-  x[] <- lapply(x[], vec_proxy_compare_default, relax = TRUE)
-  x
+  out <- lapply(as.list(x), vec_proxy_compare, relax = TRUE)
+  new_data_frame(out, nrow(x))
 }
 
 
@@ -113,6 +119,11 @@ vec_cast.data.frame <- function(x, to, ...) {
 #' @method vec_cast.data.frame data.frame
 vec_cast.data.frame.data.frame <- function(x, to, ..., x_arg = "x", to_arg = "to") {
   .Call(vctrs_df_as_dataframe, x, to, x_arg, to_arg)
+}
+#' @export
+#' @method vec_cast.data.frame list
+vec_cast.data.frame.list <- function(x, to, ..., x_arg = "x", to_arg = "to") {
+  vec_list_cast(x, to, x_arg = x_arg, to_arg = to_arg)
 }
 #' @export
 #' @method vec_cast.data.frame default
@@ -156,6 +167,6 @@ df_lossy_cast <- function(out, x, to) {
     lossy = length(extra) > 0,
     locations = int(),
     details = inline_list("Dropped variables: ", extra, quote = "`"),
-    .subclass = "vctrs_error_cast_lossy_dropped"
+    class = "vctrs_error_cast_lossy_dropped"
   )
 }

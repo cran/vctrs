@@ -57,7 +57,18 @@ test_that("hashes are consistent from run to run", {
   )
   hash <- lapply(df, vec_hash)
 
-  scoped_options(max.print = 99999)
+  # Big-endian results are byte-swapped, but otherwise equivalent.
+  # Swap results so that there's no need to save results twice.
+  if (.Platform$endian == "big") {
+    hash <- lapply(
+      hash,
+      function(x) {
+        writeBin(readBin(x, "int", 100, endian = "big"), x, endian = "little")
+      }
+    )
+  }
+
+  local_options(max.print = 99999)
   expect_known_output(print(hash), file = test_path("test-hash-hash.txt"))
 })
 
@@ -70,52 +81,38 @@ test_that("can hash list of non-vectors", {
   )
 })
 
-test_that("can hash matrices rowwise", {
-  x <- matrix(c(1, 2, 3, 4), c(2, 2))
-  expect_identical(
-    vec_hash(x, rowwise = TRUE),
-    vec_hash(x, rowwise = TRUE)
-  )
-
-  y <- matrix(c(1, 2, 3, 5), c(2, 2))
-  expect_false(identical(
-    vec_hash(x, rowwise = TRUE),
-    vec_hash(y, rowwise = TRUE)
-  ))
-})
-
-test_that("can hash matrices non-rowwise", {
+test_that("can hash matrices", {
   x <- matrix(c(1, 1, 1, 2, 2, 1), c(3, 2))
 
   expect_identical(
-    vec_hash(x, rowwise = FALSE),
-    vec_hash(x, rowwise = FALSE)
+    vec_hash(x),
+    vec_hash(x)
   )
 
   x <- matrix(c(1, 2, 3, 4), c(2, 2))
 
   expect_identical(
-    vec_hash(x, rowwise = FALSE),
-    vec_hash(x, rowwise = FALSE)
+    vec_hash(x),
+    vec_hash(x)
   )
 
   expect_false(identical(
-    vec_hash(x, rowwise = FALSE),
-    vec_hash(c(1, 2), rowwise = FALSE)
+    vec_hash(x),
+    vec_hash(c(1, 2))
   ))
 
   y <- matrix(c(1, 2, 3, 5), c(2, 2))
 
   expect_false(identical(
-    vec_hash(x, rowwise = FALSE),
-    vec_hash(y, rowwise = FALSE)
+    vec_hash(x),
+    vec_hash(y)
   ))
 })
 
-test_that("can hash with non-rowwise method", {
+test_that("can hash NA", {
   expect_identical(
-    vec_hash(NA, rowwise = FALSE),
-    vec_hash(NA, rowwise = FALSE),
+    vec_hash(NA),
+    vec_hash(NA),
   )
 })
 
@@ -123,8 +120,40 @@ test_that("can hash 1D arrays", {
   # 1D arrays are dispatched to `as.data.frame.vector()` which
   # currently does not strip dimensions. This caused an infinite
   # recursion.
-  expect_length(vec_hash(array(1:2), TRUE), 8)
-  expect_identical(vec_hash(array(1:2), FALSE), vec_hash(1:2, FALSE))
+  expect_length(vec_hash(array(1:2)), 8)
+  expect_identical(vec_hash(array(1:2)), vec_hash(1:2))
+})
+
+test_that("can hash raw vectors", {
+  expect_identical(vec_hash(0:255), vec_hash(as.raw(0:255)))
+})
+
+test_that("can hash complex vectors", {
+  expect_identical(
+    vec_hash(c(1, 2) + 0i),
+    c(obj_hash(c(1, 0)), obj_hash(c(2, 0)))
+  )
+})
+
+test_that("hash treats positive and negative 0 as equivalent (#637)", {
+  expect_equal(vec_hash(-0), vec_hash(0))
+})
+
+test_that("can hash lists of expressions", {
+  expect_equal(
+    vec_hash(list(expression(x), expression(y))),
+    c(obj_hash(expression(x)), obj_hash(expression(y)))
+  )
+})
+
+test_that("vec_hash() uses recursive equality proxy", {
+  x <- new_data_frame(list(x = foobar(1:3)))
+  default <- vec_hash(x)
+
+  local_methods(vec_proxy_equal.vctrs_foobar = function(...) c(0, 0, 0))
+  overridden <- vec_hash(x)
+
+  expect_false(identical(default, overridden))
 })
 
 
@@ -141,4 +170,16 @@ test_that("equal objects hash to same value", {
   attr(f2, "srcref") <- NULL
   expect_equal(obj_hash(f1), obj_hash(f2))
   expect_equal(vec_hash(data_frame(x = list(f1))), vec_hash(data_frame(x = list(f2))))
+})
+
+test_that("expression vectors hash to the same value as lists of calls/names", {
+  expect_equal(
+    obj_hash(expression(x, y)),
+    obj_hash(list(as.name("x"), as.name("y")))
+  )
+
+  expect_equal(
+    obj_hash(expression(mean(), sd())),
+    obj_hash(list(call("mean"), call("sd")))
+  )
 })

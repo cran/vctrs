@@ -73,7 +73,7 @@ test_that("bare lists are vectors", {
 
 test_that("S3 lists are not vectors by default", {
   expect_false(vec_is_vector(foobar()))
-  scoped_foobar_proxy()
+  local_foobar_proxy()
   expect_true(vec_is_vector(foobar()))
 })
 
@@ -129,7 +129,7 @@ test_that("non-vector types can be proxied", {
   expect_false(vec_is(x))
   expect_error(vec_assert(x), class = "vctrs_error_scalar_type")
 
-  scoped_env_proxy()
+  local_env_proxy()
 
   expect_identical(vec_typeof(x), "integer")
   expect_true(vec_is_vector(x))
@@ -160,7 +160,7 @@ test_that("data frames are always classified as such even when dispatch is off",
 })
 
 test_that("assertion is not applied on proxy", {
-  scoped_global_bindings(
+  local_methods(
     vec_proxy.vctrs_foobar = unclass,
     vec_restore.vctrs_foobar = function(x, ...) foobar(x),
     `[.vctrs_foobar` = function(x, i) vec_slice(x, i)
@@ -193,8 +193,8 @@ test_that("unspecified is finalised before assertion", {
 
 test_that("assertion failures are explained", {
   expect_known_output(file = test_path("test-assert-explanations.txt"), {
-    scoped_no_stringsAsFactors()
-    scoped_options(rlang_backtrace_on_error = "none")
+    local_no_stringsAsFactors()
+    local_options(rlang_backtrace_on_error = "none")
 
     try_cat(vec_assert(lgl(), chr()))
 
@@ -223,4 +223,11 @@ test_that("assertion failures are explained", {
 test_that("NULL is not a vector", {
   expect_false(vec_is_vector(NULL))
   expect_false(vec_is(NULL))
+})
+
+test_that("names and row names do not influence type identity (#707)", {
+  expect_true(vec_is(c(a = TRUE), logical()))
+  expect_true(vec_is(TRUE, c(a = TRUE)))
+  expect_true(vec_is(structure(mtcars, row.names = 1:32), mtcars))
+  expect_true(vec_is(mtcars, structure(mtcars, row.names = 1:32)))
 })

@@ -4,8 +4,12 @@
 \alias{vec_c}
 \title{Combine many vectors into one vector}
 \usage{
-vec_c(..., .ptype = NULL, .name_spec = NULL,
-  .name_repair = c("minimal", "unique", "check_unique", "universal"))
+vec_c(
+  ...,
+  .ptype = NULL,
+  .name_spec = NULL,
+  .name_repair = c("minimal", "unique", "check_unique", "universal")
+)
 }
 \arguments{
 \item{...}{Vectors to coerce.}
@@ -41,7 +45,8 @@ sum of the \code{vec_size()} of the contents of \code{...}.
 
 The vector will have names if the individual components have names
 (inner names) or if the arguments are named (outer names). If both
-inner and outer names are present, they are combined with a \code{.}.
+inner and outer names are present, an error is thrown unless a
+\code{.name_spec} is provided.
 }
 \description{
 Combine all arguments into a new vector of common type.

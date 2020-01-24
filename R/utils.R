@@ -1,5 +1,9 @@
+str_dup <- function(x, times) {
+  paste0(rep(x, times = times), collapse = "")
+}
+
 indent <- function(x, n) {
-  pad <- strrep(" ", n)
+  pad <- str_dup(" ", n)
   map_chr(x, gsub, pattern = "(\n+)", replacement = paste0("\\1", pad))
 }
 
@@ -49,16 +53,6 @@ inline_list <- function(title, x, width = getOption("width"), quote = "") {
   paste0(title, x)
 }
 
-#' Destructuring assignment
-#'
-#' See \code{zeallot::\link[zeallot]{\%<-\%}} for details.
-#' @importFrom zeallot %<-%
-#' @export
-#' @rdname unpack-assign
-#' @name %<-%
-#' @keywords internal
-`%<-%`
-
 has_unique_names <- function(x) {
   nms <- names(x)
 
@@ -78,68 +72,62 @@ compact <- function(x) {
   x[!is_null]
 }
 
-# From rlang
-friendly_type_of <- function(x, length = FALSE) {
-  if (is.object(x)) {
-    return(sprintf("a `%s` object", paste_classes(x)))
-  }
-
-  friendly <- as_friendly_type(typeof(x))
-
-  if (length && is_vector(x)) {
-    friendly <- paste0(friendly, sprintf(" of length %s", length(x)))
-  }
-
-  friendly
-}
-as_friendly_type <- function(type) {
-  switch(type,
-    logical = "a logical vector",
-    integer = "an integer vector",
-    numeric = ,
-    double = "a double vector",
-    complex = "a complex vector",
-    character = "a character vector",
-    raw = "a raw vector",
-    string = "a string",
-    list = "a list",
-
-    NULL = "NULL",
-    environment = "an environment",
-    externalptr = "a pointer",
-    weakref = "a weak reference",
-    S4 = "an S4 object",
-
-    name = ,
-    symbol = "a symbol",
-    language = "a call",
-    pairlist = "a pairlist node",
-    expression = "an expression vector",
-    quosure = "a quosure",
-    formula = "a formula",
-
-    char = "an internal string",
-    promise = "an internal promise",
-    ... = "an internal dots object",
-    any = "an internal `any` object",
-    bytecode = "an internal bytecode object",
-
-    primitive = ,
-    builtin = ,
-    special = "a primitive function",
-    closure = "a function",
-
-    type
-  )
-}
-paste_classes <- function(x) {
-  paste(class(x), collapse = "/")
-}
-
 paste_line <- function (...) {
   paste(chr(...), collapse = "\n")
 }
 
 has_dim <- function(x) {
   !is.null(attr(x, "dim"))
+}
+
+# Experimental
+result <- function(ok = NULL, err = NULL) {
+  structure(
+    list(ok = ok, err = err),
+    class = "rlang_result"
+  )
+}
+result_get <- function(x) {
+  if (!is_null(x$err)) {
+    cnd_signal(x$err)
+  }
+  x$ok
+}
+
+obj_type <- function(x) {
+  if (vec_is(x)) {
+    vec_ptype_full(x)
+  } else if (is.object(x)) {
+    paste(class(x), collapse = "/")
+  } else {
+    typeof(x)
+  }
+}
+
+new_opts <- function(x, opts, subclass = NULL, arg = NULL) {
+  if (!all(x %in% opts)) {
+    if (is_null(arg)) {
+      arg <- "Argument"
+    } else {
+      arg <- glue::glue("`{arg}`")
+    }
+    opts <- encodeString(opts, quote = "\"")
+    opts <- glue::glue_collapse(opts, sep = ", ", last = " or ")
+    abort(glue::glue("{arg} must be one of {opts}."))
+  }
+
+  structure(
+    set_names(opts %in% x, opts),
+    class = c(subclass, "vctrs_opts")
+  )
+}
+
+glue_data_bullets <- function(.data, ..., .env = caller_env()) {
+  glue_data <- function(...) glue::glue_data(.data, ..., .envir = .env)
+  format_error_bullets(map_chr(chr(...), glue_data))
+}
+
+unstructure <- function(x) {
+  attributes(x) <- NULL
+  x
 }

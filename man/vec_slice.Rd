@@ -15,9 +15,9 @@ vec_assign(x, i, value)
 \arguments{
 \item{x}{A vector}
 
-\item{i}{An integer, character or logical vector specifying the positions or
-names of the observations to get/set.
-Specify \code{TRUE} to index all elements (as in \code{x[]}), or \code{NULL}, \code{FALSE} or
+\item{i}{An integer, character or logical vector specifying the
+locations or names of the observations to get/set. Specify
+\code{TRUE} to index all elements (as in \code{x[]}), or \code{NULL}, \code{FALSE} or
 \code{integer()} to index none (as in \code{x[NULL]}).}
 
 \item{value}{Replacement values. \code{value} is cast to the type of
@@ -53,7 +53,7 @@ cause an error if they don't implement a \code{\link[=vec_proxy]{vec_proxy()}} m
 \item \code{vec_slice()} only slices along one dimension. For
 two-dimensional types, the first dimension is subsetted.
 \item \code{vec_slice()} preserves attributes by default.
-\item \code{vec_slice<-()} is type-stable and always returns the same type
+\item \verb{vec_slice<-()} is type-stable and always returns the same type
 as the LHS.
 }
 }

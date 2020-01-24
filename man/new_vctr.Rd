@@ -5,7 +5,7 @@
 \alias{vctr}
 \title{vctr (vector) S3 class}
 \usage{
-new_vctr(.data, ..., class = character())
+new_vctr(.data, ..., class = character(), inherit_base_type = FALSE)
 }
 \arguments{
 \item{.data}{Foundation of class. Must be a vector}
@@ -13,6 +13,10 @@ new_vctr(.data, ..., class = character())
 \item{...}{Name-value pairs defining attributes}
 
 \item{class}{Name of subclass.}
+
+\item{inherit_base_type}{\Sexpr[results=rd, stage=render]{vctrs:::lifecycle("experimental")}
+Does this class extend the base type of \code{.data}?  i.e. does the
+resulting object extend the behaviour the underlying type?}
 }
 \description{
 This abstract class provides a set of useful default methods that makes it
@@ -29,8 +33,8 @@ you as they've been carefully planned to be internally consistent.
 \itemize{
 \item \code{[[} and \code{[} use \code{NextMethod()} dispatch to the underlying base function,
 then restore attributes with \code{vec_restore()}.
-\code{rep()} and \code{length<-} work similarly.
-\item \code{[[<-} and \code{[<-} cast \code{value} to same type as \code{x}, then call
+\code{rep()} and \verb{length<-} work similarly.
+\item \verb{[[<-} and \verb{[<-} cast \code{value} to same type as \code{x}, then call
 \code{NextMethod()}.
 \item \code{as.logical()}, \code{as.integer()}, \code{as.numeric()}, \code{as.character()},
 \code{as.Date()} and \code{as.POSIXct()} methods call \code{vec_cast()}.
@@ -39,7 +43,7 @@ method uses a standard technique to wrap a vector in a data frame.
 \item \code{as.factor()}, \code{as.ordered()} and \code{as.difftime()} are not generic functions
 in base R, but have been reimplemented as generics in the \code{generics}
 package. \code{vctrs} extends these and calls \code{vec_cast()}. To inherit this
-behavior in a package, import and re-export the generic of interest
+behaviour in a package, import and re-export the generic of interest
 from \code{generics}.
 \item \code{==}, \code{!=}, \code{unique()}, \code{anyDuplicated()}, and \code{is.na()} use
 \code{\link[=vec_proxy]{vec_proxy()}}.
@@ -51,8 +55,8 @@ use \code{\link[=vec_arith]{vec_arith()}}.
 \code{sum()}, \code{any()}, \code{all()}), the Math group generics (\code{abs()}, \code{sign()},
 etc), \code{mean()}, \code{is.nan()}, \code{is.finite()}, and \code{is.infinite()}
 use \code{\link[=vec_math]{vec_math()}}.
-\item \code{dims()}, \code{dims<-}, \code{dimnames()}, \code{dimnames<-}, \code{levels()}, and
-\code{levels<-} methods throw errors.
+\item \code{dims()}, \verb{dims<-}, \code{dimnames()}, \verb{dimnames<-}, \code{levels()}, and
+\verb{levels<-} methods throw errors.
 }
 }
 

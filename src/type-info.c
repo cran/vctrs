@@ -16,25 +16,14 @@ static enum vctrs_type vec_base_typeof(SEXP x, bool proxied);
 // [[ include("vctrs.h") ]]
 struct vctrs_type_info vec_type_info(SEXP x) {
   struct vctrs_type_info info;
-  bool oo = OBJECT(x);
 
-  info.proxy_method = oo ? vec_proxy_method(x) : R_NilValue;
-  PROTECT(info.proxy_method);
+  info.type = vec_typeof(x);
 
-  // Bare data frames are treated as a base atomic type. Subclasses of
-  // data frames are treated as S3 to give them a chance to be proxied
-  // or implement their own methods for cast, type2, etc.
-  if (oo) {
-    if (is_bare_data_frame(x)) {
-      info.type = vctrs_type_dataframe;
-    } else {
-      info.type = vctrs_type_s3;
-    }
-  } else {
-    info.type = vec_base_typeof(x, false);
+  switch (info.type) {
+  case vctrs_type_s3: info.proxy_method = vec_proxy_method(x); break;
+  default: info.proxy_method = R_NilValue;
   }
 
-  UNPROTECT(1);
   return info;
 }
 
@@ -98,7 +87,7 @@ static enum vctrs_type vec_base_typeof(SEXP x, bool proxied) {
     if (!OBJECT(x)) return vctrs_type_list;
     if (is_data_frame(x)) return vctrs_type_dataframe;
     // S3 lists are only vectors if they are proxied
-    if (proxied) return vctrs_type_list;
+    if (proxied || Rf_inherits(x, "list")) return vctrs_type_list;
     // fallthrough
   default: return vctrs_type_scalar;
   }
@@ -124,16 +113,33 @@ SEXP vctrs_is_vector(SEXP x) {
   return Rf_ScalarLogical(vec_is_vector(x));
 }
 
-enum vctrs_type vec_typeof(SEXP x) {
-  return vec_type_info(x).type;
+static bool class_is_null(SEXP x) {
+  return Rf_getAttrib(x, R_ClassSymbol) == R_NilValue;
 }
+
+// [[ include("vctrs.h") ]]
+enum vctrs_type vec_typeof(SEXP x) {
+  if (!OBJECT(x) || class_is_null(x)) {
+    return vec_base_typeof(x, false);
+  }
+
+  // Bare data frames are treated as a base atomic type. Subclasses of
+  // data frames are treated as S3 to give them a chance to be proxied
+  // or implement their own methods for cast, type2, etc.
+  if (is_bare_data_frame(x)) {
+    return vctrs_type_dataframe;
+  }
+
+  return vctrs_type_s3;
+}
+
 // [[ register() ]]
 SEXP vctrs_typeof(SEXP x, SEXP dispatch) {
   enum vctrs_type type;
   if (LOGICAL(dispatch)[0]) {
     type = vec_proxy_info(x).type;
   } else {
-    type = vec_type_info(x).type;
+    type = vec_typeof(x);
   }
   return Rf_mkString(vec_type_as_str(type));
 }

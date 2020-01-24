@@ -7,6 +7,7 @@ set.seed(1014)
 
 ## ----setup--------------------------------------------------------------------
 library(vctrs)
+library(zeallot)
 
 ## -----------------------------------------------------------------------------
 new_percent <- function(x = double()) {
@@ -181,7 +182,7 @@ vec_ptype_full.vctrs_decimal <- function(x, ...) {
 x
 
 ## -----------------------------------------------------------------------------
-vec_ptype2.vctrs_decimal <- function(x, y, ...) UseMethod("vec_ptype2.vctrs_decimal")
+vec_ptype2.vctrs_decimal <- function(x, y, ...) UseMethod("vec_ptype2.vctrs_decimal", y)
 vec_ptype2.vctrs_decimal.default <- function(x, y, ..., x_arg = "x", y_arg = "y") {
   vec_default_ptype2(x, y, x_arg = x_arg, y_arg = y_arg)
 }

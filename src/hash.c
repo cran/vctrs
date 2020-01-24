@@ -32,6 +32,11 @@ static uint32_t hash_int64(int64_t x) {
 // Seems like something designed specificaly for doubles should work better
 // but I haven't been able to find anything
 static uint32_t hash_double(double x) {
+  // Treat positive/negative 0 as equivalent
+  if (x == 0.0) {
+    x = 0.0;
+  }
+
   union {
     double d;
     uint64_t i;
@@ -41,6 +46,9 @@ static uint32_t hash_double(double x) {
   return hash_int64(value.i);
 }
 
+static uint32_t hash_char(SEXP x) {
+  return hash_int64((intptr_t) x);
+}
 
 // Hashing scalars -----------------------------------------------------
 
@@ -50,35 +58,8 @@ static uint32_t dbl_hash_scalar(const double* x);
 static uint32_t cpl_hash_scalar(const Rcomplex* x);
 static uint32_t chr_hash_scalar(const SEXP* x);
 static uint32_t raw_hash_scalar(const Rbyte* x);
-static uint32_t df_hash_scalar(SEXP x, R_len_t i);
 static uint32_t list_hash_scalar(SEXP x, R_len_t i);
-static uint32_t shaped_hash_scalar(SEXP x, R_len_t i);
 
-
-// [[ include("vctrs.h") ]]
-uint32_t hash_scalar(SEXP x, R_len_t i) {
-  if (has_dim(x)) {
-    return shaped_hash_scalar(x, i);
-  }
-
-  switch(TYPEOF(x)) {
-  case LGLSXP: return lgl_hash_scalar(LOGICAL(x) + i);
-  case INTSXP: return int_hash_scalar(INTEGER(x) + i);
-  case REALSXP: return dbl_hash_scalar(REAL(x) + i);
-  case CPLXSXP: return cpl_hash_scalar(COMPLEX(x) + i);
-  case STRSXP: return chr_hash_scalar(STRING_PTR(x) + i);
-  case RAWSXP: return raw_hash_scalar(RAW(x) + i);
-  case VECSXP: {
-    if (is_data_frame(x)) {
-      return df_hash_scalar(x, i);
-    } else {
-      return list_hash_scalar(x, i);
-    }
-  }
-  default:
-    Rf_errorcall(R_NilValue, "Unsupported type %s", Rf_type2char(TYPEOF(x)));
-  }
-}
 
 static uint32_t lgl_hash_scalar(const int* x) {
   return hash_int32(*x);
@@ -88,49 +69,31 @@ static uint32_t int_hash_scalar(const int* x) {
 }
 static uint32_t dbl_hash_scalar(const double* x) {
   double val = *x;
+
   // Hash all NAs and NaNs to same value (i.e. ignoring significand)
-  if (R_IsNA(val)) {
-    val = NA_REAL;
-  } else if (R_IsNaN(val)) {
-    val = R_NaN;
+  switch (dbl_classify(val)) {
+  case vctrs_dbl_number: break;
+  case vctrs_dbl_missing: val = NA_REAL; break;
+  case vctrs_dbl_nan: val = R_NaN; break;
   }
+
   return hash_double(val);
 }
 static uint32_t cpl_hash_scalar(const Rcomplex* x) {
-  Rf_error("Hashing is not implemented for complex vectors.");
+  uint32_t hash = 0;
+  hash = hash_combine(hash, dbl_hash_scalar(&x->r));
+  hash = hash_combine(hash, dbl_hash_scalar(&x->i));
+  return hash;
 }
 static uint32_t chr_hash_scalar(const SEXP* x) {
-  return hash_object(*x);
+  return hash_char(*x);
 }
 static uint32_t raw_hash_scalar(const Rbyte* x) {
-  Rf_error("Hashing is not implemented for raw vectors.");
-}
-
-static uint32_t df_hash_scalar(SEXP x, R_len_t i) {
-  uint32_t hash = 0;
-  R_len_t p = Rf_length(x);
-
-  for (R_len_t j = 0; j < p; ++j) {
-    SEXP col = VECTOR_ELT(x, j);
-    hash = hash_combine(hash, hash_scalar(col, i));
-  }
-
-  return hash;
+  return hash_int32(*x);
 }
 
 static uint32_t list_hash_scalar(SEXP x, R_len_t i) {
   return hash_object(VECTOR_ELT(x, i));
-}
-
-// This is slow and matrices / arrays should be converted to data
-// frames ahead of time. The conversion to data frame is only a
-// stopgap, in the long term, we'll hash arrays natively.
-static uint32_t shaped_hash_scalar(SEXP x, R_len_t i) {
-  x = PROTECT(r_as_data_frame(x));
-  uint32_t out = hash_scalar(x, i);
-
-  UNPROTECT(1);
-  return out;
 }
 
 // Hashing objects -----------------------------------------------------
@@ -158,7 +121,8 @@ uint32_t hash_object(SEXP x) {
 // [[ register() ]]
 SEXP vctrs_hash_object(SEXP x) {
   SEXP out = PROTECT(Rf_allocVector(RAWSXP, sizeof(uint32_t)));
-  uint32_t hash = hash_object(x);
+  uint32_t hash = 0;
+  hash = hash_combine(hash, hash_object(x));
   memcpy(RAW(out), &hash, sizeof(uint32_t));
   UNPROTECT(1);
   return out;
@@ -172,6 +136,7 @@ static uint32_t sexp_hash(SEXP x) {
   case INTSXP: return int_hash(x);
   case REALSXP: return dbl_hash(x);
   case STRSXP: return chr_hash(x);
+  case EXPRSXP:
   case VECSXP: return list_hash(x);
   case DOTSXP:
   case LANGSXP:
@@ -181,7 +146,6 @@ static uint32_t sexp_hash(SEXP x) {
   case SYMSXP:
   case SPECIALSXP:
   case BUILTINSXP:
-  case CHARSXP:
   case ENVSXP:
   case EXTPTRSXP: return hash_int64((intptr_t) x);
   default: Rf_errorcall(R_NilValue, "Unsupported type %s", Rf_type2char(TYPEOF(x)));
@@ -335,29 +299,22 @@ static void df_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
   R_len_t ncol = Rf_length(x);
 
   for (R_len_t i = 0; i < ncol; ++i) {
-    // FIXME: Call `vec_proxy()`?
     SEXP col = VECTOR_ELT(x, i);
     hash_fill(p, size, col);
   }
 }
 
 // [[ register() ]]
-SEXP vctrs_hash(SEXP x, SEXP rowwise) {
-  x = PROTECT(vec_proxy(x));
+SEXP vctrs_hash(SEXP x) {
+  x = PROTECT(vec_proxy_equal(x));
 
   R_len_t n = vec_size(x);
   SEXP out = PROTECT(Rf_allocVector(RAWSXP, n * sizeof(uint32_t)));
 
   uint32_t* p = (uint32_t*) RAW(out);
 
-  if (r_lgl_get(rowwise, 0)) {
-    for (R_len_t i = 0; i < n; ++i) {
-      p[i] = hash_scalar(x, i);
-    }
-  } else {
-    memset(p, 0, n * sizeof(uint32_t));
-    hash_fill(p, n, x);
-  }
+  memset(p, 0, n * sizeof(uint32_t));
+  hash_fill(p, n, x);
 
   UNPROTECT(2);
   return out;

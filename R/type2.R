@@ -23,7 +23,7 @@
 #' return the same value as `vec_ptype2.y.x()`; this is currently not enforced,
 #' but should be tested.
 #'
-#' Whenever you implemenet a `vec_ptype2.new_class()` generic/method,
+#' Whenever you implement a `vec_ptype2.new_class()` generic/method,
 #' make sure to always provide `vec_ptype2.new_class.default()`. It
 #' should normally call `vec_default_ptype2()`.
 #'
@@ -60,9 +60,33 @@ vec_default_ptype2 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
     vec_assert(x)
     return(vec_ptype(x))
   }
+  if (is_same_type(x, y)) {
+    return(vec_ptype(x))
+  }
   stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg)
 }
 
 vec_typeof2 <- function(x, y) {
   .Call(vctrs_typeof2, x, y)
+}
+
+# https://github.com/r-lib/vctrs/issues/571
+vec_is_coercible <- function(x, to, ..., x_arg = "x", to_arg = "to") {
+  tryCatch(
+    vctrs_error_incompatible_type = function(...) FALSE,
+    {
+      vctrs::vec_ptype2(x, to, ..., x_arg = x_arg, y_arg = to_arg)
+      TRUE
+    }
+  )
+}
+
+vec_is_subtype <- function(x, super, ..., x_arg = "x", super_arg = "super") {
+  tryCatch(
+    vctrs_error_incompatible_type = function(...) FALSE,
+    {
+      common <- vctrs::vec_ptype2(x, super, ..., x_arg = x_arg, y_arg = super_arg)
+      vec_is(common, super)
+    }
+  )
 }

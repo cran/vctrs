@@ -8,9 +8,9 @@ SEXP vctrs_size_common(SEXP call, SEXP op, SEXP args, SEXP env) {
 
   SEXP size = PROTECT(Rf_eval(CAR(args), env)); args = CDR(args);
   if (size != R_NilValue) {
-    size_validate(size, ".size");
+    R_len_t out = size_validate(size, ".size");
     UNPROTECT(1);
-    return size;
+    return r_int(out);
   }
 
   SEXP absent = PROTECT(Rf_eval(CAR(args), env));
@@ -79,3 +79,45 @@ static SEXP vctrs_size2_common(SEXP x, SEXP y, struct counters* counters) {
   stop_incompatible_size(x, y, nx, ny, counters->curr_arg, counters->next_arg);
 }
 
+// [[ register(external = TRUE) ]]
+SEXP vctrs_recycle_common(SEXP call, SEXP op, SEXP args, SEXP env) {
+  args = CDR(args);
+
+  SEXP size = PROTECT(Rf_eval(CAR(args), env)); args = CDR(args);
+
+  R_len_t common;
+
+  SEXP xs = PROTECT(rlang_env_dots_list(env));
+
+  if (size != R_NilValue) {
+    common = size_validate(size, ".size");
+  } else {
+    common = vec_size_common(xs, -1);
+  }
+
+  SEXP out = PROTECT(vec_recycle_common(xs, common));
+
+  UNPROTECT(3);
+  return out;
+}
+
+// [[ include("vctrs.h") ]]
+SEXP vec_recycle_common(SEXP xs, R_len_t size) {
+  if (size < 0) {
+    return xs;
+  }
+
+  xs = PROTECT(r_maybe_duplicate(xs));
+
+  R_len_t n = vec_size(xs);
+
+  SEXP elt;
+
+  for (R_len_t i = 0; i < n; ++i) {
+    elt = VECTOR_ELT(xs, i);
+    SET_VECTOR_ELT(xs, i, vec_recycle(elt, size, args_empty));
+  }
+
+  UNPROTECT(1);
+  return xs;
+}

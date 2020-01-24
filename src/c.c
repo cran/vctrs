@@ -59,11 +59,12 @@ static SEXP vec_c(SEXP xs,
   out = vec_proxy(out);
   REPROTECT(out, out_pi);
 
-  SEXP idx = PROTECT(compact_seq(0, 0));
+  SEXP idx = PROTECT(compact_seq(0, 0, true));
   int* idx_ptr = INTEGER(idx);
 
   SEXP xs_names = PROTECT(r_names(xs));
   bool has_names = xs_names != R_NilValue || list_has_inner_names(xs);
+  has_names = has_names && !is_data_frame(ptype);
   SEXP out_names = has_names ? Rf_allocVector(STRSXP, out_size) : R_NilValue;
   PROTECT(out_names);
 
@@ -82,7 +83,7 @@ static SEXP vec_c(SEXP xs,
     SEXP x = VECTOR_ELT(xs, i);
     SEXP elt = PROTECT(vec_cast(x, ptype, args_empty, args_empty));
 
-    init_compact_seq(idx_ptr, counter, counter + size);
+    init_compact_seq(idx_ptr, counter, size, true);
 
     if (is_shaped) {
       SEXP idx = PROTECT(r_seq(counter + 1, counter + size + 1));
@@ -107,22 +108,16 @@ static SEXP vec_c(SEXP xs,
     UNPROTECT(1);
   }
 
+  out = PROTECT(vec_restore(out, ptype, R_NilValue));
+
   if (has_names) {
     out_names = PROTECT(vec_as_names(out_names, name_repair, false));
-
-    if (is_shaped) {
-      out = set_rownames(out, out_names);
-      REPROTECT(out, out_pi);
-    } else {
-      Rf_setAttrib(out, R_NamesSymbol, out_names);
-    }
-
+    out = vec_set_names(out, out_names);
+    REPROTECT(out, out_pi);
     UNPROTECT(1);
   }
 
-  out = vec_restore(out, ptype, R_NilValue);
-
-  UNPROTECT(6);
+  UNPROTECT(7);
   return out;
 }
 
