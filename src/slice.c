@@ -1,12 +1,18 @@
 #include "vctrs.h"
-#include "utils.h"
 #include "altrep.h"
 #include "slice.h"
 #include "subscript-loc.h"
+#include "type-data-frame.h"
+#include "utils.h"
 
 // Initialised at load time
 SEXP syms_vec_slice_fallback = NULL;
 SEXP fns_vec_slice_fallback = NULL;
+
+SEXP syms_vec_slice_fallback_integer64 = NULL;
+SEXP fns_vec_slice_fallback_integer64 = NULL;
+SEXP syms_vec_slice_dispatch_integer64 = NULL;
+SEXP fns_vec_slice_dispatch_integer64 = NULL;
 
 
 /**
@@ -193,7 +199,7 @@ static SEXP df_slice(SEXP x, SEXP subscript) {
     SET_VECTOR_ELT(out, i, sliced);
   }
 
-  SEXP row_nms = PROTECT(get_rownames(x));
+  SEXP row_nms = PROTECT(df_rownames(x));
   if (TYPEOF(row_nms) == STRSXP) {
     row_nms = PROTECT(slice_rownames(row_nms, subscript));
     Rf_setAttrib(out, R_RowNamesSymbol, row_nms);
@@ -207,7 +213,29 @@ static SEXP df_slice(SEXP x, SEXP subscript) {
 
 
 SEXP vec_slice_fallback(SEXP x, SEXP subscript) {
+  // TODO - Remove once bit64 is updated on CRAN. Special casing integer64
+  // objects to ensure correct slicing with `NA_integer_`.
+  if (is_integer64(x)) {
+    return vctrs_dispatch2(syms_vec_slice_fallback_integer64, fns_vec_slice_fallback_integer64,
+                           syms_x, x,
+                           syms_i, subscript);
+  }
+
   return vctrs_dispatch2(syms_vec_slice_fallback, fns_vec_slice_fallback,
+                         syms_x, x,
+                         syms_i, subscript);
+}
+
+static SEXP vec_slice_dispatch(SEXP x, SEXP subscript) {
+  // TODO - Remove once bit64 is updated on CRAN. Special casing integer64
+  // objects to ensure correct slicing with `NA_integer_`.
+  if (is_integer64(x)) {
+    return vctrs_dispatch2(syms_vec_slice_dispatch_integer64, fns_vec_slice_dispatch_integer64,
+                           syms_x, x,
+                           syms_i, subscript);
+  }
+
+  return vctrs_dispatch2(syms_bracket, fns_bracket,
                          syms_x, x,
                          syms_i, subscript);
 }
@@ -324,10 +352,7 @@ SEXP vec_slice_impl(SEXP x, SEXP subscript) {
     if (has_dim(x)) {
       out = PROTECT_N(vec_slice_fallback(x, subscript), &nprot);
     } else {
-      out = PROTECT_N(
-        vctrs_dispatch2(syms_bracket, fns_bracket, syms_x, x, syms_i, subscript),
-        &nprot
-      );
+      out = PROTECT_N(vec_slice_dispatch(x, subscript), &nprot);
     }
 
     // Take over attribute restoration only if the `[` method did not
@@ -455,5 +480,10 @@ SEXP vec_slice_rep(SEXP x, SEXP i, SEXP n) {
 
 void vctrs_init_slice(SEXP ns) {
   syms_vec_slice_fallback = Rf_install("vec_slice_fallback");
+  syms_vec_slice_fallback_integer64 = Rf_install("vec_slice_fallback_integer64");
+  syms_vec_slice_dispatch_integer64 = Rf_install("vec_slice_dispatch_integer64");
+
   fns_vec_slice_fallback = Rf_findVar(syms_vec_slice_fallback, ns);
+  fns_vec_slice_fallback_integer64 = Rf_findVar(syms_vec_slice_fallback_integer64, ns);
+  fns_vec_slice_dispatch_integer64 = Rf_findVar(syms_vec_slice_dispatch_integer64, ns);
 }

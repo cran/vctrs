@@ -42,7 +42,7 @@ vec_ptype2 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
   return(.Call(vctrs_type2, x, y, x_arg, y_arg))
   UseMethod("vec_ptype2")
 }
-vec_type2_dispatch <- function(x, y, ..., x_arg = "x", y_arg = "y") {
+vec_ptype2_dispatch_s3 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
   UseMethod("vec_ptype2")
 }
 #' @export
@@ -56,8 +56,6 @@ vec_ptype2.default <- function(x, y, ..., x_arg = "x", y_arg = "y") {
 #' @export
 vec_default_ptype2 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
   if (is_unspecified(y)) {
-    # FIXME: Should `vec_ptype()` make that check?
-    vec_assert(x)
     return(vec_ptype(x))
   }
   if (is_same_type(x, y)) {
@@ -68,6 +66,10 @@ vec_default_ptype2 <- function(x, y, ..., x_arg = "x", y_arg = "y") {
 
 vec_typeof2 <- function(x, y) {
   .Call(vctrs_typeof2, x, y)
+}
+
+vec_typeof2_s3 <- function(x, y) {
+  .Call(vctrs_typeof2_s3, x, y)
 }
 
 # https://github.com/r-lib/vctrs/issues/571

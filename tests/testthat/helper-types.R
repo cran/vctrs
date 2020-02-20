@@ -1,3 +1,5 @@
+# Don't call tibble::tibble() to avoid catch-22, because tibble now uses vctrs
+bare_tibble <- structure(data.frame(), class = c("tbl_df", "tbl", "data.frame"))
 
 base_empty_types <- list(
   null = NULL,
@@ -11,10 +13,18 @@ base_empty_types <- list(
   dataframe = data.frame()
 )
 
+base_s3_empty_types <- list(
+  bare_factor = new_factor(),
+  bare_ordered = new_ordered(),
+  bare_date = new_date(),
+  bare_posixct = new_datetime(tzone = "UTC"),
+  bare_posixlt = as.POSIXlt(new_datetime(tzone = "UTC")),
+  bare_tibble = bare_tibble
+)
+
 proxied_empty_types <- list(
   double = new_hidden(),
-  # Don't call tibble here to avoid catch-22, because tibble now uses vctrs
-  dataframe = structure(data.frame(), class = c("tbl_df", "tbl", "data.frame")),
+  dataframe = bare_tibble,
   dataframe = structure(data.frame(), class = c("vctrs_foobar", "data.frame"))
 )
 

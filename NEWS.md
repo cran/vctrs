@@ -1,4 +1,56 @@
 
+# vctrs 0.2.3
+
+* The main feature of this release is considerable performance
+  improvements with factors and dates.
+
+* `vec_c()` now falls back to `base::c()` if the vector doesn't
+  implement `vec_ptype2()` but implements `c()`. This should improve
+  the compatibility of vctrs-based functions with foreign classes
+  (#801).
+
+* `new_data_frame()` is now faster.
+
+* New `vec_is_list()` for detecting if a vector is a list in the vctrs sense.
+  For instance, objects of class `lm` are not lists. In general, classes need
+  to explicitly inherit from `"list"` to be considered as lists by vctrs.
+
+* Unspecified vectors of `NA` can now be assigned into a list (#819).
+
+  ```
+  x <- list(1, 2)
+  vec_slice(x, 1) <- NA
+  x
+  #> [[1]]
+  #> NULL
+  #>
+  #> [[2]]
+  #> 2
+  ```
+
+* `vec_ptype()` now errors on scalar inputs (#807).
+
+* `vec_ptype_finalise()` is now recursive over all data frame types, ensuring
+  that unspecified columns are correctly finalised to logical (#800).
+
+* `vec_ptype()` now correctly handles unspecified columns in data frames, and
+  will always return an unspecified column type (#800).
+
+* `vec_slice()` and `vec_chop()` now work correctly with `bit64::integer64()`
+  objects when an `NA` subscript is supplied. By extension, this means that
+  `vec_init()` now works with these objects as well (#813).
+
+* `vec_rbind()` now binds row names. When named inputs are supplied
+  and `names_to` is `NULL`, the names define row names. If `names_to`
+  is supplied, they are assigned in the column name as before.
+
+* `vec_cbind()` now binds row names if they are congruent across
+  inputs. If the row names are not identical that's an error.
+
+* The `c()` method for `vctrs_vctr` now throws an error when
+  `recursive` or `use.names` is supplied (#791).
+
+
 # vctrs 0.2.2
 
 * New `vec_as_subscript()` function to cast inputs to the base type

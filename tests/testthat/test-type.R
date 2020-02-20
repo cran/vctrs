@@ -1,10 +1,18 @@
 context("test-type")
 
 
-test_that("vec_ptype() is a no-op for non-vectors", {
+test_that("vec_ptype() is a no-op for NULL", {
   expect_null(vec_ptype(NULL))
-  expect_identical(vec_ptype(quote(name)), quote(name))
+})
+
+test_that("vec_ptype() is a no-op for partial types", {
+  expect_identical(vec_ptype(partial_factor("x")), partial_factor("x"))
   expect_identical(vec_ptype(partial_frame(x = 1)), partial_frame(x = 1))
+})
+
+test_that("vec_ptype() errors on scalars", {
+  expect_error(vec_ptype(quote(name)), class = "vctrs_error_scalar_type")
+  expect_error(vec_ptype(quote(fn())), class = "vctrs_error_scalar_type")
 })
 
 test_that(".ptype argument overrides others", {
@@ -96,9 +104,10 @@ test_that("proxied types are have s3 bare type", {
 
 test_that("vec_ptype() preserves attributes of unproxied structures", {
   expect_identical(vec_ptype(foobar(dbl(1))), foobar(dbl()))
+})
 
-  # Here `foobar()` is treated as a scalar so is returned as is
-  expect_identical(vec_ptype(foobar(list(1))), foobar(list(1)))
+test_that("vec_ptype() errors on scalar lists", {
+  expect_error(vec_ptype(foobar(list())), class = "vctrs_error_scalar_type")
 })
 
 test_that("can retrieve type info", {
@@ -127,13 +136,31 @@ test_that("can retrieve proxy info", {
 })
 
 test_that("class_type() detects classes", {
+  expect_identical(class_type(list()), "none")
+  expect_identical(class_type(foobar(list())), "unknown")
+  expect_identical(class_type(structure(list(), class = "list")), "list")
+  expect_identical(class_type(subclass(structure(list(), class = "list"))), "list")
+  expect_identical(class_type(new_list_of()), "list_of")
+  expect_identical(class_type(subclass(new_list_of())), "list_of")
+
   expect_identical(class_type(data.frame()), "bare_data_frame")
   expect_identical(class_type(tibble::tibble()), "bare_tibble")
   expect_identical(class_type(subclass(data.frame())), "data_frame")
 
-  expect_identical(class_type(as.POSIXlt(Sys.Date())), "posixlt")
+  expect_identical(class_type(new_factor()), "bare_factor")
+  expect_identical(class_type(new_ordered()), "bare_ordered")
+  expect_identical(class_type(subclass(new_factor())), "unknown")
+  expect_identical(class_type(subclass(new_ordered())), "unknown")
+
+
+  expect_identical(class_type(new_date()), "bare_date")
+  expect_identical(class_type(new_datetime()), "bare_posixct")
+  expect_identical(class_type(as.POSIXlt(new_date())), "bare_posixlt")
+  expect_identical(class_type(subclass(new_date())), "unknown")
+  expect_identical(class_type(subclass(new_datetime())), "unknown")
+  expect_identical(class_type(subclass(as.POSIXlt(new_date()))), "posixlt")
+
   expect_identical(class_type(new_rcrd(list(a = 1))), "rcrd")
-  expect_identical(class_type(subclass(as.POSIXlt(Sys.Date()))), "posixlt")
   expect_identical(class_type(subclass(new_rcrd(list(a = 1)))), "rcrd")
 
   expect_identical(class_type(NA), "none")
@@ -158,4 +185,43 @@ test_that("explicit list subclasses are vectors", {
   df$z <- list_subclass(list(1, 2))
 
   expect_identical(vec_slice(df, 1)$z, list_subclass(list(1)))
+})
+
+test_that("the type of a classed data frame with an unspecified column retains unspecifiedness", {
+  df1 <- subclass(data_frame(x = 1, y = NA))
+  df2 <- subclass(data_frame(x = 1, y = unspecified(1)))
+  expect <- subclass(data_frame(x = numeric(), y = unspecified()))
+
+  expect_identical(vec_ptype(df1), expect)
+  expect_identical(vec_ptype(df2), expect)
+})
+
+test_that("vec_ptype_finalise() works with NULL", {
+  expect_identical(vec_ptype_finalise(NULL), NULL)
+})
+
+test_that("vec_ptype_finalise() works recursively over bare data frames", {
+  df <- data_frame(x = numeric(), y = unspecified(), z = partial_factor())
+  expect <- data_frame(x = numeric(), y = logical(), z = factor())
+
+  expect_identical(vec_ptype_finalise(df), expect)
+})
+
+test_that("vec_ptype_finalise() works recursively over classed data frames", {
+  df <- subclass(data_frame(x = numeric(), y = unspecified(), z = partial_factor()))
+  expect <- subclass(data_frame(x = numeric(), y = logical(), z = factor()))
+
+  expect_identical(vec_ptype_finalise(df), expect)
+})
+
+test_that("vec_ptype_finalise() can handle data frame columns", {
+  df <- data_frame(x = numeric(), y = data_frame(z = unspecified()))
+  expect <- data_frame(x = numeric(), y = data_frame(z = logical()))
+
+  expect_identical(vec_ptype_finalise(df), expect)
+})
+
+test_that("vec_ptype_finalise() requires vector types", {
+  expect_error(vec_ptype_finalise(quote(name)), class = "vctrs_error_scalar_type")
+  expect_error(vec_ptype_finalise(foobar()), class = "vctrs_error_scalar_type")
 })

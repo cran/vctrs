@@ -1,7 +1,8 @@
 #include "vctrs.h"
-#include "utils.h"
 #include "slice.h"
 #include "subscript-loc.h"
+#include "type-data-frame.h"
+#include "utils.h"
 
 /*
  * @member proxy_info The result of `vec_proxy_info(x)`.
@@ -213,7 +214,7 @@ static SEXP chop_df(SEXP x, SEXP indices, struct vctrs_chop_info info) {
   int n_cols = Rf_length(x);
 
   SEXP col_names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
-  SEXP row_names = PROTECT(get_rownames(x));
+  SEXP row_names = PROTECT(df_rownames(x));
 
   bool has_row_names = TYPEOF(row_names) == STRSXP;
 
@@ -312,18 +313,26 @@ static SEXP chop_shaped(SEXP x, SEXP indices, struct vctrs_chop_info info) {
 static SEXP chop_fallback(SEXP x, SEXP indices, struct vctrs_chop_info info) {
   SEXP elt;
 
-  // Construct call with symbols, not values, for performance
-  SEXP call = PROTECT(Rf_lang3(syms_bracket, syms_x, syms_i));
-
   // Evaluate in a child of the global environment to allow dispatch
   // to custom functions. We define `[` to point to its base
   // definition to ensure consistent look-up. This is the same logic
   // as in `vctrs_dispatch_n()`, reimplemented here to allow repeated
   // evaluations in a loop.
   SEXP env = PROTECT(r_new_environment(R_GlobalEnv, 2));
-  Rf_defineVar(syms_bracket, fns_bracket, env);
   Rf_defineVar(syms_x, x, env);
   Rf_defineVar(syms_i, info.index, env);
+
+  // Construct call with symbols, not values, for performance.
+  // TODO - Remove once bit64 is updated on CRAN. Special casing integer64
+  // objects to ensure correct slicing with `NA_integer_`.
+  SEXP call;
+  if (is_integer64(x)) {
+    call = PROTECT(Rf_lang3(syms_vec_slice_dispatch_integer64, syms_x, syms_i));
+    Rf_defineVar(syms_vec_slice_dispatch_integer64, fns_vec_slice_dispatch_integer64, env);
+  } else {
+    call = PROTECT(Rf_lang3(syms_bracket, syms_x, syms_i));
+    Rf_defineVar(syms_bracket, fns_bracket, env);
+  }
 
   for (R_len_t i = 0; i < info.out_size; ++i) {
     if (info.has_indices) {

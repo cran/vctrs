@@ -6,7 +6,7 @@
 \alias{vec_cast.data.frame}
 \title{Data frame class}
 \usage{
-new_data_frame(x = list(), n = NULL, ..., class = character())
+new_data_frame(x = list(), n = NULL, ..., class = NULL)
 
 \method{vec_ptype2}{data.frame}(x, y, ...)
 

@@ -42,6 +42,35 @@ test_that("vec_typeof2() returns common type", {
   }
 })
 
+test_that("vec_typeof2_s3() returns common type", {
+  all_base_empty_types <- c(base_empty_types, base_s3_empty_types)
+
+  nms_s3 <- names(base_s3_empty_types)
+  nms <- names(all_base_empty_types)
+
+  for (i in seq_along(all_base_empty_types)) {
+    this <- nms[[i]]
+
+    for (j in seq_along(all_base_empty_types)) {
+      that <- nms[[j]]
+
+      # Skip when we have two non s3 objects
+      if (!(this %in% nms_s3) & !(that %in% nms_s3)) {
+        next
+      }
+
+      if (i <= j) {
+        exp <- paste0("vctrs_type2_s3_", this, "_", that)
+      } else {
+        exp <- paste0("vctrs_type2_s3_", that, "_", this)
+      }
+      out <- vec_typeof2_s3(all_base_empty_types[[this]], all_base_empty_types[[that]])
+
+      expect_identical(out, exp)
+    }
+  }
+})
+
 test_that("vec_ptype2() dispatches when inputs have shape", {
   expect_identical(dim(vec_ptype2(int(), matrix(nrow = 3, ncol = 4))), c(0L, 4L))
   expect_identical(dim(vec_ptype2(matrix("", nrow = 3), c("", "", ""))), c(0L, 1L))
@@ -57,6 +86,11 @@ test_that("vec_ptype2() requires vectors", {
   expect_error(vec_ptype2(quote(name), quote(name)), class = "vctrs_error_scalar_type")
 })
 
+test_that("vec_ptype2() with unspecified requires vectors", {
+  expect_error(vec_ptype2(unspecified(), quote(name)), class = "vctrs_error_scalar_type")
+  expect_error(vec_ptype2(quote(name), unspecified()), class = "vctrs_error_scalar_type")
+})
+
 test_that("vec_ptype2() forwards argument tag", {
   expect_error(vec_ptype2(quote(name), list(), x_arg = "foo"), "`foo`", class = "vctrs_error_scalar_type")
   expect_error(vec_ptype2(list(), quote(name), y_arg = "foo"), "`foo`", class = "vctrs_error_scalar_type")
@@ -69,7 +103,7 @@ test_that("stop_incompatible_type() checks for scalars", {
 })
 
 test_that("vec_ptype2() methods forward args to stop_incompatible_type()", {
-  expect_args(new_hidden(), NA, x_arg = "foo", y_arg = "bar")
+  expect_args(new_hidden(), lgl(), x_arg = "foo", y_arg = "bar")
   expect_args(lgl(), new_hidden(), x_arg = "foo", y_arg = "bar")
   expect_args(int(), new_hidden(), x_arg = "foo", y_arg = "bar")
   expect_args(dbl(), new_hidden(), x_arg = "foo", y_arg = "bar")

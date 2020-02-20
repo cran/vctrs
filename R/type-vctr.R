@@ -105,6 +105,19 @@ vec_restore.vctrs_vctr <- function(x, to, ..., i = NULL) {
   NextMethod()
 }
 
+#' @method vec_ptype2 vctrs_vctr
+#' @export
+vec_ptype2.vctrs_vctr <- function(x, y, ..., x_arg = "x", y_arg = "y") {
+  # This method is redundant with `vec_ptype2.default()` but it
+  # instructs `vec_c()` that it isn't a foreign type. This avoids
+  # infinite recursion through `c.vctrs_vctr()`.
+  if (has_same_type(x, y)) {
+    vec_ptype(x)
+  } else {
+    vec_default_ptype2(x, y, ..., x_arg = x_arg, y_arg = y_arg)
+  }
+}
+
 #' @method vec_cast vctrs_vctr
 #' @export
 vec_cast.vctrs_vctr <- function(x, to, ...) UseMethod("vec_cast.vctrs_vctr")
@@ -137,7 +150,13 @@ vec_cast.list.vctrs_vctr <- function(x, to, ...) {
 }
 
 #' @export
-c.vctrs_vctr <- function(...) {
+c.vctrs_vctr <- function(..., recursive = FALSE, use.names = TRUE) {
+  if (!is_false(recursive)) {
+    abort("`recursive` must be `FALSE` when concatenating vctrs classes.")
+  }
+  if (!is_true(use.names)) {
+    abort("`use.names` must be `TRUE` when concatenating vctrs classes.")
+  }
   vec_c(...)
 }
 

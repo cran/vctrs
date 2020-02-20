@@ -15,6 +15,7 @@ typedef R_xlen_t r_ssize_t;
 
 enum vctrs_type {
   vctrs_type_null = 0,
+  vctrs_type_unspecified,
   vctrs_type_logical,
   vctrs_type_integer,
   vctrs_type_double,
@@ -92,6 +93,7 @@ bool vec_is_partial(SEXP x);
 // in `vec_typeof2()`
 enum vctrs_type2 {
   vctrs_type2_null_null,
+  vctrs_type2_null_unspecified,
   vctrs_type2_null_logical,
   vctrs_type2_null_integer,
   vctrs_type2_null_double,
@@ -102,6 +104,18 @@ enum vctrs_type2 {
   vctrs_type2_null_dataframe,
   vctrs_type2_null_s3,
   vctrs_type2_null_scalar,
+
+  vctrs_type2_unspecified_unspecified,
+  vctrs_type2_unspecified_logical,
+  vctrs_type2_unspecified_integer,
+  vctrs_type2_unspecified_double,
+  vctrs_type2_unspecified_complex,
+  vctrs_type2_unspecified_character,
+  vctrs_type2_unspecified_raw,
+  vctrs_type2_unspecified_list,
+  vctrs_type2_unspecified_dataframe,
+  vctrs_type2_unspecified_s3,
+  vctrs_type2_unspecified_scalar,
 
   vctrs_type2_logical_logical,
   vctrs_type2_logical_integer,
@@ -169,6 +183,131 @@ enum vctrs_type2 {
   vctrs_type2_scalar_scalar
 };
 
+enum vctrs_type2_s3 {
+  vctrs_type2_s3_null_bare_factor,
+  vctrs_type2_s3_null_bare_ordered,
+  vctrs_type2_s3_null_bare_date,
+  vctrs_type2_s3_null_bare_posixct,
+  vctrs_type2_s3_null_bare_posixlt,
+  vctrs_type2_s3_null_bare_tibble,
+  vctrs_type2_s3_null_unknown,
+
+  vctrs_type2_s3_unspecified_bare_factor,
+  vctrs_type2_s3_unspecified_bare_ordered,
+  vctrs_type2_s3_unspecified_bare_date,
+  vctrs_type2_s3_unspecified_bare_posixct,
+  vctrs_type2_s3_unspecified_bare_posixlt,
+  vctrs_type2_s3_unspecified_bare_tibble,
+  vctrs_type2_s3_unspecified_unknown,
+
+  vctrs_type2_s3_logical_bare_factor,
+  vctrs_type2_s3_logical_bare_ordered,
+  vctrs_type2_s3_logical_bare_date,
+  vctrs_type2_s3_logical_bare_posixct,
+  vctrs_type2_s3_logical_bare_posixlt,
+  vctrs_type2_s3_logical_bare_tibble,
+  vctrs_type2_s3_logical_unknown,
+
+  vctrs_type2_s3_integer_bare_factor,
+  vctrs_type2_s3_integer_bare_ordered,
+  vctrs_type2_s3_integer_bare_date,
+  vctrs_type2_s3_integer_bare_posixct,
+  vctrs_type2_s3_integer_bare_posixlt,
+  vctrs_type2_s3_integer_bare_tibble,
+  vctrs_type2_s3_integer_unknown,
+
+  vctrs_type2_s3_double_bare_factor,
+  vctrs_type2_s3_double_bare_ordered,
+  vctrs_type2_s3_double_bare_date,
+  vctrs_type2_s3_double_bare_posixct,
+  vctrs_type2_s3_double_bare_posixlt,
+  vctrs_type2_s3_double_bare_tibble,
+  vctrs_type2_s3_double_unknown,
+
+  vctrs_type2_s3_complex_bare_factor,
+  vctrs_type2_s3_complex_bare_ordered,
+  vctrs_type2_s3_complex_bare_date,
+  vctrs_type2_s3_complex_bare_posixct,
+  vctrs_type2_s3_complex_bare_posixlt,
+  vctrs_type2_s3_complex_bare_tibble,
+  vctrs_type2_s3_complex_unknown,
+
+  vctrs_type2_s3_character_bare_factor,
+  vctrs_type2_s3_character_bare_ordered,
+  vctrs_type2_s3_character_bare_date,
+  vctrs_type2_s3_character_bare_posixct,
+  vctrs_type2_s3_character_bare_posixlt,
+  vctrs_type2_s3_character_bare_tibble,
+  vctrs_type2_s3_character_unknown,
+
+  vctrs_type2_s3_raw_bare_factor,
+  vctrs_type2_s3_raw_bare_ordered,
+  vctrs_type2_s3_raw_bare_date,
+  vctrs_type2_s3_raw_bare_posixct,
+  vctrs_type2_s3_raw_bare_posixlt,
+  vctrs_type2_s3_raw_bare_tibble,
+  vctrs_type2_s3_raw_unknown,
+
+  vctrs_type2_s3_list_bare_factor,
+  vctrs_type2_s3_list_bare_ordered,
+  vctrs_type2_s3_list_bare_date,
+  vctrs_type2_s3_list_bare_posixct,
+  vctrs_type2_s3_list_bare_posixlt,
+  vctrs_type2_s3_list_bare_tibble,
+  vctrs_type2_s3_list_unknown,
+
+  vctrs_type2_s3_dataframe_bare_factor,
+  vctrs_type2_s3_dataframe_bare_ordered,
+  vctrs_type2_s3_dataframe_bare_date,
+  vctrs_type2_s3_dataframe_bare_posixct,
+  vctrs_type2_s3_dataframe_bare_posixlt,
+  vctrs_type2_s3_dataframe_bare_tibble,
+  vctrs_type2_s3_dataframe_unknown,
+
+  vctrs_type2_s3_scalar_bare_factor,
+  vctrs_type2_s3_scalar_bare_ordered,
+  vctrs_type2_s3_scalar_bare_date,
+  vctrs_type2_s3_scalar_bare_posixct,
+  vctrs_type2_s3_scalar_bare_posixlt,
+  vctrs_type2_s3_scalar_bare_tibble,
+  vctrs_type2_s3_scalar_unknown,
+
+  vctrs_type2_s3_bare_factor_bare_factor,
+  vctrs_type2_s3_bare_factor_bare_ordered,
+  vctrs_type2_s3_bare_factor_bare_date,
+  vctrs_type2_s3_bare_factor_bare_posixct,
+  vctrs_type2_s3_bare_factor_bare_posixlt,
+  vctrs_type2_s3_bare_factor_bare_tibble,
+  vctrs_type2_s3_bare_factor_unknown,
+
+  vctrs_type2_s3_bare_ordered_bare_ordered,
+  vctrs_type2_s3_bare_ordered_bare_date,
+  vctrs_type2_s3_bare_ordered_bare_posixct,
+  vctrs_type2_s3_bare_ordered_bare_posixlt,
+  vctrs_type2_s3_bare_ordered_bare_tibble,
+  vctrs_type2_s3_bare_ordered_unknown,
+
+  vctrs_type2_s3_bare_date_bare_date,
+  vctrs_type2_s3_bare_date_bare_posixct,
+  vctrs_type2_s3_bare_date_bare_posixlt,
+  vctrs_type2_s3_bare_date_bare_tibble,
+  vctrs_type2_s3_bare_date_unknown,
+
+  vctrs_type2_s3_bare_posixct_bare_posixct,
+  vctrs_type2_s3_bare_posixct_bare_posixlt,
+  vctrs_type2_s3_bare_posixct_bare_tibble,
+  vctrs_type2_s3_bare_posixct_unknown,
+
+  vctrs_type2_s3_bare_posixlt_bare_posixlt,
+  vctrs_type2_s3_bare_posixlt_bare_tibble,
+  vctrs_type2_s3_bare_posixlt_unknown,
+
+  vctrs_type2_s3_bare_tibble_bare_tibble,
+  vctrs_type2_s3_bare_tibble_unknown,
+
+  vctrs_type2_s3_unknown_unknown
+};
+
 enum vctrs_type2 vec_typeof2(SEXP x, SEXP y);
 const char* vctrs_type2_as_str(enum vctrs_type2 type);
 
@@ -179,6 +318,7 @@ extern SEXP vctrs_shared_empty_cpl;
 extern SEXP vctrs_shared_empty_chr;
 extern SEXP vctrs_shared_empty_raw;
 extern SEXP vctrs_shared_empty_list;
+extern SEXP vctrs_shared_empty_date;
 extern SEXP vctrs_shared_empty_uns;
 
 extern SEXP vctrs_shared_true;
@@ -193,6 +333,7 @@ bool vec_is_unspecified(SEXP x);
 // Vector methods ------------------------------------------------
 
 #include "arg.h"
+#include "names.h"
 
 enum vctrs_proxy_kind {
   vctrs_proxy_default,
@@ -220,12 +361,18 @@ SEXP vec_assign(SEXP x, SEXP index, SEXP value);
 bool vec_requires_fallback(SEXP x, struct vctrs_proxy_info info);
 SEXP vec_init(SEXP x, R_len_t n);
 SEXP vec_type(SEXP x);
-SEXP vec_type_finalise(SEXP x);
+SEXP vec_ptype_finalise(SEXP x);
 bool vec_is_unspecified(SEXP x);
 SEXP vec_recycle(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
 SEXP vec_recycle_common(SEXP xs, R_len_t size);
 SEXP vec_names(SEXP x);
 SEXP vec_group_loc(SEXP x);
+SEXP vec_match(SEXP needles, SEXP haystack);
+
+SEXP vec_c(SEXP xs,
+           SEXP ptype,
+           SEXP name_spec,
+           const struct name_repair_opts* name_repair);
 
 SEXP vec_type2(SEXP x,
                SEXP y,
@@ -233,14 +380,38 @@ SEXP vec_type2(SEXP x,
                struct vctrs_arg* y_arg,
                int* left);
 
+SEXP vec_ptype2_dispatch(SEXP x, SEXP y,
+                         enum vctrs_type x_type,
+                         enum vctrs_type y_type,
+                         struct vctrs_arg* x_arg,
+                         struct vctrs_arg* y_arg,
+                         int* left);
+
+SEXP vec_ptype2_dispatch_s3(SEXP x,
+                            SEXP y,
+                            struct vctrs_arg* x_arg,
+                            struct vctrs_arg* y_arg);
+
+SEXP vec_cast_dispatch(SEXP x,
+                       SEXP to,
+                       enum vctrs_type x_type,
+                       enum vctrs_type to_type,
+                       bool* lossy,
+                       struct vctrs_arg* x_arg,
+                       struct vctrs_arg* to_arg);
+
+SEXP df_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
+SEXP df_as_dataframe(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
+
 bool is_data_frame(SEXP x);
 bool is_record(SEXP x);
 
 R_len_t df_size(SEXP x);
 R_len_t df_rownames_size(SEXP x);
 R_len_t df_raw_size(SEXP x);
-SEXP vctrs_df_restore(SEXP x, SEXP to, SEXP n);
-SEXP df_restore_impl(SEXP x, SEXP to, R_len_t size);
+R_len_t df_raw_size_from_list(SEXP x);
+SEXP vec_bare_df_restore(SEXP x, SEXP to, SEXP n);
+SEXP vec_df_restore(SEXP x, SEXP to, SEXP n);
 
 SEXP chr_assign(SEXP out, SEXP index, SEXP value, bool clone);
 SEXP list_assign(SEXP out, SEXP index, SEXP value, bool clone);
@@ -266,6 +437,7 @@ int compare_scalar(SEXP x, R_len_t i, SEXP y, R_len_t j, bool na_equal);
 uint32_t hash_object(SEXP x);
 void hash_fill(uint32_t* p, R_len_t n, SEXP x);
 
+SEXP vec_unique(SEXP x);
 bool duplicated_any(SEXP names);
 
 // Rowwise operations -------------------------------------------
@@ -338,21 +510,28 @@ enum vctrs_dbl_class {
 
 enum vctrs_dbl_class dbl_classify(double x);
 
-// Names --------------------------------------------------------
+// Factor methods -----------------------------------------------
 
-enum name_repair_arg {
-  name_repair_none,
-  name_repair_minimal,
-  name_repair_unique,
-  name_repair_universal,
-  name_repair_check_unique
-};
+SEXP fct_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
+SEXP ord_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
 
-const char* name_repair_arg_as_c_string(enum name_repair_arg arg);
-enum name_repair_arg validate_name_repair(SEXP arg);
-SEXP vec_as_names(SEXP names, enum name_repair_arg type, bool quiet);
-bool is_unique_names(SEXP names);
-SEXP vec_as_unique_names(SEXP names, bool quiet);
+SEXP fct_as_character(SEXP x, struct vctrs_arg* x_arg);
+SEXP ord_as_character(SEXP x, struct vctrs_arg* x_arg);
+
+SEXP chr_as_factor(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* to_arg);
+SEXP fct_as_factor(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
+
+SEXP chr_as_ordered(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* to_arg);
+SEXP ord_as_ordered(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
+
+// Datetime methods ---------------------------------------------
+
+SEXP date_datetime_ptype2(SEXP x, SEXP y);
+SEXP datetime_datetime_ptype2(SEXP x, SEXP y);
+
+// Tibble methods ----------------------------------------------
+
+SEXP tibble_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
 
 // Character translation ----------------------------------------
 
@@ -412,7 +591,8 @@ void stop_incompatible_size(SEXP x, SEXP y,
 void stop_recycle_incompatible_size(R_len_t x_size, R_len_t size,
                                     struct vctrs_arg* x_arg)
   __attribute__((noreturn));
-
+void stop_corrupt_factor_levels(SEXP x, struct vctrs_arg* arg) __attribute__((noreturn));
+void stop_corrupt_ordered_levels(SEXP x, struct vctrs_arg* arg) __attribute__((noreturn));
 
 // Compatibility ------------------------------------------------
 

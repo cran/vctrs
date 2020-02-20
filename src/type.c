@@ -3,28 +3,28 @@
 #include "arg-counter.h"
 
 // Initialised at load time
-static SEXP syms_vec_type_finalise_dispatch = NULL;
-static SEXP fns_vec_type_finalise_dispatch = NULL;
+static SEXP syms_vec_ptype_finalise_dispatch = NULL;
+static SEXP fns_vec_ptype_finalise_dispatch = NULL;
 
 
 static SEXP vec_type_slice(SEXP x, SEXP empty);
-static SEXP lgl_type(SEXP x);
 static SEXP s3_type(SEXP x);
 
 // [[ include("vctrs.h"); register() ]]
 SEXP vec_type(SEXP x) {
   switch (vec_typeof(x)) {
-  case vctrs_type_scalar:    return x;
-  case vctrs_type_null:      return R_NilValue;
-  case vctrs_type_logical:   return lgl_type(x);
-  case vctrs_type_integer:   return vec_type_slice(x, vctrs_shared_empty_int);
-  case vctrs_type_double:    return vec_type_slice(x, vctrs_shared_empty_dbl);
-  case vctrs_type_complex:   return vec_type_slice(x, vctrs_shared_empty_cpl);
-  case vctrs_type_character: return vec_type_slice(x, vctrs_shared_empty_chr);
-  case vctrs_type_raw:       return vec_type_slice(x, vctrs_shared_empty_raw);
-  case vctrs_type_list:      return vec_type_slice(x, vctrs_shared_empty_list);
-  case vctrs_type_dataframe: return df_map(x, &vec_type);
-  case vctrs_type_s3:        return s3_type(x);
+  case vctrs_type_null:        return R_NilValue;
+  case vctrs_type_unspecified: return vctrs_shared_empty_uns;
+  case vctrs_type_logical:     return vec_type_slice(x, vctrs_shared_empty_lgl);
+  case vctrs_type_integer:     return vec_type_slice(x, vctrs_shared_empty_int);
+  case vctrs_type_double:      return vec_type_slice(x, vctrs_shared_empty_dbl);
+  case vctrs_type_complex:     return vec_type_slice(x, vctrs_shared_empty_cpl);
+  case vctrs_type_character:   return vec_type_slice(x, vctrs_shared_empty_chr);
+  case vctrs_type_raw:         return vec_type_slice(x, vctrs_shared_empty_raw);
+  case vctrs_type_list:        return vec_type_slice(x, vctrs_shared_empty_list);
+  case vctrs_type_dataframe:   return bare_df_map(x, &vec_type);
+  case vctrs_type_s3:          return s3_type(x);
+  case vctrs_type_scalar:      stop_scalar_type(x, args_empty);
   }
   never_reached("vec_type_impl");
 }
@@ -37,49 +37,91 @@ static SEXP vec_type_slice(SEXP x, SEXP empty) {
     return vec_slice(x, R_NilValue);
   }
 }
-static SEXP lgl_type(SEXP x) {
-  if (vec_is_unspecified(x)) {
-    return vctrs_shared_empty_uns;
-  } else {
-    return vec_type_slice(x, vctrs_shared_empty_lgl);
-  }
-}
 static SEXP s3_type(SEXP x) {
-  if (vec_is_vector(x)) {
-    return vec_slice(x, R_NilValue);
-  } else {
-    // FIXME: Only used for partial frames
+  switch(class_type(x)) {
+  case vctrs_class_bare_tibble:
+    return bare_df_map(x, &vec_type);
+
+  case vctrs_class_data_frame:
+    return df_map(x, &vec_type);
+
+  case vctrs_class_bare_data_frame:
+    Rf_errorcall(R_NilValue, "Internal error: Bare data frames should be handled by `vec_type()`");
+
+  case vctrs_class_none:
+    Rf_errorcall(R_NilValue, "Internal error: Non-S3 classes should be handled by `vec_type()`");
+
+  default:
+    break;
+  }
+
+  if (vec_is_partial(x)) {
     return x;
   }
+
+  vec_assert(x, args_empty);
+  return vec_slice(x, R_NilValue);
 }
 
+static SEXP vec_ptype_finalise_unspecified(SEXP x);
+static SEXP vec_ptype_finalise_dispatch(SEXP x);
 
 // [[ include("vctrs.h"); register() ]]
-SEXP vec_type_finalise(SEXP x) {
+SEXP vec_ptype_finalise(SEXP x) {
   if (x == R_NilValue) {
     return x;
   }
 
-  if (OBJECT(x)) {
-    if (vec_is_unspecified(x)) {
-      R_len_t n = Rf_length(x);
-      SEXP out = PROTECT(Rf_allocVector(LGLSXP, n));
-      r_lgl_fill(out, NA_LOGICAL, n);
-      UNPROTECT(1);
-      return out;
-    }
-  }
-
-  if (!vec_is_partial(x)) {
+  if (!OBJECT(x)) {
     vec_assert(x, args_empty);
+    return x;
   }
 
-  switch (vec_typeof(x)) {
-  case vctrs_type_dataframe: return df_map(x, &vec_type_finalise);
-  case vctrs_type_s3:        return vctrs_dispatch1(syms_vec_type_finalise_dispatch, fns_vec_type_finalise_dispatch,
-                                                    syms_x, x);
-  default:                   return x;
+  if (vec_is_unspecified(x)) {
+    return vec_ptype_finalise_unspecified(x);
   }
+
+  if (vec_is_partial(x)) {
+    return vec_ptype_finalise_dispatch(x);
+  }
+
+  vec_assert(x, args_empty);
+
+  switch(class_type(x)) {
+  case vctrs_class_bare_tibble:
+  case vctrs_class_bare_data_frame:
+    return bare_df_map(x, &vec_ptype_finalise);
+
+  case vctrs_class_data_frame:
+    return df_map(x, &vec_ptype_finalise);
+
+  case vctrs_class_none:
+    Rf_errorcall(R_NilValue, "Internal error: Non-S3 classes should have returned by now");
+
+  default:
+    return vec_ptype_finalise_dispatch(x);
+  }
+}
+
+static SEXP vec_ptype_finalise_unspecified(SEXP x) {
+  R_len_t size = Rf_length(x);
+
+  if (size == 0) {
+    return vctrs_shared_empty_lgl;
+  }
+
+  SEXP out = PROTECT(Rf_allocVector(LGLSXP, size));
+  r_lgl_fill(out, NA_LOGICAL, size);
+
+  UNPROTECT(1);
+  return out;
+}
+
+static SEXP vec_ptype_finalise_dispatch(SEXP x) {
+  return vctrs_dispatch1(
+    syms_vec_ptype_finalise_dispatch, fns_vec_ptype_finalise_dispatch,
+    syms_x, x
+  );
 }
 
 
@@ -112,7 +154,7 @@ SEXP vctrs_type_common_impl(SEXP dots, SEXP ptype) {
   struct vctrs_arg ptype_arg = new_wrapper_arg(NULL, ".ptype");
 
   SEXP type = PROTECT(reduce(ptype, &ptype_arg, dots, &vctrs_type2_common));
-  type = vec_type_finalise(type);
+  type = vec_ptype_finalise(type);
 
   UNPROTECT(1);
   return type;
@@ -134,6 +176,6 @@ static SEXP vctrs_type2_common(SEXP current, SEXP next, struct counters* counter
 
 
 void vctrs_init_type(SEXP ns) {
-  syms_vec_type_finalise_dispatch = Rf_install("vec_ptype_finalise_dispatch");
-  fns_vec_type_finalise_dispatch = Rf_findVar(syms_vec_type_finalise_dispatch, ns);
+  syms_vec_ptype_finalise_dispatch = Rf_install("vec_ptype_finalise_dispatch");
+  fns_vec_ptype_finalise_dispatch = Rf_findVar(syms_vec_ptype_finalise_dispatch, ns);
 }

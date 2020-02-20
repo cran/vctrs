@@ -112,6 +112,12 @@ test_that("dimensionality matches output" ,{
   expect_error(vec_cast(x, logical()), class = "vctrs_error_incompatible_cast")
 })
 
+test_that("the common type of two `NA` vectors is unspecified", {
+  expect_equal(vec_ptype2(NA, NA), unspecified())
+
+  # Ensure the R level dispatch is consistent
+  expect_equal(vec_default_ptype2(NA, NA), unspecified())
+})
 
 # Integer
 
@@ -309,6 +315,11 @@ test_that("can sort raw", {
   x <- as.raw(c(3, 1, 2, 4))
   expect_identical(vec_order(x), int(2, 3, 1, 4))
   expect_identical(x[vec_order(x)], as.raw(1:4))
+})
+
+test_that("raw has informative type summaries", {
+  expect_equal(vec_ptype_abbr(raw()), "raw")
+  expect_equal(vec_ptype_full(raw()), "raw")
 })
 
 

@@ -104,6 +104,8 @@ test_that("vec_c() repairs names", {
   expect_error(vec_c(a = 1, a = 2, `_` = 3, .name_repair = "check_unique"), class = "vctrs_error_names_must_be_unique")
 
   expect_named(vec_c(a = 1, a = 2, `_` = 3, .name_repair = "universal"), c("a...1", "a...2", "._"))
+
+  expect_named(vec_c(a = 1, a = 2, .name_repair = ~ toupper(.)), c("A", "A"))
 })
 
 test_that("vec_c() doesn't use outer names for data frames (#524)", {
@@ -135,4 +137,77 @@ test_that("vec_c() outer names work with proxied objects", {
   exp <- set_names(xs, c("outer_1", "outer_2"))
   expect_error(vec_c(outer = xs), "Please supply")
   expect_equal(vec_c(outer = xs, .name_spec = "{outer}_{inner}"), exp)
+})
+
+test_that("vec_c() falls back to c() for foreign classes", {
+  verify_errors({
+    expect_error(
+      vec_c(foobar(1), foobar(2)),
+      "concatenation"
+    )
+  })
+  expect_error(
+    vec_c(NULL, foobar(1), foobar(2)),
+    "concatenation"
+  )
+
+  # Check off-by-one error
+  expect_error(
+    vec_c(foobar(1), "", foobar(2)),
+    class = "vctrs_error_incompatible_type"
+  )
+
+  # Fallback when the class implements `c()`
+  method <- function(...) rep_along(list(...), "dispatched")
+  local_methods(
+    c.vctrs_foobar = method
+  )
+  expect_identical(
+    vec_c(foobar(1), foobar(2)),
+    c("dispatched", "dispatched")
+  )
+  expect_identical(
+    vec_c(NULL, foobar(1), NULL, foobar(2)),
+    c("dispatched", "dispatched")
+  )
+
+  # Registered fallback
+  s3_register("base::c", "vctrs_c_fallback", method)
+  expect_identical(
+    vec_c(
+      structure(1, class = "vctrs_c_fallback"),
+      structure(2, class = "vctrs_c_fallback")
+    ),
+    c("dispatched", "dispatched")
+  )
+
+  # Don't fallback for S3 lists which are treated as scalars by default
+  expect_error(
+    vec_c(foobar(list(1)), foobar(list(2))),
+    class = "vctrs_error_scalar_type"
+  )
+})
+
+test_that("vec_c() fallback doesn't support `name_spec` or `ptype`", {
+  verify_errors({
+    expect_error(
+      vec_c(foobar(1), foobar(2), .name_spec = "{outer}_{inner}"),
+      "name specification"
+    )
+    expect_error(
+      vec_c(foobar(1), foobar(2), .ptype = ""),
+      "prototype"
+    )
+  })
+})
+
+test_that("vec_c() has informative error messages", {
+  verify_output(test_path("error", "test-c.txt"), {
+    "# vec_c() falls back to c() for foreign classes"
+    vec_c(foobar(1), foobar(2))
+
+    "# vec_c() fallback doesn't support `name_spec` or `ptype`"
+    vec_c(foobar(1), foobar(2), .name_spec = "{outer}_{inner}")
+    vec_c(foobar(1), foobar(2), .ptype = "")
+  })
 })

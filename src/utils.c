@@ -9,18 +9,27 @@ SEXP (*rlang_unbox)(SEXP) = NULL;
 SEXP (*rlang_env_dots_values)(SEXP) = NULL;
 SEXP (*rlang_env_dots_list)(SEXP) = NULL;
 SEXP vctrs_method_table = NULL;
+SEXP base_method_table = NULL;
 
 SEXP strings_tbl = NULL;
 SEXP strings_tbl_df = NULL;
 SEXP strings_data_frame = NULL;
 SEXP strings_vctrs_rcrd = NULL;
-SEXP strings_posixt = NULL;
+SEXP strings_date = NULL;
+SEXP strings_posixct = NULL;
 SEXP strings_posixlt = NULL;
+SEXP strings_posixt = NULL;
+SEXP strings_factor = NULL;
+SEXP strings_ordered = NULL;
 SEXP strings_vctrs_vctr = NULL;
 SEXP strings_vctrs_list_of = NULL;
 SEXP strings_list = NULL;
 
 SEXP classes_data_frame = NULL;
+SEXP classes_factor = NULL;
+SEXP classes_ordered = NULL;
+SEXP classes_date = NULL;
+SEXP classes_posixct = NULL;
 SEXP classes_tibble = NULL;
 SEXP classes_list_of = NULL;
 SEXP classes_vctrs_group_rle = NULL;
@@ -230,6 +239,7 @@ SEXP vctrs_set_attributes(SEXP x, SEXP attrib) {
   return x;
 }
 
+// [[ include("utils.h") ]]
 SEXP map(SEXP x, SEXP (*fn)(SEXP)) {
   R_len_t n = Rf_length(x);
   SEXP out = PROTECT(Rf_allocVector(VECSXP, n));
@@ -244,10 +254,35 @@ SEXP map(SEXP x, SEXP (*fn)(SEXP)) {
   UNPROTECT(2);
   return out;
 }
+// [[ include("utils.h") ]]
+SEXP map_with_data(SEXP x, SEXP (*fn)(SEXP, void*), void* data) {
+  R_len_t n = Rf_length(x);
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, n));
 
+  for (R_len_t i = 0; i < n; ++i) {
+    SET_VECTOR_ELT(out, i, fn(VECTOR_ELT(x, i), data));
+  }
+
+  SEXP nms = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+  Rf_setAttrib(out, R_NamesSymbol, nms);
+
+  UNPROTECT(2);
+  return out;
+}
+
+// [[ include("utils.h") ]]
+SEXP bare_df_map(SEXP df, SEXP (*fn)(SEXP)) {
+  SEXP out = PROTECT(map(df, fn));
+  out = vec_bare_df_restore(out, df, vctrs_shared_zero_int);
+
+  UNPROTECT(1);
+  return out;
+}
+
+// [[ include("utils.h") ]]
 SEXP df_map(SEXP df, SEXP (*fn)(SEXP)) {
   SEXP out = PROTECT(map(df, fn));
-  out = vctrs_df_restore(out, df, vctrs_shared_zero_int);
+  out = vec_df_restore(out, df, vctrs_shared_zero_int);
 
   UNPROTECT(1);
   return out;
@@ -279,7 +314,7 @@ static SEXP s3_method_sym(const char* generic, const char* class) {
 }
 
 // First check in global env, then in method table
-static SEXP s3_get_method(const char* generic, const char* class) {
+static SEXP s3_get_method(const char* generic, const char* class, SEXP table) {
   SEXP sym = s3_method_sym(generic, class);
 
   SEXP method = r_env_get(R_GlobalEnv, sym);
@@ -287,7 +322,7 @@ static SEXP s3_get_method(const char* generic, const char* class) {
     return method;
   }
 
-  method = r_env_get(vctrs_method_table, sym);
+  method = r_env_get(table, sym);
   if (r_is_function(method)) {
     return method;
   }
@@ -295,7 +330,7 @@ static SEXP s3_get_method(const char* generic, const char* class) {
   return R_NilValue;
 }
 
-SEXP s3_find_method(const char* generic, SEXP x) {
+SEXP s3_find_method(const char* generic, SEXP x, SEXP table) {
   if (!OBJECT(x)) {
     return R_NilValue;
   }
@@ -305,7 +340,7 @@ SEXP s3_find_method(const char* generic, SEXP x) {
   int n_class = Rf_length(class);
 
   for (int i = 0; i < n_class; ++i, ++class_ptr) {
-    SEXP method = s3_get_method(generic, CHAR(*class_ptr));
+    SEXP method = s3_get_method(generic, CHAR(*class_ptr), table);
     if (method != R_NilValue) {
       UNPROTECT(1);
       return method;
@@ -314,6 +349,110 @@ SEXP s3_find_method(const char* generic, SEXP x) {
 
   UNPROTECT(1);
   return R_NilValue;
+}
+
+// [[ include("utils.h") ]]
+bool vec_implements_ptype2(SEXP x) {
+  if (vec_typeof(x) == vctrs_type_s3) {
+    SEXP met = s3_find_method("vec_ptype2", x, vctrs_method_table);
+    return met != R_NilValue;
+  } else {
+    return true;
+  }
+}
+
+// [[ include("utils.h") ]]
+SEXP list_first_non_null(SEXP xs, R_len_t* non_null_i) {
+  SEXP x = R_NilValue;
+  R_len_t n = Rf_length(xs);
+
+  R_len_t i = 0;
+  for (; i < n; ++i) {
+    x = VECTOR_ELT(xs, i);
+    if (x != R_NilValue) {
+      break;
+    }
+  }
+
+  if (non_null_i) {
+    *non_null_i = i;
+  }
+  return x;
+}
+
+// [[ include("utils.h") ]]
+bool list_is_s3_homogeneous(SEXP xs) {
+  R_len_t n = Rf_length(xs);
+  if (n == 0 || n == 1) {
+    return true;
+  }
+
+  R_len_t i = -1;
+  SEXP first = list_first_non_null(xs, &i);
+  SEXP first_class = PROTECT(r_class(first));
+
+  for (; i < n; ++i) {
+    SEXP this = VECTOR_ELT(xs, i);
+    if (this == R_NilValue) {
+      continue;
+    }
+    SEXP this_class = PROTECT(r_class(this));
+
+    if (!equal_object(first_class, this_class)) {
+      UNPROTECT(2);
+      return false;
+    }
+
+    UNPROTECT(1);
+  }
+
+  UNPROTECT(1);
+  return true;
+}
+
+// [[ include("utils.h") ]]
+SEXP node_compact_d(SEXP node) {
+  SEXP handle = PROTECT(Rf_cons(R_NilValue, node));
+
+  SEXP prev = handle;
+  while (node != R_NilValue) {
+    if (CAR(node) == R_NilValue) {
+      SETCDR(prev, CDR(node));
+    } else {
+      prev = node;
+    }
+    node = CDR(node);
+  }
+
+  UNPROTECT(1);
+  return CDR(handle);
+}
+
+
+// [[ include("utils.h") ]]
+SEXP new_empty_factor(SEXP levels) {
+  if (TYPEOF(levels) != STRSXP) {
+    Rf_errorcall(R_NilValue, "Internal error: `level` must be a character vector.");
+  }
+
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 0));
+
+  Rf_setAttrib(out, R_LevelsSymbol, levels);
+  Rf_setAttrib(out, R_ClassSymbol, classes_factor);
+
+  UNPROTECT(1);
+  return out;
+}
+
+// [[ include("utils.h") ]]
+SEXP new_empty_ordered(SEXP levels) {
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 0));
+
+  Rf_setAttrib(out, R_LevelsSymbol, levels);
+  Rf_setAttrib(out, R_ClassSymbol, classes_ordered);
+
+  UNPROTECT(1);
+  return out;
 }
 
 // [[ include("vctrs.h") ]]
@@ -479,6 +618,11 @@ SEXP arg_validate(SEXP arg, const char* arg_nm) {
   } else {
     Rf_errorcall(R_NilValue, "`%s` tag must be a string", arg_nm);
   }
+}
+
+// [[ include("utils.h") ]]
+bool is_integer64(SEXP x) {
+  return TYPEOF(x) == REALSXP && Rf_inherits(x, "integer64");
 }
 
 
@@ -755,19 +899,16 @@ SEXP r_new_environment(SEXP parent, R_len_t size) {
 static SEXP new_function_call = NULL;
 static SEXP new_function__formals_node = NULL;
 static SEXP new_function__body_node = NULL;
-static SEXP new_function__env_node = NULL;
 
 SEXP r_new_function(SEXP formals, SEXP body, SEXP env) {
   SETCAR(new_function__formals_node, formals);
   SETCAR(new_function__body_node, body);
-  SETCAR(new_function__env_node, env);
 
-  SEXP fn = Rf_eval(new_function_call, R_BaseEnv);
+  SEXP fn = Rf_eval(new_function_call, env);
 
   // Free for gc
   SETCAR(new_function__formals_node, R_NilValue);
   SETCAR(new_function__body_node, R_NilValue);
-  SETCAR(new_function__env_node, R_NilValue);
 
   return fn;
 }
@@ -838,13 +979,6 @@ SEXP r_pairlist(SEXP* tags, SEXP* cars) {
 }
 SEXP r_call(SEXP fn, SEXP* tags, SEXP* cars) {
   return Rf_lcons(fn, r_pairlist(tags, cars));
-}
-
-SEXP r_names(SEXP x) {
-  return Rf_getAttrib(x, R_NamesSymbol);
-}
-SEXP r_poke_names(SEXP x, SEXP names) {
-  return Rf_setAttrib(x, R_NamesSymbol, names);
 }
 
 bool r_has_name_at(SEXP names, R_len_t i) {
@@ -1008,6 +1142,7 @@ SEXP vctrs_shared_empty_cpl = NULL;
 SEXP vctrs_shared_empty_chr = NULL;
 SEXP vctrs_shared_empty_raw = NULL;
 SEXP vctrs_shared_empty_list = NULL;
+SEXP vctrs_shared_empty_date = NULL;
 SEXP vctrs_shared_true = NULL;
 SEXP vctrs_shared_false = NULL;
 Rcomplex vctrs_shared_na_cpl;
@@ -1064,6 +1199,8 @@ SEXP syms_missing = NULL;
 SEXP syms_size = NULL;
 SEXP syms_subscript_action = NULL;
 SEXP syms_subscript_type = NULL;
+SEXP syms_repair = NULL;
+SEXP syms_tzone = NULL;
 
 SEXP fns_bracket = NULL;
 SEXP fns_quote = NULL;
@@ -1076,13 +1213,15 @@ void vctrs_init_utils(SEXP ns) {
   vctrs_ns_env = ns;
   vctrs_method_table = r_env_get(ns, Rf_install(".__S3MethodsTable__."));
 
+  base_method_table = r_env_get(R_BaseNamespace, Rf_install(".__S3MethodsTable__."));
+
   vctrs_shared_empty_str = Rf_mkString("");
   R_PreserveObject(vctrs_shared_empty_str);
 
 
   // Holds the CHARSXP objects because unlike symbols they can be
   // garbage collected
-  strings = Rf_allocVector(STRSXP, 16);
+  strings = Rf_allocVector(STRSXP, 21);
   R_PreserveObject(strings);
 
   strings_dots = Rf_mkChar("...");
@@ -1094,44 +1233,59 @@ void vctrs_init_utils(SEXP ns) {
   strings_vctrs_rcrd = Rf_mkChar("vctrs_rcrd");
   SET_STRING_ELT(strings, 2, strings_vctrs_rcrd);
 
+  strings_date = Rf_mkChar("Date");
+  SET_STRING_ELT(strings, 3, strings_date);
+
+  strings_posixct = Rf_mkChar("POSIXct");
+  SET_STRING_ELT(strings, 4, strings_posixct);
+
   strings_posixlt = Rf_mkChar("POSIXlt");
-  SET_STRING_ELT(strings, 3, strings_posixlt);
+  SET_STRING_ELT(strings, 5, strings_posixlt);
 
   strings_posixt = Rf_mkChar("POSIXt");
-  SET_STRING_ELT(strings, 4, strings_posixlt);
+  SET_STRING_ELT(strings, 6, strings_posixlt);
 
   strings_vctrs_vctr = Rf_mkChar("vctrs_vctr");
-  SET_STRING_ELT(strings, 5, strings_vctrs_vctr);
+  SET_STRING_ELT(strings, 7, strings_vctrs_vctr);
 
   strings_none = Rf_mkChar("none");
-  SET_STRING_ELT(strings, 6, strings_none);
+  SET_STRING_ELT(strings, 8, strings_none);
 
   strings_minimal = Rf_mkChar("minimal");
-  SET_STRING_ELT(strings, 7, strings_minimal);
+  SET_STRING_ELT(strings, 9, strings_minimal);
 
   strings_unique = Rf_mkChar("unique");
-  SET_STRING_ELT(strings, 8, strings_unique);
+  SET_STRING_ELT(strings, 10, strings_unique);
 
   strings_universal = Rf_mkChar("universal");
-  SET_STRING_ELT(strings, 9, strings_universal);
+  SET_STRING_ELT(strings, 11, strings_universal);
 
   strings_check_unique = Rf_mkChar("check_unique");
-  SET_STRING_ELT(strings, 10, strings_check_unique);
+  SET_STRING_ELT(strings, 12, strings_check_unique);
 
   strings_key = Rf_mkChar("key");
-  SET_STRING_ELT(strings, 11, strings_key);
+  SET_STRING_ELT(strings, 13, strings_key);
 
   strings_loc = Rf_mkChar("loc");
-  SET_STRING_ELT(strings, 12, strings_loc);
+  SET_STRING_ELT(strings, 14, strings_loc);
 
   strings_val = Rf_mkChar("val");
-  SET_STRING_ELT(strings, 13, strings_val);
+  SET_STRING_ELT(strings, 15, strings_val);
 
   strings_group = Rf_mkChar("group");
-  SET_STRING_ELT(strings, 14, strings_group);
+  SET_STRING_ELT(strings, 16, strings_group);
 
   strings_length = Rf_mkChar("length");
-  SET_STRING_ELT(strings, 15, strings_length);
+  SET_STRING_ELT(strings, 17, strings_length);
+
+  strings_factor = Rf_mkChar("factor");
+  SET_STRING_ELT(strings, 18, strings_factor);
+
+  strings_ordered = Rf_mkChar("ordered");
+  SET_STRING_ELT(strings, 19, strings_ordered);
+
+  strings_list = Rf_mkChar("list");
+  SET_STRING_ELT(strings, 20, strings_list);
 
 
   classes_data_frame = Rf_allocVector(STRSXP, 1);
@@ -1139,6 +1293,24 @@ void vctrs_init_utils(SEXP ns) {
 
   strings_data_frame = Rf_mkChar("data.frame");
   SET_STRING_ELT(classes_data_frame, 0, strings_data_frame);
+
+  classes_factor = Rf_allocVector(STRSXP, 1);
+  R_PreserveObject(classes_factor);
+  SET_STRING_ELT(classes_factor, 0, strings_factor);
+
+  classes_ordered = Rf_allocVector(STRSXP, 2);
+  R_PreserveObject(classes_ordered);
+  SET_STRING_ELT(classes_ordered, 0, strings_ordered);
+  SET_STRING_ELT(classes_ordered, 1, strings_factor);
+
+  classes_date = Rf_allocVector(STRSXP, 1);
+  R_PreserveObject(classes_date);
+  SET_STRING_ELT(classes_date, 0, strings_date);
+
+  classes_posixct = Rf_allocVector(STRSXP, 2);
+  R_PreserveObject(classes_posixct);
+  SET_STRING_ELT(classes_posixct, 0, strings_posixct);
+  SET_STRING_ELT(classes_posixct, 1, strings_posixt);
 
 
   chrs_subset = Rf_mkString("subset");
@@ -1226,6 +1398,11 @@ void vctrs_init_utils(SEXP ns) {
   R_PreserveObject(vctrs_shared_empty_list);
   MARK_NOT_MUTABLE(vctrs_shared_empty_list);
 
+  vctrs_shared_empty_date = Rf_allocVector(REALSXP, 0);
+  R_PreserveObject(vctrs_shared_empty_date);
+  Rf_setAttrib(vctrs_shared_empty_date, R_ClassSymbol, classes_date);
+  MARK_NOT_MUTABLE(vctrs_shared_empty_date);
+
   vctrs_shared_true = Rf_allocVector(LGLSXP, 1);
   R_PreserveObject(vctrs_shared_true);
   MARK_NOT_MUTABLE(vctrs_shared_true);
@@ -1275,6 +1452,8 @@ void vctrs_init_utils(SEXP ns) {
   syms_size = Rf_install("size");
   syms_subscript_action = Rf_install("subscript_action");
   syms_subscript_type = Rf_install("subscript_type");
+  syms_repair = Rf_install("repair");
+  syms_tzone = Rf_install("tzone");
 
   fns_bracket = Rf_findVar(syms_bracket, R_BaseEnv);
   fns_quote = Rf_findVar(Rf_install("quote"), R_BaseEnv);
@@ -1286,12 +1465,11 @@ void vctrs_init_utils(SEXP ns) {
   new_env__parent_node = CDDR(new_env_call);
   new_env__size_node = CDR(new_env__parent_node);
 
-  new_function_call = r_parse_eval("as.call(list(`function`, NULL, NULL, NULL))", R_BaseEnv);
+  new_function_call = r_parse_eval("as.call(list(`function`, NULL, NULL))", R_BaseEnv);
   R_PreserveObject(new_function_call);
 
   new_function__formals_node = CDR(new_function_call);
   new_function__body_node = CDR(new_function__formals_node);
-  new_function__env_node = CDR(new_function__body_node);
 
   const char* formals_code = "pairlist2(... = , .x = quote(..1), .y = quote(..2), . = quote(..1))";
   rlang_formula_formals = r_parse_eval(formals_code, ns);

@@ -170,6 +170,8 @@ test_that("can repair names in `vec_rbind()` (#229)", {
 
   expect_named(vec_rbind(list(`_` = 1)), "_")
   expect_named(vec_rbind(list(`_` = 1), .name_repair = "universal"), c("._"))
+
+  expect_named(vec_rbind(list(a = 1, a = 2), .name_repair = ~ toupper(.)), c("A", "A"))
 })
 
 test_that("can construct an id column", {
@@ -186,6 +188,46 @@ test_that("can construct an id column", {
 test_that("vec_rbind() fails with arrays of dimensionality > 3", {
   expect_error(vec_rbind(array(NA, c(1, 1, 1))), "Can't bind arrays")
 })
+
+test_that("row names are preserved by vec_rbind()", {
+  df1 <- mtcars[1:3, ]
+  df2 <- mtcars[4:5, ]
+  expect_identical(vec_rbind(df1, df2), mtcars[1:5, ])
+
+  row.names(df2) <- NULL
+  out <- mtcars[1:5, ]
+  row.names(out) <- c(row.names(df1), "...4", "...5")
+  expect_identical(vec_rbind(df1, df2), out)
+})
+
+test_that("can assign row names in vec_rbind()", {
+  df1 <- mtcars[1:3, ]
+  df2 <- mtcars[4:5, ]
+
+  # Combination
+  out <- vec_rbind(foo = df1, df2)
+  exp <- mtcars[1:5, ]
+  row.names(exp) <- c(paste0("foo...", row.names(df1)), row.names(df2))
+  expect_identical(out, exp)
+
+  out <- vec_rbind(foo = df1, df2, .names_to = "id")
+  exp <- mtcars[1:5, ]
+  exp$id <- c(rep("foo", 3), rep("", 2))
+  expect_identical(out, exp)
+
+  # Sequence
+  out <- vec_rbind(foo = unrownames(df1), df2, bar = unrownames(mtcars[6, ]))
+  exp <- mtcars[1:6, ]
+  row.names(exp) <- c(paste0("foo", 1:3), row.names(df2), "bar")
+  expect_identical(out, exp)
+
+  out <- vec_rbind(foo = unrownames(df1), df2, bar = unrownames(mtcars[6, ]), .names_to = "id")
+  exp <- mtcars[1:6, ]
+  exp$id <- c(rep("foo", 3), rep("", 2), "bar")
+  row.names(exp) <- c(paste0("...", 1:3), row.names(df2), "...6")
+  expect_identical(out, exp)
+})
+
 
 # cols --------------------------------------------------------------------
 
@@ -269,6 +311,7 @@ test_that("can repair names in `vec_cbind()` (#227)", {
   expect_named(vec_cbind(`_` = 1, .name_repair = "universal"), "._")
 
   expect_named(vec_cbind(a = 1, a = 2, .name_repair = "minimal"), c("a", "a"))
+  expect_named(vec_cbind(a = 1, a = 2, .name_repair = toupper), c("A", "A"))
 })
 
 test_that("can supply `.names_to` to `vec_rbind()` (#229)", {
@@ -355,4 +398,91 @@ test_that("vec_cbind() fails with arrays of dimensionality > 3", {
   a <- array(NA, c(1, 1, 1))
   expect_error(vec_cbind(a), "Can't bind arrays")
   expect_error(vec_cbind(x = a), "Can't bind arrays")
+})
+
+test_that("vec_rbind() consistently handles unnamed outputs", {
+  # Name repair of columns is a little weird but unclear we can do better
+  expect_identical(
+    vec_rbind(1, 2),
+    data.frame(...1 = c(1, 2))
+  )
+  expect_identical(
+    vec_rbind(1, 2, ...10 = 3),
+    data.frame(...1 = c(1, 2, 3), row.names = c("...1", "...2", "...3"))
+  )
+
+  expect_identical(
+    vec_rbind(a = 1, b = 2),
+    data.frame(...1 = c(1, 2), row.names = c("a", "b"))
+  )
+  expect_identical(
+    vec_rbind(c(a = 1), c(b = 2)),
+    data.frame(a = c(1, NA), b = c(NA, 2))
+  )
+})
+
+test_that("vec_cbind() consistently handles unnamed outputs", {
+  expect_identical(
+    vec_cbind(1, 2),
+    data.frame(...1 = 1, ...2 = 2)
+  )
+  expect_identical(
+    vec_cbind(1, 2, ...10 = 3),
+    data.frame(...1 = 1, ...2 = 2, ...3 = 3)
+  )
+  expect_identical(
+    vec_cbind(a = 1, b = 2),
+    data.frame(a = 1, b = 2)
+  )
+  expect_identical(
+    vec_cbind(c(a = 1), c(b = 2)),
+    new_data_frame(list(...1 = c(a = 1), ...2 = c(b = 2)))
+  )
+})
+
+test_that("rbind() and cbind() have informative outputs when repairing names", {
+  verify_output(test_path("output", "bind-name-repair.txt"), {
+    "# vec_rbind()"
+
+    "Suboptimal"
+    vec_rbind(1, 2)
+
+    "Suboptimal"
+    vec_rbind(1, 2, ...10 = 3)
+
+    vec_rbind(a = 1, b = 2)
+    vec_rbind(c(a = 1), c(b = 2))
+
+    "# vec_cbind()"
+    vec_cbind(1, 2)
+    vec_cbind(1, 2, ...10 = 3)
+    vec_cbind(a = 1, b = 2)
+    vec_cbind(c(a = 1), c(b = 2))
+  })
+})
+
+test_that("cbind() deals with row names", {
+  expect_identical(
+    vec_cbind(mtcars[1:3], foo = 1),
+    cbind(mtcars[1:3], foo = 1)
+  )
+  expect_identical(
+    vec_cbind(mtcars[1:3], mtcars[4]),
+    cbind(mtcars[1:3], mtcars[4])
+  )
+
+  out <- vec_cbind(
+    mtcars[1, 1, drop = FALSE],
+    unrownames(mtcars[1:3, 2, drop = FALSE])
+  )
+  exp <- mtcars[1:3, c(1, 2)]
+  exp[[1]] <- exp[[1, 1]]
+  row.names(exp) <- paste0(c("Mazda RX4..."), 1:3)
+  expect_identical(out, exp)
+
+  # Should work once we have frame prototyping
+  expect_error(
+    vec_cbind(mtcars[1:3], vec_slice(mtcars[4], nrow(mtcars):1)),
+    "different row names"
+  )
 })

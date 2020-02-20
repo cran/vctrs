@@ -15,35 +15,11 @@
 #' @keywords internal
 #' @examples
 #' new_data_frame(list(x = 1:10, y = 10:1))
-new_data_frame <- function(x = list(), n = NULL, ..., class = character()) {
-  if (!is.list(x)) {
-    abort("`x` must be a list.")
-  }
-
-  if (is.null(n)) {
-    n <- df_size(x)
-  } else if (!is.integer(n) || length(n) != 1L) {
-    abort("`n` must be an integer of size 1.")
-  }
-
-  # names() should always be a character vector, but we can't enforce that
-  # because as.data.frame() returns a data frame with NULL names to indicate
-  # that outer names should be used
-  if (length(x) == 0) {
-    names(x) <- character()
-  }
-
-  new_attributes <- list(
-    names = names(x),
-    ...,
-    class = c(class, "data.frame"),
-    row.names = .set_row_names(n)
-  )
-
-  attributes(x) <- new_attributes
-
-  x
+new_data_frame <- function(x = list(), n = NULL, ..., class = NULL) {
+  .External(vctrs_new_data_frame, x, n, class, ...)
 }
+new_data_frame <- fn_inline_formals(new_data_frame, "x")
+
 
 # Light weight constructor used for tests - avoids having to repeatedly do
 # stringsAsFactors = FALSE etc. Should not be used in internal code as is
@@ -133,7 +109,7 @@ vec_cast.data.frame.default <- function(x, to, ..., x_arg = "x", to_arg = "to") 
 
 #' @export
 vec_restore.data.frame <- function(x, to, ..., n = NULL) {
-  .Call(vctrs_df_restore, x, to, n)
+  .Call(vctrs_bare_df_restore, x, to, n)
 }
 
 

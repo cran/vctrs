@@ -69,6 +69,21 @@ test_that("vec_ptype2(<factor>, NA) is symmetric (#687)", {
   )
 })
 
+test_that("vec_ptype2() errors with malformed factors", {
+  x <- structure(1, class = "factor")
+  y <- factor("x")
+
+  expect_error(vec_ptype2(x, y, x_arg = "z"), "`z` is a corrupt factor")
+  expect_error(vec_ptype2(y, x, y_arg = "z"), "`z` is a corrupt factor")
+})
+
+test_that("vec_ptype2() errors with malformed ordered factors", {
+  x <- structure(1, class = c("ordered", "factor"))
+  y <- as.ordered(factor("x"))
+
+  expect_error(vec_ptype2(x, y, x_arg = "z"), "`z` is a corrupt ordered factor")
+  expect_error(vec_ptype2(y, x, y_arg = "z"), "`z` is a corrupt ordered factor")
+})
 
 # Casting -----------------------------------------------------------------
 
@@ -127,6 +142,12 @@ test_that("orderedness of factor is preserved", {
 test_that("NA are not considered lossy in factor cast (#109)", {
   f <- factor(c("itsy", "bitsy", NA, "spider", "spider"))
   expect_warning(vec_cast(f, f[1]), NA)
+})
+
+test_that("Casting to a factor with explicit NA levels retains them", {
+  f <- factor(c("x", NA), exclude = NULL)
+  expect_identical(vec_cast(f, f), f)
+  expect_identical(vec_cast(f, factor()), f)
 })
 
 # Arithmetic and factor ---------------------------------------------------
