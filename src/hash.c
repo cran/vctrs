@@ -1,14 +1,16 @@
 #include "vctrs.h"
+#include "equal.h"
+#include "hash.h"
 #include "utils.h"
 
 // boost::hash_combine from https://stackoverflow.com/questions/35985960
-static uint32_t hash_combine(uint32_t x, uint32_t y) {
+static inline uint32_t hash_combine(uint32_t x, uint32_t y) {
   return x ^ (y + 0x9e3779b9 + (x << 6) + (x >> 2));
 }
 
 // 32-bit mixer from murmurhash
 // https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp#L68
-static uint32_t hash_int32(uint32_t x) {
+static inline uint32_t hash_int32(uint32_t x) {
   x ^= x >> 16;
   x *= 0x85ebca6b;
   x ^= x >> 13;
@@ -20,7 +22,7 @@ static uint32_t hash_int32(uint32_t x) {
 
 // 64-bit mixer from murmurhash
 // https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp#L81
-static uint32_t hash_int64(int64_t x) {
+static inline uint32_t hash_int64(int64_t x) {
   x ^= x >> 33;
   x *= UINT64_C(0xff51afd7ed558ccd);
   x ^= x >> 33;
@@ -31,7 +33,7 @@ static uint32_t hash_int64(int64_t x) {
 
 // Seems like something designed specificaly for doubles should work better
 // but I haven't been able to find anything
-static uint32_t hash_double(double x) {
+static inline uint32_t hash_double(double x) {
   // Treat positive/negative 0 as equivalent
   if (x == 0.0) {
     x = 0.0;
@@ -46,28 +48,27 @@ static uint32_t hash_double(double x) {
   return hash_int64(value.i);
 }
 
-static uint32_t hash_char(SEXP x) {
+static inline uint32_t hash_char(SEXP x) {
   return hash_int64((intptr_t) x);
 }
 
 // Hashing scalars -----------------------------------------------------
 
-static uint32_t lgl_hash_scalar(const int* x);
-static uint32_t int_hash_scalar(const int* x);
-static uint32_t dbl_hash_scalar(const double* x);
-static uint32_t cpl_hash_scalar(const Rcomplex* x);
-static uint32_t chr_hash_scalar(const SEXP* x);
-static uint32_t raw_hash_scalar(const Rbyte* x);
-static uint32_t list_hash_scalar(SEXP x, R_len_t i);
+static inline uint32_t lgl_hash_scalar(const int* x);
+static inline uint32_t int_hash_scalar(const int* x);
+static inline uint32_t dbl_hash_scalar(const double* x);
+static inline uint32_t cpl_hash_scalar(const Rcomplex* x);
+static inline uint32_t chr_hash_scalar(const SEXP* x);
+static inline uint32_t raw_hash_scalar(const Rbyte* x);
 
 
-static uint32_t lgl_hash_scalar(const int* x) {
+static inline uint32_t lgl_hash_scalar(const int* x) {
   return hash_int32(*x);
 }
-static uint32_t int_hash_scalar(const int* x) {
+static inline uint32_t int_hash_scalar(const int* x) {
   return hash_int32(*x);
 }
-static uint32_t dbl_hash_scalar(const double* x) {
+static inline uint32_t dbl_hash_scalar(const double* x) {
   double val = *x;
 
   // Hash all NAs and NaNs to same value (i.e. ignoring significand)
@@ -79,21 +80,29 @@ static uint32_t dbl_hash_scalar(const double* x) {
 
   return hash_double(val);
 }
-static uint32_t cpl_hash_scalar(const Rcomplex* x) {
+static inline uint32_t cpl_hash_scalar(const Rcomplex* x) {
   uint32_t hash = 0;
   hash = hash_combine(hash, dbl_hash_scalar(&x->r));
   hash = hash_combine(hash, dbl_hash_scalar(&x->i));
   return hash;
 }
-static uint32_t chr_hash_scalar(const SEXP* x) {
+static inline uint32_t chr_hash_scalar(const SEXP* x) {
   return hash_char(*x);
 }
-static uint32_t raw_hash_scalar(const Rbyte* x) {
+static inline uint32_t raw_hash_scalar(const Rbyte* x) {
   return hash_int32(*x);
 }
 
-static uint32_t list_hash_scalar(SEXP x, R_len_t i) {
+static inline uint32_t list_hash_scalar_na_equal(SEXP x, R_len_t i) {
   return hash_object(VECTOR_ELT(x, i));
+}
+static inline uint32_t list_hash_scalar_na_propagate(SEXP x, R_len_t i) {
+  SEXP elt = VECTOR_ELT(x, i);
+  if (elt == R_NilValue) {
+    return HASH_MISSING;
+  } else {
+    return hash_object(elt);
+  }
 }
 
 // Hashing objects -----------------------------------------------------
@@ -130,7 +139,7 @@ SEXP vctrs_hash_object(SEXP x) {
 
 
 static uint32_t sexp_hash(SEXP x) {
-  switch(TYPEOF(x)) {
+  switch (TYPEOF(x)) {
   case NILSXP: return 0;
   case LGLSXP: return lgl_hash(x);
   case INTSXP: return int_hash(x);
@@ -214,44 +223,63 @@ static uint32_t fn_hash(SEXP x) {
 
 // Fill hash array -----------------------------------------------------
 
-static void lgl_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void int_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void dbl_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void cpl_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void chr_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void raw_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void list_hash_fill(uint32_t* p, R_len_t size, SEXP x);
-static void df_hash_fill(uint32_t* p, R_len_t size, SEXP x);
+static inline void lgl_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void lgl_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void int_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void int_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void dbl_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void dbl_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void cpl_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void cpl_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void chr_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void chr_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void raw_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void raw_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void list_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x);
+static inline void list_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x);
+static inline void df_hash_fill(uint32_t* p, R_len_t size, SEXP x, bool na_equal);
 
-// Not compatible with hash_scalar
+// Not compatible with hash_scalar. When `@na_equal` is false, missing
+// values are propagated and encoded as `1`.
+//
 // [[ include("vctrs.h") ]]
-void hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+void hash_fill(uint32_t* p, R_len_t size, SEXP x, bool na_equal) {
   if (has_dim(x)) {
     // The conversion to data frame is only a stopgap, in the long
     // term, we'll hash arrays natively
     x = PROTECT(r_as_data_frame(x));
-    hash_fill(p, size, x);
+    hash_fill(p, size, x, na_equal);
     UNPROTECT(1);
     return;
   }
 
-  switch (TYPEOF(x)) {
-  case LGLSXP: lgl_hash_fill(p, size, x); return;
-  case INTSXP: int_hash_fill(p, size, x); return;
-  case REALSXP: dbl_hash_fill(p, size, x); return;
-  case CPLXSXP: cpl_hash_fill(p, size, x); return;
-  case STRSXP: chr_hash_fill(p, size, x); return;
-  case RAWSXP: raw_hash_fill(p, size, x); return;
-  case VECSXP:
-    if (is_data_frame(x)) {
-      df_hash_fill(p, size, x);
-    } else {
-      list_hash_fill(p, size, x);
+  if (na_equal) {
+    switch (vec_proxy_typeof(x)) {
+    case vctrs_type_logical: lgl_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_integer: int_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_double: dbl_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_complex: cpl_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_character: chr_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_raw: raw_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_list: list_hash_fill_na_equal(p, size, x); return;
+    case vctrs_type_dataframe: df_hash_fill(p, size, x, true); return;
+    default: break;
     }
-    return;
-  default:
-    Rf_error("Internal error: Unsupported type %s in `hash_fill()`.", Rf_type2char(TYPEOF(x)));
+  } else {
+    switch (vec_proxy_typeof(x)) {
+    case vctrs_type_logical: lgl_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_integer: int_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_double: dbl_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_complex: cpl_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_character: chr_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_raw: raw_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_list: list_hash_fill_na_propagate(p, size, x); return;
+    case vctrs_type_dataframe: df_hash_fill(p, size, x, false); return;
+    default: break;
+    }
   }
+
+  Rf_error("Internal error: Unsupported type %s in `hash_fill()`.", Rf_type2char(TYPEOF(x)));
 }
 
 #define HASH_FILL(CTYPE, CONST_DEREF, HASHER)   \
@@ -261,25 +289,80 @@ void hash_fill(uint32_t* p, R_len_t size, SEXP x) {
     p[i] = hash_combine(p[i], HASHER(xp));      \
   }
 
-static void lgl_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+#define HASH_FILL_NA_PROPAGATE(CTYPE, CONST_DEREF, HASHER, NA_VALUE)    \
+  const CTYPE* xp = CONST_DEREF(x);                                     \
+                                                                        \
+  for (R_len_t i = 0; i < size; ++i, ++xp) {                            \
+    uint32_t h = p[i];                                                  \
+    if (h == HASH_MISSING) {                                            \
+      continue;                                                         \
+    }                                                                   \
+    if (*xp == NA_VALUE) {                                              \
+      p[i] = HASH_MISSING;                                              \
+    } else {                                                            \
+      p[i] = hash_combine(h, HASHER(xp));                               \
+    }                                                                   \
+  }
+
+#define HASH_FILL_NA_PROPAGATE_CMP(CTYPE, CONST_DEREF, HASHER, NA_CMP)  \
+  const CTYPE* xp = CONST_DEREF(x);                                     \
+                                                                        \
+  for (R_len_t i = 0; i < size; ++i, ++xp) {                            \
+    uint32_t h = p[i];                                                  \
+    if (h == HASH_MISSING) {                                            \
+      continue;                                                         \
+    }                                                                   \
+    if (NA_CMP(*xp)) {                                                  \
+      p[i] = HASH_MISSING;                                              \
+    } else {                                                            \
+      p[i] = hash_combine(h, HASHER(xp));                               \
+    }                                                                   \
+  }
+
+static inline void lgl_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
   HASH_FILL(int, LOGICAL_RO, lgl_hash_scalar);
 }
-static void int_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+static inline void lgl_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_NA_PROPAGATE(int, LOGICAL_RO, lgl_hash_scalar, NA_LOGICAL);
+}
+
+static inline void int_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
   HASH_FILL(int, INTEGER_RO, int_hash_scalar);
 }
-static void dbl_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+static inline void int_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_NA_PROPAGATE(int, INTEGER_RO, int_hash_scalar, NA_INTEGER);
+}
+
+static inline void dbl_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
   HASH_FILL(double, REAL_RO, dbl_hash_scalar);
 }
-static void cpl_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+static inline void dbl_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_NA_PROPAGATE_CMP(double, REAL_RO, dbl_hash_scalar, dbl_equal_missing);
+}
+
+static inline void cpl_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
   HASH_FILL(Rcomplex, COMPLEX_RO, cpl_hash_scalar);
 }
-static void chr_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+static inline void cpl_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_NA_PROPAGATE_CMP(Rcomplex, COMPLEX_RO, cpl_hash_scalar, cpl_equal_missing);
+}
+
+static inline void chr_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
   HASH_FILL(SEXP, STRING_PTR_RO, chr_hash_scalar);
 }
-static void raw_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+static inline void chr_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_NA_PROPAGATE(SEXP, STRING_PTR_RO, chr_hash_scalar, NA_STRING);
+}
+
+static inline void raw_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL(Rbyte, RAW_RO, raw_hash_scalar);
+}
+static inline void raw_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
   HASH_FILL(Rbyte, RAW_RO, raw_hash_scalar);
 }
 
+#undef HASH_FILL_NA_PROPAGATE_CMP
+#undef HASH_FILL_NA_PROPAGATE
 #undef HASH_FILL
 
 
@@ -288,19 +371,37 @@ static void raw_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
     p[i] = hash_combine(p[i], HASHER(x, i));    \
   }
 
-static void list_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
-  HASH_FILL_BARRIER(list_hash_scalar);
+#define HASH_FILL_BARRIER_NA_PROPAGATE(HASHER)  \
+  for (R_len_t i = 0; i < size; ++i) {          \
+    uint32_t h = p[i];                          \
+    if (h == HASH_MISSING) {                    \
+      continue;                                 \
+    }                                           \
+    uint32_t elt_hash = HASHER(x, i);           \
+    if (elt_hash == HASH_MISSING) {             \
+      p[i] = HASH_MISSING;                      \
+    } else {                                    \
+      p[i] = hash_combine(p[i], elt_hash);      \
+    }                                           \
+  }
+
+static void list_hash_fill_na_equal(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_BARRIER(list_hash_scalar_na_equal);
+}
+static void list_hash_fill_na_propagate(uint32_t* p, R_len_t size, SEXP x) {
+  HASH_FILL_BARRIER_NA_PROPAGATE(list_hash_scalar_na_propagate);
 }
 
+#undef HASH_FILL_BARRIER_NA_PROPAGATE
 #undef HASH_FILL_BARRIER
 
 
-static void df_hash_fill(uint32_t* p, R_len_t size, SEXP x) {
+static void df_hash_fill(uint32_t* p, R_len_t size, SEXP x, bool na_equal) {
   R_len_t ncol = Rf_length(x);
 
   for (R_len_t i = 0; i < ncol; ++i) {
     SEXP col = VECTOR_ELT(x, i);
-    hash_fill(p, size, col);
+    hash_fill(p, size, col, na_equal);
   }
 }
 
@@ -314,7 +415,7 @@ SEXP vctrs_hash(SEXP x) {
   uint32_t* p = (uint32_t*) RAW(out);
 
   memset(p, 0, n * sizeof(uint32_t));
-  hash_fill(p, n, x);
+  hash_fill(p, n, x, true);
 
   UNPROTECT(2);
   return out;

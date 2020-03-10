@@ -65,6 +65,7 @@ test_that("vec_duplicate_id gives position of first found", {
 test_that("vec_unique matches unique", {
   x <- sample(100, 1000, replace = TRUE)
   expect_equal(vec_unique(x), unique(x))
+  expect_equal(vec_unique(c("x", "x")), "x")
 })
 
 test_that("vec_unique matches unique for matrices", {
@@ -194,13 +195,21 @@ test_that("vec_unique() works with glm objects (#643)", {
   expect_equal(vec_unique(list(model, model)), list(model))
 })
 
+test_that("can take the unique locations of dfs with list-cols", {
+  df <- tibble(x = list(1, 2, 1, 3), y = list(1, 2, 1, 3))
+  expect_identical(vec_unique_loc(df), c(1L, 2L, 4L))
+})
+
+
 # matching ----------------------------------------------------------------
 
 test_that("vec_match() matches match()", {
   n <- c(1:3, NA)
   h <- c(4, 2, 1, NA)
-
   expect_equal(vec_match(n, h), match(n, h))
+
+  expect_equal(vec_match(1.5, c(2, 1.5, NA)), match(1.5, c(2, 1.5, NA)))
+  expect_equal(vec_match("x", "x"), match("x", "x"))
 })
 
 test_that("vec_in() matches %in%", {
@@ -208,6 +217,13 @@ test_that("vec_in() matches %in%", {
   h <- c(4, 2, 1, NA)
 
   expect_equal(vec_in(n, h), n %in% h)
+})
+
+test_that("can opt out of NA matching", {
+  n <- c(1, NA)
+  h <- c(1:3, NA)
+
+  expect_equal(vec_in(n, h, na_equal = FALSE), c(TRUE, NA))
 })
 
 test_that("vec_match works with empty data frame", {
@@ -260,4 +276,29 @@ test_that("matching functions take the equality proxy recursively", {
 
   expect_equal(vec_match(df, df2), c(NA, 1))
   expect_equal(vec_in(df, df2), c(FALSE, TRUE))
+})
+
+test_that("can propagate missing values while matching", {
+  exp <- c(NA, 3L, NA, 1L)
+  expect_identical(vec_match(lgl(NA, TRUE, NA, FALSE), lgl(FALSE, NA, TRUE), na_equal = FALSE), exp)
+  expect_identical(vec_match(int(NA, 1L, NA, 2L), int(2L, NA, 1L), na_equal = FALSE), exp)
+  expect_identical(vec_match(dbl(NA, 1, NA, 2), dbl(2, NA, 1), na_equal = FALSE), exp)
+  expect_identical(vec_match(cpl(NA, 1, NA, 2), cpl(2, NA, 1), na_equal = FALSE), exp)
+  expect_identical(vec_match(chr(NA, "1", NA, "2"), chr("2", NA, "1"), na_equal = FALSE), exp)
+  expect_identical(vec_match(list(NULL, 1, NULL, 2), list(2, NULL, 1), na_equal = FALSE), exp)
+
+  # No missing values for raw vectors
+  expect_identical(vec_match(bytes(0, 1, 0, 2), bytes(2, 0, 1), na_equal = FALSE), c(2L, 3L, 2L, 1L))
+})
+
+test_that("missing values are propagated across columns", {
+  for (na_value in list(NA, na_int, na_dbl, na_cpl, na_chr, list(NULL))) {
+    df <- data_frame(x = 1, y = data_frame(foo = 2, bar = na_value), z = 3)
+    expect_identical(vec_match(df, df), 1L)
+    expect_identical(vec_match(df, df, na_equal = FALSE), na_int)
+  }
+})
+
+test_that("can't supply NA as `na_equal`", {
+  expect_error(vec_match(NA, NA, na_equal = NA), "single `TRUE` or `FALSE`")
 })

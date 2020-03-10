@@ -98,12 +98,13 @@ enum vctrs_type vec_proxy_typeof(SEXP x) {
   return vec_base_typeof(x, true);
 }
 
+// [[ include("vctrs.h") ]]
 bool vec_is_list(SEXP x) {
   if (TYPEOF(x) != VECSXP) {
     return false;
   }
 
-  switch(class_type(x)) {
+  switch (class_type(x)) {
   // Bare list
   case vctrs_class_none:
     return true;
@@ -186,7 +187,7 @@ SEXP vctrs_typeof(SEXP x, SEXP dispatch) {
 
 void vctrs_stop_unsupported_type(enum vctrs_type type, const char* fn) {
   Rf_errorcall(R_NilValue,
-               "Unsupported vctrs type `%s` in `%s`",
+               "Internal error: Unsupported vctrs type `%s` in `%s`",
                vec_type_as_str(type),
                fn);
 }

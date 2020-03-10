@@ -336,6 +336,13 @@ SEXP s3_find_method(const char* generic, SEXP x, SEXP table) {
   }
 
   SEXP class = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
+
+  // Avoid corrupt objects where `x` is an OBJECT(), but the class is NULL
+  if (class == R_NilValue) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+
   SEXP* class_ptr = STRING_PTR(class);
   int n_class = Rf_length(class);
 
@@ -453,6 +460,18 @@ SEXP new_empty_ordered(SEXP levels) {
 
   UNPROTECT(1);
   return out;
+}
+
+// [[ include("utils.h") ]]
+bool list_has_inner_vec_names(SEXP x, R_len_t size) {
+  for (R_len_t i = 0; i < size; ++i) {
+    SEXP elt = VECTOR_ELT(x, i);
+    if (vec_names(elt) != R_NilValue) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // [[ include("vctrs.h") ]]
@@ -628,11 +647,16 @@ bool is_integer64(SEXP x) {
 
 void* r_vec_deref(SEXP x) {
   switch (TYPEOF(x)) {
+  case LGLSXP: return LOGICAL(x);
   case INTSXP: return INTEGER(x);
+  case REALSXP: return REAL(x);
+  case CPLXSXP: return COMPLEX(x);
   case STRSXP: return STRING_PTR(x);
+  case RAWSXP: return RAW(x);
   default: Rf_error("Unimplemented type in `r_vec_deref()`.");
   }
 }
+
 const void* r_vec_const_deref(SEXP x) {
   switch (TYPEOF(x)) {
   case INTSXP: return INTEGER_RO(x);
@@ -929,6 +953,14 @@ bool r_is_true(SEXP x) {
   return r_is_bool(x) && LOGICAL(x)[0] == 1;
 }
 
+// [[ include("utils.h") ]]
+int r_bool_as_int(SEXP x) {
+  if (!r_is_bool(x)) {
+    Rf_errorcall(R_NilValue, "Input must be a single `TRUE` or `FALSE`.");
+  }
+  return LOGICAL(x)[0];
+}
+
 bool r_is_string(SEXP x) {
   return TYPEOF(x) == STRSXP &&
     Rf_length(x) == 1 &&
@@ -1131,6 +1163,84 @@ SEXP r_as_function(SEXP x, const char* arg) {
   }
 }
 
+static SEXP syms_try_catch_hnd = NULL;
+static inline SEXP try_catch_hnd(SEXP ptr) {
+  SEXP call = PROTECT(Rf_lang2(syms_try_catch_hnd, ptr));
+  SEXP out = Rf_eval(call, vctrs_ns_env);
+  UNPROTECT(1);
+  return out;
+}
+
+struct r_try_catch_data {
+  void (*fn)(void*);
+  void* fn_data;
+
+  SEXP cnd_sym;
+
+  void (*hnd)(void*);
+  void* hnd_data;
+
+  ERR err;
+};
+
+// [[ register() ]]
+SEXP vctrs_try_catch_callback(SEXP ptr, SEXP cnd) {
+  struct r_try_catch_data* data = (struct r_try_catch_data*) R_ExternalPtrAddr(ptr);
+
+  if (cnd == R_NilValue) {
+    if (data->fn) {
+      data->fn(data->fn_data);
+    }
+  } else {
+    data->err = cnd;
+    if (data->hnd) {
+      data->hnd(data->hnd_data);
+    }
+  }
+
+  return R_NilValue;
+}
+
+static SEXP syms_try_catch_impl = NULL;
+
+// [[ include("utils.h") ]]
+ERR r_try_catch(void (*fn)(void*),
+                void* fn_data,
+                SEXP cnd_sym,
+                void (*hnd)(void*),
+                void* hnd_data) {
+
+  struct r_try_catch_data data = {
+    .fn = fn,
+    .fn_data = fn_data,
+    .cnd_sym = cnd_sym,
+    .hnd = hnd,
+    .hnd_data = hnd_data,
+    .err = NULL
+  };
+  SEXP xptr = PROTECT(R_MakeExternalPtr(&data, R_NilValue, R_NilValue));
+  SEXP hnd_fn = PROTECT(try_catch_hnd(xptr));
+
+  SEXP syms[3] = {
+    syms_data,
+    cnd_sym,
+    NULL
+  };
+  SEXP args[3] = {
+    xptr,
+    hnd_fn,
+    NULL
+  };
+
+  SEXP call = PROTECT(r_call(syms_try_catch_impl, syms, args));
+  Rf_eval(call, vctrs_ns_env);
+
+  UNPROTECT(3);
+  return data.err;
+}
+
+SEXP (*rlang_sym_as_character)(SEXP x);
+
 
 SEXP vctrs_ns_env = NULL;
 SEXP vctrs_shared_empty_str = NULL;
@@ -1145,10 +1255,12 @@ SEXP vctrs_shared_empty_list = NULL;
 SEXP vctrs_shared_empty_date = NULL;
 SEXP vctrs_shared_true = NULL;
 SEXP vctrs_shared_false = NULL;
+
 Rcomplex vctrs_shared_na_cpl;
+SEXP vctrs_shared_na_lgl = NULL;
+SEXP vctrs_shared_na_list = NULL;
 
 SEXP vctrs_shared_zero_int = NULL;
-SEXP vctrs_shared_na_lgl = NULL;
 
 SEXP strings = NULL;
 SEXP strings_empty = NULL;
@@ -1173,6 +1285,8 @@ SEXP chrs_negate = NULL;
 SEXP chrs_numeric = NULL;
 SEXP chrs_character = NULL;
 SEXP chrs_empty = NULL;
+SEXP chrs_cast = NULL;
+SEXP chrs_error = NULL;
 
 SEXP syms_i = NULL;
 SEXP syms_n = NULL;
@@ -1201,13 +1315,38 @@ SEXP syms_subscript_action = NULL;
 SEXP syms_subscript_type = NULL;
 SEXP syms_repair = NULL;
 SEXP syms_tzone = NULL;
+SEXP syms_data = NULL;
+SEXP syms_vctrs_error_incompatible_type = NULL;
+SEXP syms_vctrs_error_cast_lossy = NULL;
+SEXP syms_cnd_signal = NULL;
+SEXP syms_logical = NULL;
+SEXP syms_numeric = NULL;
+SEXP syms_character = NULL;
+SEXP syms_body = NULL;
+SEXP syms_parent = NULL;
 
 SEXP fns_bracket = NULL;
 SEXP fns_quote = NULL;
 SEXP fns_names = NULL;
 
+SEXP result_attrib = NULL;
+
 struct vctrs_arg args_empty_;
 struct vctrs_arg* args_empty = NULL;
+
+
+SEXP r_new_shared_vector(SEXPTYPE type, R_len_t n) {
+  SEXP out = Rf_allocVector(type, n);
+  R_PreserveObject(out);
+  MARK_NOT_MUTABLE(out);
+  return out;
+}
+SEXP r_new_shared_character(const char* name) {
+  SEXP out = Rf_mkString(name);
+  R_PreserveObject(out);
+  MARK_NOT_MUTABLE(out);
+  return out;
+}
 
 void vctrs_init_utils(SEXP ns) {
   vctrs_ns_env = ns;
@@ -1221,8 +1360,7 @@ void vctrs_init_utils(SEXP ns) {
 
   // Holds the CHARSXP objects because unlike symbols they can be
   // garbage collected
-  strings = Rf_allocVector(STRSXP, 21);
-  R_PreserveObject(strings);
+  strings = r_new_shared_vector(STRSXP, 21);
 
   strings_dots = Rf_mkChar("...");
   SET_STRING_ELT(strings, 0, strings_dots);
@@ -1288,144 +1426,86 @@ void vctrs_init_utils(SEXP ns) {
   SET_STRING_ELT(strings, 20, strings_list);
 
 
-  classes_data_frame = Rf_allocVector(STRSXP, 1);
-  R_PreserveObject(classes_data_frame);
-
+  classes_data_frame = r_new_shared_vector(STRSXP, 1);
   strings_data_frame = Rf_mkChar("data.frame");
   SET_STRING_ELT(classes_data_frame, 0, strings_data_frame);
 
-  classes_factor = Rf_allocVector(STRSXP, 1);
-  R_PreserveObject(classes_factor);
+  classes_factor = r_new_shared_vector(STRSXP, 1);
   SET_STRING_ELT(classes_factor, 0, strings_factor);
 
-  classes_ordered = Rf_allocVector(STRSXP, 2);
-  R_PreserveObject(classes_ordered);
+  classes_ordered = r_new_shared_vector(STRSXP, 2);
   SET_STRING_ELT(classes_ordered, 0, strings_ordered);
   SET_STRING_ELT(classes_ordered, 1, strings_factor);
 
-  classes_date = Rf_allocVector(STRSXP, 1);
-  R_PreserveObject(classes_date);
+  classes_date = r_new_shared_vector(STRSXP, 1);
   SET_STRING_ELT(classes_date, 0, strings_date);
 
-  classes_posixct = Rf_allocVector(STRSXP, 2);
-  R_PreserveObject(classes_posixct);
+  classes_posixct = r_new_shared_vector(STRSXP, 2);
   SET_STRING_ELT(classes_posixct, 0, strings_posixct);
   SET_STRING_ELT(classes_posixct, 1, strings_posixt);
 
+  chrs_subset = r_new_shared_character("subset");
+  chrs_extract = r_new_shared_character("extract");
+  chrs_assign = r_new_shared_character("assign");
+  chrs_rename = r_new_shared_character("rename");
+  chrs_remove = r_new_shared_character("remove");
+  chrs_negate = r_new_shared_character("negate");
+  chrs_numeric = r_new_shared_character("numeric");
+  chrs_character = r_new_shared_character("character");
+  chrs_empty = r_new_shared_character("");
+  chrs_cast = r_new_shared_character("cast");
+  chrs_error = r_new_shared_character("error");
 
-  chrs_subset = Rf_mkString("subset");
-  R_PreserveObject(chrs_subset);
-
-  chrs_extract = Rf_mkString("extract");
-  R_PreserveObject(chrs_extract);
-
-  chrs_assign = Rf_mkString("assign");
-  R_PreserveObject(chrs_assign);
-
-  chrs_rename = Rf_mkString("rename");
-  R_PreserveObject(chrs_rename);
-
-  chrs_remove = Rf_mkString("remove");
-  R_PreserveObject(chrs_remove);
-
-  chrs_negate = Rf_mkString("negate");
-  R_PreserveObject(chrs_negate);
-
-  chrs_numeric = Rf_mkString("numeric");
-  R_PreserveObject(chrs_numeric);
-
-  chrs_character = Rf_mkString("character");
-  R_PreserveObject(chrs_character);
-
-  chrs_empty = Rf_mkString("");
-  R_PreserveObject(chrs_empty);
-
-
-  classes_tibble = Rf_allocVector(STRSXP, 3);
-  R_PreserveObject(classes_tibble);
+  classes_tibble = r_new_shared_vector(STRSXP, 3);
 
   strings_tbl_df = Rf_mkChar("tbl_df");
   SET_STRING_ELT(classes_tibble, 0, strings_tbl_df);
 
   strings_tbl = Rf_mkChar("tbl");
   SET_STRING_ELT(classes_tibble, 1, strings_tbl);
-
   SET_STRING_ELT(classes_tibble, 2, strings_data_frame);
 
 
-  classes_list_of = Rf_allocVector(STRSXP, 3);
-  R_PreserveObject(classes_list_of);
-
+  classes_list_of = r_new_shared_vector(STRSXP, 3);
   strings_vctrs_list_of = Rf_mkChar("vctrs_list_of");
   SET_STRING_ELT(classes_list_of, 0, strings_vctrs_list_of);
   SET_STRING_ELT(classes_list_of, 1, strings_vctrs_vctr);
   SET_STRING_ELT(classes_list_of, 2, Rf_mkChar("list"));
 
 
-  classes_vctrs_group_rle = Rf_allocVector(STRSXP, 3);
-  R_PreserveObject(classes_vctrs_group_rle);
-
+  classes_vctrs_group_rle = r_new_shared_vector(STRSXP, 3);
   SET_STRING_ELT(classes_vctrs_group_rle, 0, Rf_mkChar("vctrs_group_rle"));
   SET_STRING_ELT(classes_vctrs_group_rle, 1, strings_vctrs_rcrd);
   SET_STRING_ELT(classes_vctrs_group_rle, 2, strings_vctrs_vctr);
 
 
-  vctrs_shared_empty_lgl = Rf_allocVector(LGLSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_lgl);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_lgl);
-
-  vctrs_shared_empty_int = Rf_allocVector(INTSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_int);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_int);
-
-  vctrs_shared_empty_dbl = Rf_allocVector(REALSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_dbl);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_dbl);
-
-  vctrs_shared_empty_cpl = Rf_allocVector(CPLXSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_cpl);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_cpl);
-
-  vctrs_shared_empty_chr = Rf_allocVector(STRSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_chr);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_chr);
-
-  vctrs_shared_empty_raw = Rf_allocVector(RAWSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_raw);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_raw);
-
-  vctrs_shared_empty_list = Rf_allocVector(VECSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_list);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_list);
-
-  vctrs_shared_empty_date = Rf_allocVector(REALSXP, 0);
-  R_PreserveObject(vctrs_shared_empty_date);
+  vctrs_shared_empty_lgl = r_new_shared_vector(LGLSXP, 0);
+  vctrs_shared_empty_int = r_new_shared_vector(INTSXP, 0);
+  vctrs_shared_empty_dbl = r_new_shared_vector(REALSXP, 0);
+  vctrs_shared_empty_cpl = r_new_shared_vector(CPLXSXP, 0);
+  vctrs_shared_empty_chr = r_new_shared_vector(STRSXP, 0);
+  vctrs_shared_empty_raw = r_new_shared_vector(RAWSXP, 0);
+  vctrs_shared_empty_list = r_new_shared_vector(VECSXP, 0);
+  vctrs_shared_empty_date = r_new_shared_vector(REALSXP, 0);
   Rf_setAttrib(vctrs_shared_empty_date, R_ClassSymbol, classes_date);
-  MARK_NOT_MUTABLE(vctrs_shared_empty_date);
 
-  vctrs_shared_true = Rf_allocVector(LGLSXP, 1);
-  R_PreserveObject(vctrs_shared_true);
-  MARK_NOT_MUTABLE(vctrs_shared_true);
+  vctrs_shared_true = r_new_shared_vector(LGLSXP, 1);
   LOGICAL(vctrs_shared_true)[0] = 1;
 
-  vctrs_shared_false = Rf_allocVector(LGLSXP, 1);
-  R_PreserveObject(vctrs_shared_false);
-  MARK_NOT_MUTABLE(vctrs_shared_false);
+  vctrs_shared_false = r_new_shared_vector(LGLSXP, 1);
   LOGICAL(vctrs_shared_false)[0] = 0;
 
   vctrs_shared_na_cpl.i = NA_REAL;
   vctrs_shared_na_cpl.r = NA_REAL;
 
+  vctrs_shared_na_lgl = r_new_shared_vector(LGLSXP, 1);
+  LOGICAL(vctrs_shared_na_lgl)[0] = NA_LOGICAL;
 
-  vctrs_shared_na_lgl = r_lgl(NA_LOGICAL);
-  R_PreserveObject(vctrs_shared_na_lgl);
-  MARK_NOT_MUTABLE(vctrs_shared_na_lgl);
+  vctrs_shared_na_list = r_new_shared_vector(VECSXP, 1);
+  SET_VECTOR_ELT(vctrs_shared_na_list, 0, R_NilValue);
 
-  vctrs_shared_zero_int = Rf_allocVector(INTSXP, 1);
+  vctrs_shared_zero_int = r_new_shared_vector(INTSXP, 1);
   INTEGER(vctrs_shared_zero_int)[0] = 0;
-  R_PreserveObject(vctrs_shared_zero_int);
-  MARK_NOT_MUTABLE(vctrs_shared_zero_int);
-
 
   syms_i = Rf_install("i");
   syms_n = Rf_install("n");
@@ -1454,6 +1534,17 @@ void vctrs_init_utils(SEXP ns) {
   syms_subscript_type = Rf_install("subscript_type");
   syms_repair = Rf_install("repair");
   syms_tzone = Rf_install("tzone");
+  syms_data = Rf_install("data");
+  syms_try_catch_impl = Rf_install("try_catch_impl");
+  syms_try_catch_hnd = Rf_install("try_catch_hnd");
+  syms_vctrs_error_incompatible_type = Rf_install("vctrs_error_incompatible_type");
+  syms_vctrs_error_cast_lossy = Rf_install("vctrs_error_cast_lossy");
+  syms_cnd_signal = Rf_install("cnd_signal");
+  syms_logical = Rf_install("logical");
+  syms_numeric = Rf_install("numeric");
+  syms_character = Rf_install("character");
+  syms_body = Rf_install("body");
+  syms_parent = Rf_install("parent");
 
   fns_bracket = Rf_findVar(syms_bracket, R_BaseEnv);
   fns_quote = Rf_findVar(Rf_install("quote"), R_BaseEnv);
@@ -1482,6 +1573,7 @@ void vctrs_init_utils(SEXP ns) {
   rlang_unbox = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_unbox");
   rlang_env_dots_values = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_env_dots_values");
   rlang_env_dots_list = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_env_dots_list");
+  rlang_sym_as_character = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_sym_as_character");
 
   syms_as_data_frame2 = Rf_install("as.data.frame2");
   syms_colnames = Rf_install("colnames");
@@ -1496,6 +1588,25 @@ void vctrs_init_utils(SEXP ns) {
   compact_rep_attrib = Rf_cons(R_NilValue, R_NilValue);
   R_PreserveObject(compact_rep_attrib);
   SET_TAG(compact_rep_attrib, Rf_install("vctrs_compact_rep"));
+
+  {
+    SEXP result_names = PROTECT(Rf_allocVector(STRSXP, 2));
+    SET_STRING_ELT(result_names, 0, Rf_mkChar("ok"));
+    SET_STRING_ELT(result_names, 1, Rf_mkChar("err"));
+
+    result_attrib = PROTECT(Rf_cons(result_names, R_NilValue));
+    SET_TAG(result_attrib, R_NamesSymbol);
+
+    SEXP result_class = PROTECT(Rf_allocVector(STRSXP, 1));
+    SET_STRING_ELT(result_class, 0, Rf_mkChar("rlang_result"));
+
+    result_attrib = PROTECT(Rf_cons(result_class, result_attrib));
+    SET_TAG(result_attrib, R_ClassSymbol);
+
+    R_PreserveObject(result_attrib);
+    MARK_NOT_MUTABLE(result_attrib);
+    UNPROTECT(4);
+  }
 
   // We assume the following in `union vctrs_dbl_indicator`
   VCTRS_ASSERT(sizeof(double) == sizeof(int64_t));

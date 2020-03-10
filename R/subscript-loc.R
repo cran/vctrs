@@ -61,7 +61,6 @@ vec_as_location <- function(i,
                             arg = NULL) {
   if (!missing(...)) ellipsis::check_dots_empty()
 
-  i <- vec_as_subscript(i, arg = arg)
   .Call(
     vctrs_as_location,
     i = i,
@@ -69,6 +68,7 @@ vec_as_location <- function(i,
     names = names,
     loc_negative = "invert",
     loc_oob = "error",
+    loc_zero = "remove",
     missing = missing,
     arg = arg
   )
@@ -80,6 +80,8 @@ vec_as_location <- function(i,
 #'   elements are out-of-bounds. If `"extend"`, out-of-bounds
 #'   locations are allowed if they are consecutive after the end. This
 #'   can be used to implement extendable vectors like `letters[1:30]`.
+#' @param zero Whether to `"remove"` zero values, throw an informative
+#'   `"error"`, or `"ignore"` them.
 #' @export
 num_as_location <- function(i,
                             n,
@@ -87,10 +89,11 @@ num_as_location <- function(i,
                             missing = c("propagate", "error"),
                             negative = c("invert", "error", "ignore"),
                             oob = c("error", "extend"),
+                            zero = c("remove", "error", "ignore"),
                             arg = NULL) {
   if (!missing(...)) ellipsis::check_dots_empty()
 
-  if (!is_integer(i) && !is_double(i)) {
+  if (is.object(i) || !(is_integer(i) || is_double(i))) {
     abort("`i` must be a numeric vector.")
   }
   .Call(
@@ -100,6 +103,7 @@ num_as_location <- function(i,
     names = NULL,
     loc_negative = negative,
     loc_oob = oob,
+    loc_zero = zero,
     missing = missing,
     arg = arg
   )
@@ -288,7 +292,7 @@ cnd_body_vctrs_error_location_negative_positive <- function(cnd, ...) {
     n_loc <- length(positive_loc)
     positive_loc <- ensure_full_stop(enumerate(positive_loc))
     loc <- glue::glue(
-      "{arg} has {n_loc} missing values at locations {positive_loc}"
+      "{arg} has {n_loc} positive values at locations {positive_loc}"
     )
   }
   format_error_bullets(c(
@@ -340,6 +344,32 @@ cnd_bullets_location_need_non_negative <- function(cnd, ...) {
   cnd$subscript_arg <- append_arg("The subscript", cnd$subscript_arg)
   format_error_bullets(c(
     x = glue::glue_data(cnd, "{subscript_arg} can't contain negative locations.")
+  ))
+}
+
+stop_location_zero <- function(i, ...) {
+  cnd_signal(new_error_subscript_type(
+    i,
+    body = cnd_bullets_location_need_non_zero,
+    ...
+  ))
+}
+cnd_bullets_location_need_non_zero <- function(cnd, ...) {
+  zero_loc <- which(cnd$i == 0)
+  zero_loc_size <- length(zero_loc)
+  arg <- append_arg("The subscript", cnd$subscript_arg)
+
+  if (zero_loc_size == 1) {
+    loc <- glue::glue("It has a `0` value at location {zero_loc}.")
+  } else {
+    zero_loc <- ensure_full_stop(enumerate(zero_loc))
+    loc <- glue::glue(
+      "It has {zero_loc_size} `0` values at locations {zero_loc}"
+    )
+  }
+  format_error_bullets(c(
+    x = glue::glue("{arg} can't contain `0` values."),
+    i = loc
   ))
 }
 

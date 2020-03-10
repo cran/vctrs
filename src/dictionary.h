@@ -9,32 +9,47 @@
 // at the R-level).
 
 struct dictionary {
+  SEXP protect;
+
   SEXP vec;
-  R_len_t* key;
+  enum vctrs_type type;
+
+  int (*equal)(const void*, R_len_t i, const void*, R_len_t j);
+  int (*equal_missing)(const void*, R_len_t i);
+  const void* vec_p;
+
   uint32_t* hash;
+  R_len_t* key;
+
   uint32_t size;
   uint32_t used;
 };
-typedef struct dictionary dictionary;
 
 /**
  * Initialise a dictionary
  *
- * - `dict_init()` creates a dictionary and precaches the hashes for
+ * - `new_dictionary()` creates a dictionary and precaches the hashes for
  *   each element of `x`.
  *
- * - `dict_init_partial()` creates a dictionary with precached hashes
+ * - `new_dictionary_partial()` creates a dictionary with precached hashes
  *   as well, but does not allocate an array of keys. This is useful
  *   for finding a key in another dictionary with `dict_hash_with()`.
  */
-void dict_init(dictionary* d, SEXP x);
-void dict_init_partial(dictionary* d, SEXP x);
+
+struct dictionary_opts {
+  bool partial;
+  bool na_equal;
+};
+
+struct dictionary* new_dictionary(SEXP x);
+struct dictionary* new_dictionary_partial(SEXP x);
 
 #define PROTECT_DICT(d, n) do {                 \
-    PROTECT((d)->vec);                          \
-    *(n) += 1;                                  \
+    struct dictionary* d_ = (d);                \
+    PROTECT(d_->vec);                           \
+    PROTECT(d_->protect);                       \
+    *(n) += 2;                                  \
   } while(0)
-
 
 /**
  * Find key hash for a vector element
@@ -44,7 +59,9 @@ void dict_init_partial(dictionary* d, SEXP x);
  * - `dict_hash_with()` finds the hash for indexing into `d` with
  *   element `i` of `x`.
  */
-uint32_t dict_hash_scalar(dictionary* d, R_len_t i);
-uint32_t dict_hash_with(dictionary* d, dictionary* x, R_len_t i);
+uint32_t dict_hash_scalar(struct dictionary* d, R_len_t i);
+uint32_t dict_hash_with(struct dictionary* d, struct dictionary* x, R_len_t i);
 
-void dict_put(dictionary* d, uint32_t k, R_len_t i);
+bool dict_is_missing(struct dictionary* d, R_len_t i);
+
+void dict_put(struct dictionary* d, uint32_t k, R_len_t i);

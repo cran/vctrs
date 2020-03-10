@@ -211,15 +211,83 @@ test_that("the names on an empty data frame are an empty character vector", {
   expect_identical(names(new_data_frame()), character())
 })
 
-test_that("attributes with special names are ignored", {
+test_that("class attribute", {
   expect_identical(
-    names(new_data_frame(list(), 0L, names = "name")),
-    character()
+    class(new_data_frame(list(a = 1))),
+    "data.frame"
+  )
+  expect_identical(
+    class(new_data_frame(list(a = 1), class = "tbl_df")),
+    c("tbl_df", "data.frame")
+  )
+  expect_identical(
+    class(new_data_frame(list(a = 1), class = c("tbl_df", "tbl", "data.frame"))),
+    c("tbl_df", "tbl", "data.frame", "data.frame")
+  )
+  expect_identical(
+    class(new_data_frame(list(a = 1), class = "foo_frame")),
+    c("foo_frame", "data.frame")
+  )
+  expect_error(
+    class(exec(new_data_frame, list(a = 1), !!!attributes(new_data_frame(list(), class = "tbl_df")))),
+    "`n` and `row.names` must be consistent"
+  )
+  expect_identical(
+    class(exec(new_data_frame, list(a = 1), !!!attributes(new_data_frame(list(b = 1), class = "tbl_df")))),
+    c("tbl_df", "data.frame", "data.frame")
+  )
+})
+
+test_that("attributes with special names are merged", {
+  expect_identical(
+    names(new_data_frame(list(a = 1))),
+    "a"
   )
 
   expect_identical(
-    attr(new_data_frame(list(), 0L, row.names = "rowname"), "row.names"),
+    names(new_data_frame(list(a = 1), names = "name")),
+    "name"
+  )
+
+  expect_identical(
+    names(new_data_frame(list(1), names = "name")),
+    "name"
+  )
+
+  expect_identical(
+    attr(new_data_frame(list()), "row.names"),
     integer()
+  )
+
+  expect_identical(
+    .row_names_info(new_data_frame(list(), n = 3L)),
+    -3L
+  )
+
+  expect_error(new_data_frame(list(), n = 1L, row.names = 1:3), ".")
+
+  expect_identical(
+    .row_names_info(new_data_frame(list(), n = 3L, row.names = 1:3)),
+    3L
+  )
+
+  expect_identical(
+    .row_names_info(new_data_frame(list(), n = 3L, row.names = c(NA, -3L))),
+    -3L
+  )
+
+  expect_identical(
+    attr(new_data_frame(list(), n = 1L, row.names = "rowname"), "row.names"),
+    "rowname"
+  )
+
+  expect_error(
+    new_data_frame(list(), row.names = "rowname"),
+    "must be consistent"
+  )
+  expect_identical(
+    row.names(new_data_frame(list(), row.names = chr())),
+    chr()
   )
 })
 
@@ -234,4 +302,36 @@ test_that("if supplied, `n` must be an integer of size 1", {
 
 test_that("`class` must be a character vector", {
   expect_error(new_data_frame(class = 1), "must be NULL or a character vector")
+})
+
+test_that("flat width is computed", {
+  df_flat_width <- function(x) {
+    .Call(vctrs_df_flat_width, x)
+  }
+  expect_identical(df_flat_width(mtcars), ncol(mtcars))
+
+  df <- tibble(x = 1, y = tibble(x = 2, y = tibble(x = 3), z = 4), z = 5)
+  expect_identical(df_flat_width(df), 5L)
+})
+
+test_that("can flatten data frames", {
+  df_flatten <- function(x) {
+    .Call(vctrs_df_flatten, x)
+  }
+  expect_identical(df_flatten(mtcars), as.data.frame(as.list(mtcars)))
+
+  df <- tibble(x = 1, y = tibble(x = 2, y = tibble(x = 3), z = 4), z = 5)
+  expect_identical(df_flatten(df), new_data_frame(list(x = 1, x = 2, x = 3, z = 4, z = 5)))
+})
+
+test_that("new_data_frame() zaps existing attributes", {
+  struct <- structure(list(), foo = 1)
+  expect_identical(
+    attributes(new_data_frame(struct)),
+    attributes(new_data_frame(list())),
+  )
+  expect_identical(
+    attributes(new_data_frame(struct, bar = 2)),
+    attributes(new_data_frame(list(), bar = 2)),
+  )
 })

@@ -15,16 +15,6 @@ SEXP syms_vec_slice_dispatch_integer64 = NULL;
 SEXP fns_vec_slice_dispatch_integer64 = NULL;
 
 
-/**
- * This `vec_slice()` variant falls back to `[` with S3 objects.
- *
- * @param to The type to restore to.
- * @param dispatch When `true`, dispatches to `[` for compatibility
- *   with base R. When `false`, uses native implementations.
- */
-SEXP vec_slice_impl(SEXP x, SEXP subscript);
-
-
 #define SLICE_SUBSCRIPT(RTYPE, CTYPE, DEREF, CONST_DEREF, NA_VALUE)     \
   const CTYPE* data = CONST_DEREF(x);                                   \
   R_len_t n = Rf_length(subscript);                                     \
@@ -281,9 +271,14 @@ static void repair_na_names(SEXP names, SEXP subscript) {
   }
 
   SEXP* p_names = STRING_PTR(names);
+  const int* p_subscript = INTEGER_RO(subscript);
 
   // Special handling for a compact_rep object with repeated `NA`
   if (is_compact_rep(subscript)) {
+    if (p_subscript[0] != NA_INTEGER) {
+      return;
+    }
+
     for (R_len_t i = 0; i < n; ++i) {
       p_names[i] = strings_empty;
     }
@@ -291,10 +286,8 @@ static void repair_na_names(SEXP names, SEXP subscript) {
     return;
   }
 
-  const int* p_i = INTEGER_RO(subscript);
-
   for (R_len_t i = 0; i < n; ++i) {
-    if (p_i[i] == NA_INTEGER) {
+    if (p_subscript[i] == NA_INTEGER) {
       p_names[i] = strings_empty;
     }
   }

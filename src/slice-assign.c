@@ -10,15 +10,14 @@ SEXP fns_vec_assign_fallback = NULL;
 SEXP vec_as_location(SEXP i, R_len_t n, SEXP names);
 
 static SEXP vec_assign_fallback(SEXP x, SEXP index, SEXP value);
-SEXP vec_assign_impl(SEXP x, SEXP index, SEXP value, bool clone);
-static SEXP lgl_assign(SEXP x, SEXP index, SEXP value, bool clone);
-static SEXP int_assign(SEXP x, SEXP index, SEXP value, bool clone);
-static SEXP dbl_assign(SEXP x, SEXP index, SEXP value, bool clone);
-static SEXP cpl_assign(SEXP x, SEXP index, SEXP value, bool clone);
-SEXP chr_assign(SEXP x, SEXP index, SEXP value, bool clone);
-static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone);
-SEXP list_assign(SEXP x, SEXP index, SEXP value, bool clone);
-SEXP df_assign(SEXP x, SEXP index, SEXP value, bool clone);
+static SEXP lgl_assign(SEXP x, SEXP index, SEXP value);
+static SEXP int_assign(SEXP x, SEXP index, SEXP value);
+static SEXP dbl_assign(SEXP x, SEXP index, SEXP value);
+static SEXP cpl_assign(SEXP x, SEXP index, SEXP value);
+SEXP chr_assign(SEXP x, SEXP index, SEXP value);
+static SEXP raw_assign(SEXP x, SEXP index, SEXP value);
+SEXP list_assign(SEXP x, SEXP index, SEXP value);
+SEXP df_assign(SEXP x, SEXP index, SEXP value);
 
 // [[ register(); include("vctrs.h") ]]
 SEXP vec_assign(SEXP x, SEXP index, SEXP value) {
@@ -31,60 +30,73 @@ SEXP vec_assign(SEXP x, SEXP index, SEXP value) {
   vec_assert(x, &x_arg);
   vec_assert(value, &value_arg);
 
-  // Take the proxy of the RHS before coercing and recycling
-  SEXP value_orig = value;
-  value = PROTECT(vec_coercible_cast(value, x, &value_arg, &x_arg));
-  SEXP value_proxy = PROTECT(vec_proxy(value));
-
-  // Recycle the proxy of `value`
   index = PROTECT(vec_as_location_opts(index,
                                        vec_size(x),
                                        PROTECT(vec_names(x)),
-                                       vec_as_location_default_assign_opts));
-  value_proxy = PROTECT(vec_recycle(value_proxy, vec_size(index), &value_arg));
+                                       vec_as_location_default_assign_opts,
+                                       NULL));
 
-  struct vctrs_proxy_info info = vec_proxy_info(x);
+  // Cast and recycle `value`
+  value = PROTECT(vec_coercible_cast(value, x, &value_arg, &x_arg));
+  value = PROTECT(vec_recycle(value, vec_size(index), &value_arg));
 
-  SEXP out;
-  if (vec_requires_fallback(x, info) || has_dim(x)) {
-    // Restore the value before falling back to `[<-`
-    value = PROTECT(vec_restore(value_proxy, value_orig, R_NilValue));
-    out = vec_assign_fallback(x, index, value);
-    UNPROTECT(1);
-  } else {
-    out = PROTECT(vec_assign_impl(info.proxy, index, value_proxy, true));
-    out = vec_restore(out, x, R_NilValue);
-    UNPROTECT(1);
-  }
+  SEXP proxy = PROTECT(vec_proxy(x));
 
-  UNPROTECT(5);
+  proxy = PROTECT(vec_proxy_assign(proxy, index, value));
+
+  SEXP out = vec_restore(proxy, x, R_NilValue);
+
+  UNPROTECT(6);
   return out;
 }
 
-/**
- * @param clone Whether to shallow duplicate before assignment. With
- *   data frames, the cloning is recursive. If `false`, make sure you
- *   own the relevant parts of the vector structure (data frame
- *   columns in particular).
- */
-SEXP vec_assign_impl(SEXP proxy, SEXP index, SEXP value, bool clone) {
+SEXP vec_assign_switch(SEXP proxy, SEXP index, SEXP value) {
   switch (vec_proxy_typeof(proxy)) {
-  case vctrs_type_logical:     return lgl_assign(proxy, index, value, clone);
-  case vctrs_type_integer:     return int_assign(proxy, index, value, clone);
-  case vctrs_type_double:      return dbl_assign(proxy, index, value, clone);
-  case vctrs_type_complex:     return cpl_assign(proxy, index, value, clone);
-  case vctrs_type_character:   return chr_assign(proxy, index, value, clone);
-  case vctrs_type_raw:         return raw_assign(proxy, index, value, clone);
-  case vctrs_type_list:        return list_assign(proxy, index, value, clone);
-  case vctrs_type_dataframe:   return df_assign(proxy, index, value, clone);
+  case vctrs_type_logical:     return lgl_assign(proxy, index, value);
+  case vctrs_type_integer:     return int_assign(proxy, index, value);
+  case vctrs_type_double:      return dbl_assign(proxy, index, value);
+  case vctrs_type_complex:     return cpl_assign(proxy, index, value);
+  case vctrs_type_character:   return chr_assign(proxy, index, value);
+  case vctrs_type_raw:         return raw_assign(proxy, index, value);
+  case vctrs_type_list:        return list_assign(proxy, index, value);
+  case vctrs_type_dataframe:   return df_assign(proxy, index, value);
   case vctrs_type_null:
   case vctrs_type_unspecified:
   case vctrs_type_s3:
-                               Rf_error("Internal error in `vec_assign_impl()`: Unexpected type %s.",
+                               Rf_error("Internal error in `vec_assign_switch()`: Unexpected type %s.",
                                         vec_type_as_str(vec_typeof(proxy)));
   case vctrs_type_scalar:      stop_scalar_type(proxy, args_empty);
   }
-  never_reached("vec_assign_impl");
+  never_reached("vec_assign_switch");
+}
+
+// `vec_proxy_assign()` will duplicate the `proxy` if it is referenced or
+// marked as not mutable. Otherwise, `vec_proxy_assign()` will assign
+// directly into the `proxy`. Even though it can directly assign, the safe
+// way to call `vec_proxy_assign()` is to catch and protect its output rather
+// than relying on it to assign directly.
+
+/*
+ * @param proxy The proxy of the output container
+ * @param index The locations to assign `value` to
+ * @param value The value to assign into the proxy. Must already be
+ *   cast to the type of the true output container, and have been
+ *   recycled to the correct size. Should not be proxied, in case
+ *   we have to fallback.
+ */
+SEXP vec_proxy_assign(SEXP proxy, SEXP index, SEXP value) {
+  struct vctrs_proxy_info info = vec_proxy_info(value);
+
+  // If a fallback is required, the `proxy` is identical to the output container
+  // because no proxy method was called
+  if (vec_requires_fallback(value, info) || has_dim(proxy)) {
+    index = PROTECT(compact_materialize(index));
+    SEXP out = vec_assign_fallback(proxy, index, value);
+    UNPROTECT(1);
+    return out;
+  }
+
+  return vec_assign_switch(proxy, index, info.proxy);
 }
 
 #define ASSIGN_INDEX(CTYPE, DEREF, CONST_DEREF)                 \
@@ -97,7 +109,7 @@ SEXP vec_assign_impl(SEXP proxy, SEXP index, SEXP value, bool clone) {
   }                                                             \
                                                                 \
   const CTYPE* value_data = CONST_DEREF(value);                 \
-  SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);      \
+  SEXP out = PROTECT(r_maybe_duplicate(x));                     \
   CTYPE* out_data = DEREF(out);                                 \
                                                                 \
   for (R_len_t i = 0; i < n; ++i) {                             \
@@ -122,7 +134,7 @@ SEXP vec_assign_impl(SEXP proxy, SEXP index, SEXP value, bool clone) {
   }                                                             \
                                                                 \
   const CTYPE* value_data = CONST_DEREF(value);                 \
-  SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);      \
+  SEXP out = PROTECT(r_maybe_duplicate(x));                     \
   CTYPE* out_data = DEREF(out) + start;                         \
                                                                 \
   for (int i = 0; i < n; ++i, out_data += step, ++value_data) { \
@@ -139,22 +151,22 @@ SEXP vec_assign_impl(SEXP proxy, SEXP index, SEXP value, bool clone) {
     ASSIGN_INDEX(CTYPE, DEREF, CONST_DEREF);    \
   }
 
-static SEXP lgl_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+static SEXP lgl_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN(int, LOGICAL, LOGICAL_RO);
 }
-static SEXP int_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+static SEXP int_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN(int, INTEGER, INTEGER_RO);
 }
-static SEXP dbl_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+static SEXP dbl_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN(double, REAL, REAL_RO);
 }
-static SEXP cpl_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+static SEXP cpl_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN(Rcomplex, COMPLEX, COMPLEX_RO);
 }
-SEXP chr_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+SEXP chr_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN(SEXP, STRING_PTR, STRING_PTR_RO);
 }
-static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+static SEXP raw_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN(Rbyte, RAW, RAW_RO);
 }
 
@@ -172,7 +184,7 @@ static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone) {
              "`value` should have been recycled to fit `x`.");  \
   }                                                             \
                                                                 \
-  SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);      \
+  SEXP out = PROTECT(r_maybe_duplicate(x));                     \
                                                                 \
   for (R_len_t i = 0; i < n; ++i) {                             \
     int j = index_data[i];                                      \
@@ -195,7 +207,7 @@ static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone) {
              "`value` should have been recycled to fit `x`.");  \
   }                                                             \
                                                                 \
-  SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);      \
+  SEXP out = PROTECT(r_maybe_duplicate(x));                     \
                                                                 \
   for (R_len_t i = 0; i < n; ++i, start += step) {              \
     SET(out, start, GET(value, i));                             \
@@ -211,7 +223,7 @@ static SEXP raw_assign(SEXP x, SEXP index, SEXP value, bool clone) {
     ASSIGN_BARRIER_INDEX(GET, SET);             \
   }
 
-SEXP list_assign(SEXP x, SEXP index, SEXP value, bool clone) {
+SEXP list_assign(SEXP x, SEXP index, SEXP value) {
   ASSIGN_BARRIER(VECTOR_ELT, SET_VECTOR_ELT);
 }
 
@@ -226,8 +238,8 @@ SEXP list_assign(SEXP x, SEXP index, SEXP value, bool clone) {
  *
  * [[ include("vctrs.h") ]]
  */
-SEXP df_assign(SEXP x, SEXP index, SEXP value, bool clone) {
-  SEXP out = PROTECT(clone ? Rf_shallow_duplicate(x) : x);
+SEXP df_assign(SEXP x, SEXP index, SEXP value) {
+  SEXP out = PROTECT(r_maybe_duplicate(x));
   R_len_t n = Rf_length(out);
 
   for (R_len_t i = 0; i < n; ++i) {
@@ -237,15 +249,14 @@ SEXP df_assign(SEXP x, SEXP index, SEXP value, bool clone) {
     // No need to cast or recycle because those operations are
     // recursive and have already been performed. However, proxy and
     // restore are not recursive so need to be done for each element
-    // we recurse into.
+    // we recurse into. `vec_proxy_assign()` will proxy the `value_elt`.
     SEXP proxy_elt = PROTECT(vec_proxy(out_elt));
-    value_elt = PROTECT(vec_proxy(value_elt));
 
-    SEXP assigned = PROTECT(vec_assign_impl(proxy_elt, index, value_elt, clone));
+    SEXP assigned = PROTECT(vec_proxy_assign(proxy_elt, index, value_elt));
     assigned = vec_restore(assigned, out_elt, R_NilValue);
 
     SET_VECTOR_ELT(out, i, assigned);
-    UNPROTECT(3);
+    UNPROTECT(2);
   }
 
   UNPROTECT(1);

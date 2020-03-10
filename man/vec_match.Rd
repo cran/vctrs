@@ -5,9 +5,9 @@
 \alias{vec_in}
 \title{Find matching observations across vectors}
 \usage{
-vec_match(needles, haystack)
+vec_match(needles, haystack, ..., na_equal = TRUE)
 
-vec_in(needles, haystack)
+vec_in(needles, haystack, ..., na_equal = TRUE)
 }
 \arguments{
 \item{needles, haystack}{Vector of \code{needles} to search for in vector haystack.
@@ -16,6 +16,13 @@ return the location of the first match.
 
 \code{needles} and \code{haystack} are coerced to the same type prior to
 comparison.}
+
+\item{...}{These dots are for future extensions and must be empty.}
+
+\item{na_equal}{If \code{TRUE}, missing values in \code{needles} can be
+matched to missing values in \code{haystack}. If \code{FALSE}, they
+propagate, missing values in \code{needles} are represented as \code{NA} in
+the return value.}
 }
 \value{
 A vector the same length as \code{needles}. \code{vec_in()} returns a
@@ -31,10 +38,11 @@ haystack. \code{vec_match()} returns an integer vector giving location of
 }
 \section{Missing values}{
 
-In most cases, missing values are not considered to be equal, i.e.
-\code{NA == NA} is not \code{TRUE}. This behaviour would be unappealing here,
-so these functions consider all \code{NAs} to be equal. (Similarly,
-all \code{NaN} are also considered to be equal.)
+In most cases places in R, missing values are not considered to be equal,
+i.e. \code{NA == NA} is not \code{TRUE}. The exception is in matching functions
+like \code{\link[=match]{match()}} and \code{\link[=merge]{merge()}}, where an \code{NA} will match another \code{NA}.
+By \code{vec_match()} and \code{vec_in()} will match \code{NA}s; but you can control
+this behaviour with the \code{na_equal} argument.
 }
 
 \examples{

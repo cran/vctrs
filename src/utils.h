@@ -11,6 +11,7 @@
   } while (0)
 
 #define PROTECT_N(x, n) (++*n, PROTECT(x))
+#define PROTECT2(x, y) (PROTECT(x), PROTECT(y))
 
 enum vctrs_class_type {
   vctrs_class_list,
@@ -30,6 +31,7 @@ enum vctrs_class_type {
 };
 
 bool r_is_bool(SEXP x);
+int r_bool_as_int(SEXP x);
 
 SEXP vctrs_eval_mask_n(SEXP fn,
                        SEXP* syms, SEXP* args,
@@ -118,6 +120,8 @@ void init_list_of(SEXP x, SEXP ptype);
 SEXP new_empty_factor(SEXP levels);
 SEXP new_empty_ordered(SEXP levels);
 
+bool list_has_inner_vec_names(SEXP x, R_len_t size);
+
 void init_compact_seq(int* p, R_len_t start, R_len_t size, bool increasing);
 SEXP compact_seq(R_len_t start, R_len_t size, bool increasing);
 bool is_compact_seq(SEXP x);
@@ -146,6 +150,7 @@ extern SEXP (*rlang_env_dots_list)(SEXP);
 
 void* r_vec_deref(SEXP x);
 const void* r_vec_const_deref(SEXP x);
+
 void r_vec_ptr_inc(SEXPTYPE type, void** p, R_len_t i);
 void r_vec_fill(SEXPTYPE type, void* p, const void* value_p, R_len_t value_i, R_len_t n);
 
@@ -245,16 +250,92 @@ static inline SEXP r_list(SEXP x) {
 
 #define r_str_as_character Rf_ScalarString
 
+static inline SEXP r_sym_as_character(SEXP x) {
+  return r_str_as_character(PRINTNAME(x));
+}
+// This unserialises ASCII Unicode tags of the form `<U+xxxx>`
+extern SEXP (*rlang_sym_as_character)(SEXP x);
+
 SEXP r_as_data_frame(SEXP x);
 
 static inline void r_dbg_save(SEXP x, const char* name) {
   Rf_defineVar(Rf_install(name), x, R_GlobalEnv);
 }
 
+ERR r_try_catch(void (*fn)(void*),
+                void* fn_data,
+                SEXP cnd_sym,
+                void (*hnd)(void*),
+                void* hnd_data);
+
+extern SEXP vctrs_ns_env;
+extern SEXP syms_cnd_signal;
+static inline void r_cnd_signal(SEXP cnd) {
+  SEXP call = PROTECT(Rf_lang2(syms_cnd_signal, cnd));
+  Rf_eval(call, vctrs_ns_env);
+  UNPROTECT(1);
+}
+
+extern SEXP result_attrib;
+
+static inline SEXP r_result(SEXP x, ERR err) {
+  if (!err) {
+    err = R_NilValue;
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SET_VECTOR_ELT(result, 0, x);
+  SET_VECTOR_ELT(result, 1, err);
+
+  SET_ATTRIB(result, result_attrib);
+  SET_OBJECT(result, 1);
+
+  UNPROTECT(1);
+  return result;
+}
+
+static inline SEXP r_result_get(SEXP x, ERR err) {
+  if (err) {
+    r_cnd_signal(err);
+  }
+
+  return x;
+}
+
+static inline struct vctrs_arg vec_as_arg(SEXP x) {
+  if (x == R_NilValue) {
+    return *args_empty;
+  } else {
+    return new_wrapper_arg(NULL, r_chr_get_c_string(x, 0));
+  }
+}
+
+extern SEXP fns_quote;
+static inline SEXP expr_protect(SEXP x) {
+  switch (TYPEOF(x)) {
+  case SYMSXP:
+  case LANGSXP:
+    return Rf_lang2(fns_quote, x);
+  default:
+    return x;
+  }
+}
+
+static inline const void* vec_type_missing_value(enum vctrs_type type) {
+  switch (type) {
+  case vctrs_type_logical: return &NA_LOGICAL;
+  case vctrs_type_integer: return &NA_INTEGER;
+  case vctrs_type_double: return &NA_REAL;
+  case vctrs_type_complex: return &vctrs_shared_na_cpl;
+  case vctrs_type_character: return &NA_STRING;
+  case vctrs_type_list: return vctrs_shared_na_list;
+  default: vctrs_stop_unsupported_type(type, "vec_type_missing_value");
+  }
+}
+
 
 extern SEXP vctrs_ns_env;
 extern SEXP vctrs_shared_empty_str;
-extern SEXP vctrs_shared_na_lgl;
 extern SEXP vctrs_shared_zero_int;
 
 extern SEXP classes_data_frame;
@@ -301,6 +382,8 @@ extern SEXP chrs_negate;
 extern SEXP chrs_numeric;
 extern SEXP chrs_character;
 extern SEXP chrs_empty;
+extern SEXP chrs_cast;
+extern SEXP chrs_error;
 
 extern SEXP syms_i;
 extern SEXP syms_n;
@@ -329,6 +412,15 @@ extern SEXP syms_subscript_action;
 extern SEXP syms_subscript_type;
 extern SEXP syms_repair;
 extern SEXP syms_tzone;
+extern SEXP syms_data;
+extern SEXP syms_vctrs_error_incompatible_type;
+extern SEXP syms_vctrs_error_cast_lossy;
+extern SEXP syms_cnd_signal;
+extern SEXP syms_logical;
+extern SEXP syms_numeric;
+extern SEXP syms_character;
+extern SEXP syms_body;
+extern SEXP syms_parent;
 
 #define syms_names R_NamesSymbol
 

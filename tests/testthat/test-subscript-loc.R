@@ -166,6 +166,23 @@ test_that("num_as_location() optionally forbids negative indices", {
   expect_error(num_as_location(c(1, -10), 2L, negative = "error"), class = "vctrs_error_subscript_type")
 })
 
+test_that("num_as_location() optionally ignores zero indices", {
+  expect_identical(num_as_location(c(1, 0), 2L, zero = "ignore"), c(1L, 0L))
+})
+
+test_that("num_as_location() optionally forbids zero indices", {
+  verify_errors({
+    expect_error(
+      num_as_location(0L, 1L, zero = "error"),
+      class = "vctrs_error_subscript_type"
+    )
+    expect_error(
+      num_as_location(c(0, 0, 0, 0, 0, 0), 1, zero = "error"),
+      class = "vctrs_error_subscript_type"
+    )
+  })
+})
+
 test_that("vec_as_location() handles NULL", {
   expect_identical(
     vec_as_location(NULL, 10),
@@ -309,6 +326,10 @@ test_that("can customise subscript type errors", {
       num_as_location(c(1, 4), 2, oob = "extend", arg = "foo"),
       class = "vctrs_error_subscript_oob"
     )
+    expect_error(
+      num_as_location(0, 1, zero = "error", arg = "foo"),
+      class = "vctrs_error_subscript_type"
+    )
 
     "With tibble columns"
     expect_error(
@@ -346,6 +367,10 @@ test_that("can customise subscript type errors", {
     expect_error(
       with_tibble_cols(num_as_location(c(1, 4), 2, oob = "extend")),
       class = "vctrs_error_subscript_oob"
+    )
+    expect_error(
+      with_tibble_cols(num_as_location(0, 1, zero = "error")),
+      class = "vctrs_error_subscript_type"
     )
   })
 })
@@ -397,6 +422,10 @@ test_that("can customise OOB errors", {
   })
 })
 
+test_that("num_as_location() requires non-S3 inputs", {
+  expect_error(num_as_location(factor("foo"), 2), "must be a numeric vector")
+})
+
 test_that("conversion to locations has informative error messages", {
   verify_output(test_path("error", "test-subscript-loc.txt"), {
     "# vec_as_location() checks for mix of negative and missing locations"
@@ -409,6 +438,10 @@ test_that("conversion to locations has informative error messages", {
 
     "# num_as_location() optionally forbids negative indices"
     num_as_location(dbl(1, -1), 2L, negative = "error")
+
+    "# num_as_location() optionally forbids zero indices"
+    num_as_location(0L, 1L, zero = "error")
+    num_as_location(c(0, 0, 0, 0, 0, 0), 1, zero = "error")
 
     "# logical subscripts must match size of indexed vector"
     vec_as_location(c(TRUE, FALSE), 3)
@@ -488,6 +521,7 @@ test_that("conversion to locations has informative error messages", {
     vec_as_location(c(-1, NA), 3, arg = "foo")
     vec_as_location(c(-1, 1), 3, arg = "foo")
     num_as_location(c(1, 4), 2, oob = "extend", arg = "foo")
+    num_as_location(0, 1, zero = "error", arg = "foo")
     "With tibble columns"
     with_tibble_cols(num_as_location(-1, 2, negative = "error"))
     with_tibble_cols(num_as_location2(-1, 2, negative = "error"))
@@ -498,6 +532,7 @@ test_that("conversion to locations has informative error messages", {
     with_tibble_cols(vec_as_location(c(-1, NA), 3))
     with_tibble_cols(vec_as_location(c(-1, 1), 3))
     with_tibble_cols(num_as_location(c(1, 4), 2, oob = "extend"))
+    with_tibble_cols(num_as_location(0, 1, zero = "error"))
 
     "# can customise OOB errors"
     vec_slice(set_names(letters), "foo")

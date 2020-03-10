@@ -1,0 +1,50 @@
+
+vec_unchop() errors on unsupported location values
+==================================================
+
+> vec_unchop(list(1, 2), list(c(1, 2), 0))
+Error: Must subset elements with a valid subscript vector.
+x The subscript can't contain `0` values.
+i It has a `0` value at location 1.
+
+> vec_unchop(list(1), list(-1))
+Error: Must subset elements with a valid subscript vector.
+x The subscript can't contain negative locations.
+
+
+vec_unchop() falls back to c() for foreign classes
+==================================================
+
+> vec_unchop(list(foobar(1), foobar(2)))
+Error: Can't find vctrs or base methods for concatenation.
+vctrs methods must be implemented for class `vctrs_foobar`.
+See <https://vctrs.r-lib.org/articles/s3-vector.html>.
+
+
+vec_unchop() fallback doesn't support `name_spec` or `ptype`
+============================================================
+
+> vec_unchop(list(foobar(1)), name_spec = "{outer}_{inner}")
+Error: Can't use a name specification with non-vctrs types.
+vctrs methods must be implemented for class `vctrs_foobar`.
+See <https://vctrs.r-lib.org/articles/s3-vector.html>.
+
+> vec_unchop(list(foobar(1)), ptype = "")
+Error: Can't specify a prototype with non-vctrs types.
+vctrs methods must be implemented for class `vctrs_foobar`.
+See <https://vctrs.r-lib.org/articles/s3-vector.html>.
+
+
+vec_unchop() does not support non-numeric S3 indices
+====================================================
+
+> vec_unchop(list(1), list(factor("x")))
+Error: Must subset elements with a valid subscript vector.
+x The subscript has the wrong type `character`.
+i It must be numeric.
+
+> vec_unchop(list(1), list(foobar(1L)))
+Error: Must subset elements with a valid subscript vector.
+x The subscript has the wrong type `vctrs_foobar`.
+i It must be numeric.
+

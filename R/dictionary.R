@@ -197,13 +197,24 @@ vec_unique_count <- function(x) {
 #'
 #' `vec_in()` is equivalent to [%in%]; `vec_match()` is equivalent to `match()`.
 #'
-#' @inherit vec_duplicate sections
+#' @section Missing values:
+#' In most cases places in R, missing values are not considered to be equal,
+#' i.e. `NA == NA` is not `TRUE`. The exception is in matching functions
+#' like [match()] and [merge()], where an `NA` will match another `NA`.
+#' By `vec_match()` and `vec_in()` will match `NA`s; but you can control
+#' this behaviour with the `na_equal` argument.
+#'
 #' @param needles,haystack Vector of `needles` to search for in vector haystack.
 #'   `haystack` should usually be unique; if not `vec_match()` will only
 #'   return the location of the first match.
 #'
 #'   `needles` and `haystack` are coerced to the same type prior to
 #'   comparison.
+#' @inheritParams ellipsis::dots_empty
+#' @param na_equal If `TRUE`, missing values in `needles` can be
+#'   matched to missing values in `haystack`. If `FALSE`, they
+#'   propagate, missing values in `needles` are represented as `NA` in
+#'   the return value.
 #' @return A vector the same length as `needles`. `vec_in()` returns a
 #'   logical vector; `vec_match()` returns an integer vector.
 #' @export
@@ -217,12 +228,14 @@ vec_unique_count <- function(x) {
 #'
 #' # Only the first index of duplicates is returned
 #' vec_match(c("a", "b"), c("a", "b", "a", "b"))
-vec_match <- function(needles, haystack) {
-  .Call(vctrs_match, needles, haystack)
+vec_match <- function(needles, haystack, ..., na_equal = TRUE) {
+  if (!missing(...)) ellipsis::check_dots_empty()
+  .Call(vctrs_match, needles, haystack, na_equal)
 }
 
 #' @export
 #' @rdname vec_match
-vec_in <- function(needles, haystack) {
-  .Call(vctrs_in, needles, haystack)
+vec_in <- function(needles, haystack, ..., na_equal = TRUE) {
+  if (!missing(...)) ellipsis::check_dots_empty()
+  .Call(vctrs_in, needles, haystack, na_equal)
 }

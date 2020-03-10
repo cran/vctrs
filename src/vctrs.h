@@ -1,3 +1,7 @@
+#ifndef VCTRS_H
+#define VCTRS_H
+
+
 #define R_NO_REMAP
 #include <R.h>
 #include <Rinternals.h>
@@ -9,6 +13,10 @@
 typedef R_xlen_t r_ssize_t;
 
 #define VCTRS_ASSERT(condition) ((void)sizeof(char[1 - 2*!(condition)]))
+
+// An ERR indicates either a C NULL in case of no error, or a
+// condition object otherwise
+#define ERR SEXP
 
 
 // Vector types -------------------------------------------------
@@ -86,6 +94,7 @@ struct vctrs_proxy_info vec_proxy_info(SEXP x);
 enum vctrs_type vec_typeof(SEXP x);
 enum vctrs_type vec_proxy_typeof(SEXP x);
 const char* vec_type_as_str(enum vctrs_type type);
+bool vec_is_list(SEXP x);
 bool vec_is_vector(SEXP x);
 bool vec_is_partial(SEXP x);
 
@@ -325,6 +334,8 @@ extern SEXP vctrs_shared_true;
 extern SEXP vctrs_shared_false;
 
 extern Rcomplex vctrs_shared_na_cpl;
+extern SEXP vctrs_shared_na_lgl;
+extern SEXP vctrs_shared_na_list;
 
 SEXP vec_unspecified(R_len_t n);
 bool vec_is_unspecified(SEXP x);
@@ -354,25 +365,38 @@ R_len_t vec_bare_dim_n(SEXP x);
 SEXP vec_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
 SEXP vec_cast_common(SEXP xs, SEXP to);
 SEXP vec_coercible_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
-SEXP vec_slice(SEXP x, SEXP index);
+SEXP vec_coercible_cast_e(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg, ERR* err);
+bool vec_is_coercible(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg, int* dir);
+SEXP vec_slice(SEXP x, SEXP subscript);
+SEXP vec_slice_impl(SEXP x, SEXP subscript);
 SEXP vec_chop(SEXP x, SEXP indices);
 SEXP vec_slice_shaped(enum vctrs_type type, SEXP x, SEXP index);
 SEXP vec_assign(SEXP x, SEXP index, SEXP value);
+SEXP vec_proxy_assign(SEXP proxy, SEXP index, SEXP value);
 bool vec_requires_fallback(SEXP x, struct vctrs_proxy_info info);
 SEXP vec_init(SEXP x, R_len_t n);
 SEXP vec_type(SEXP x);
 SEXP vec_ptype_finalise(SEXP x);
 bool vec_is_unspecified(SEXP x);
 SEXP vec_recycle(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
+SEXP vec_recycle_fallback(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
 SEXP vec_recycle_common(SEXP xs, R_len_t size);
 SEXP vec_names(SEXP x);
 SEXP vec_group_loc(SEXP x);
-SEXP vec_match(SEXP needles, SEXP haystack);
+SEXP vec_match_params(SEXP needles, SEXP haystack, bool na_equal);
+
+static inline SEXP vec_match(SEXP needles, SEXP haystack) {
+  return vec_match_params(needles, haystack, true);
+}
+
 
 SEXP vec_c(SEXP xs,
            SEXP ptype,
            SEXP name_spec,
            const struct name_repair_opts* name_repair);
+
+SEXP vec_c_fallback(SEXP xs, SEXP ptype, SEXP name_spec);
+bool needs_vec_c_fallback(SEXP xs);
 
 SEXP vec_type2(SEXP x,
                SEXP y,
@@ -413,9 +437,9 @@ R_len_t df_raw_size_from_list(SEXP x);
 SEXP vec_bare_df_restore(SEXP x, SEXP to, SEXP n);
 SEXP vec_df_restore(SEXP x, SEXP to, SEXP n);
 
-SEXP chr_assign(SEXP out, SEXP index, SEXP value, bool clone);
-SEXP list_assign(SEXP out, SEXP index, SEXP value, bool clone);
-SEXP df_assign(SEXP out, SEXP index, SEXP value, bool clone);
+SEXP chr_assign(SEXP out, SEXP index, SEXP value);
+SEXP list_assign(SEXP out, SEXP index, SEXP value);
+SEXP df_assign(SEXP out, SEXP index, SEXP value);
 
 // equal_object() never propagates missingness, so
 // it can return a `bool`
@@ -432,10 +456,16 @@ bool equal_names(SEXP x, SEXP y);
  * The behaviour is undefined if these conditions are not true.
  */
 int equal_scalar(SEXP x, R_len_t i, SEXP y, R_len_t j, bool na_equal);
+int equal_scalar_na_equal_p(enum vctrs_type proxy_type,
+                            SEXP x, const void* x_p, R_len_t i,
+                            SEXP y, const void* y_p, R_len_t j);
+int equal_scalar_na_propagate_p(enum vctrs_type proxy_type,
+                                SEXP x, const void* x_p, R_len_t i,
+                                SEXP y, const void* y_p, R_len_t j);
 int compare_scalar(SEXP x, R_len_t i, SEXP y, R_len_t j, bool na_equal);
 
 uint32_t hash_object(SEXP x);
-void hash_fill(uint32_t* p, R_len_t n, SEXP x);
+void hash_fill(uint32_t* p, R_len_t n, SEXP x, bool na_equal);
 
 SEXP vec_unique(SEXP x);
 bool duplicated_any(SEXP names);
@@ -603,4 +633,7 @@ void stop_corrupt_ordered_levels(SEXP x, struct vctrs_arg* arg) __attribute__((n
 # define COMPLEX_RO(x) ((const Rcomplex*) COMPLEX(x))
 # define STRING_PTR_RO(x) ((const SEXP*) STRING_PTR(x))
 # define RAW_RO(x) ((const Rbyte*) RAW(x))
+#endif
+
+
 #endif

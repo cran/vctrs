@@ -1,16 +1,16 @@
 #include <R.h>
 #include <Rinternals.h>
 #include <stdlib.h> // for NULL
-#include <stdbool.h> // for bool
+#include <stdbool.h>
 #include <R_ext/Rdynload.h>
 #include "altrep-rle.h"
 #include "vctrs.h"
 
-/* FIXME:
-   Check these declarations against the C/Fortran source code.
-*/
+// Compile with `-fvisibility=hidden -DHAVE_VISIBILITY_ATTRIBUTE` if you link to this library
+#include <R_ext/Visibility.h>
+#define export attribute_visible extern
 
-/* .Call calls */
+
 extern SEXP vctrs_list_get(SEXP, SEXP);
 extern SEXP vctrs_list_set(SEXP, SEXP, SEXP);
 extern SEXP vctrs_field_get(SEXP, SEXP);
@@ -20,7 +20,7 @@ extern SEXP vctrs_n_fields(SEXP);
 extern SEXP vctrs_hash(SEXP);
 extern SEXP vctrs_hash_object(SEXP);
 extern SEXP vctrs_equal_object(SEXP, SEXP);
-extern SEXP vctrs_in(SEXP, SEXP);
+extern SEXP vctrs_in(SEXP, SEXP, SEXP);
 extern SEXP vctrs_duplicated(SEXP);
 extern SEXP vctrs_unique_loc(SEXP);
 extern SEXP vctrs_count(SEXP);
@@ -33,7 +33,7 @@ extern SEXP vec_group_loc(SEXP);
 extern SEXP vctrs_equal(SEXP, SEXP, SEXP);
 extern SEXP vctrs_equal_na(SEXP);
 extern SEXP vctrs_compare(SEXP, SEXP, SEXP);
-extern SEXP vec_match(SEXP, SEXP);
+extern SEXP vctrs_match(SEXP, SEXP, SEXP);
 extern SEXP vctrs_duplicated_any(SEXP);
 extern SEXP vctrs_size(SEXP);
 extern SEXP vec_dim(SEXP);
@@ -45,10 +45,11 @@ extern SEXP vctrs_type2(SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_typeof2(SEXP, SEXP);
 extern SEXP vctrs_typeof2_s3(SEXP, SEXP);
 extern SEXP vctrs_cast(SEXP, SEXP, SEXP, SEXP);
-extern SEXP vctrs_as_location(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP vctrs_as_location(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_slice(SEXP, SEXP);
 extern SEXP vctrs_init(SEXP, SEXP);
 extern SEXP vctrs_chop(SEXP, SEXP);
+extern SEXP vctrs_unchop(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_chop_seq(SEXP, SEXP, SEXP, SEXP);
 extern SEXP vec_slice_seq(SEXP, SEXP, SEXP, SEXP);
 extern SEXP vec_slice_rep(SEXP, SEXP, SEXP);
@@ -89,24 +90,36 @@ extern SEXP vctrs_validate_minimal_names(SEXP, SEXP);
 extern SEXP vctrs_as_names(SEXP, SEXP, SEXP);
 extern SEXP vctrs_is_partial(SEXP);
 extern SEXP vctrs_is_list(SEXP);
+extern SEXP vctrs_try_catch_callback(SEXP, SEXP);
+extern SEXP vctrs_is_coercible(SEXP, SEXP, SEXP, SEXP);
+extern SEXP vctrs_as_subscript(SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP vctrs_as_subscript_result(SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP vctrs_df_flat_width(SEXP);
+extern SEXP df_flatten(SEXP);
+extern SEXP vctrs_equal_scalar(SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP vctrs_linked_version();
 
-// Very experimental
-// Available in the API header
-extern R_len_t vec_size(SEXP);
-extern SEXP vec_init(SEXP, R_len_t);
-extern SEXP vec_assign_impl(SEXP, SEXP, SEXP, bool);
-extern SEXP vec_slice_impl(SEXP, SEXP);
-extern SEXP vec_names(SEXP);
-extern SEXP vec_recycle(SEXP, R_len_t, struct vctrs_arg*);
-extern SEXP vec_chop(SEXP, SEXP);
 
-// Extremely experimental
-// Exported but not directly available in the API header
-extern SEXP compact_seq(R_len_t, R_len_t, bool);
-extern SEXP init_compact_seq(int*, R_len_t, R_len_t, bool);
 
-// Extremely experimental (for dplyr)
+// Maturing
+// In the public header
 extern bool vec_is_vector(SEXP);
+extern R_len_t short_vec_size(SEXP);
+extern SEXP short_vec_recycle(SEXP, R_len_t);
+
+// Experimental
+// Exported but not available in the public header
+extern SEXP exp_vec_cast(SEXP, SEXP);
+extern SEXP exp_vec_restore(SEXP, SEXP);
+extern SEXP exp_vec_proxy(SEXP);
+extern SEXP exp_vec_chop(SEXP, SEXP);
+extern SEXP exp_vec_proxy_assign(SEXP, SEXP, SEXP);
+extern SEXP exp_vec_slice_impl(SEXP, SEXP);
+extern SEXP exp_vec_names(SEXP);
+extern SEXP exp_vec_set_names(SEXP, SEXP);
+extern SEXP exp_short_vec_init(SEXP, R_len_t);
+extern SEXP exp_short_compact_seq(R_len_t, R_len_t, bool);
+extern SEXP exp_short_init_compact_seq(int*, R_len_t, R_len_t, bool);
 
 // Defined below
 SEXP vctrs_init_library(SEXP);
@@ -125,7 +138,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_hash",                       (DL_FUNC) &vctrs_hash, 1},
   {"vctrs_hash_object",                (DL_FUNC) &vctrs_hash_object, 1},
   {"vctrs_equal_object",               (DL_FUNC) &vctrs_equal_object, 2},
-  {"vctrs_in",                         (DL_FUNC) &vctrs_in, 2},
+  {"vctrs_in",                         (DL_FUNC) &vctrs_in, 3},
   {"vctrs_unique_loc",                 (DL_FUNC) &vctrs_unique_loc, 1},
   {"vctrs_duplicated",                 (DL_FUNC) &vctrs_duplicated, 1},
   {"vctrs_duplicated_any",             (DL_FUNC) &vctrs_duplicated_any, 1},
@@ -143,7 +156,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_equal",                      (DL_FUNC) &vctrs_equal, 3},
   {"vctrs_equal_na",                   (DL_FUNC) &vctrs_equal_na, 1},
   {"vctrs_compare",                    (DL_FUNC) &vctrs_compare, 3},
-  {"vctrs_match",                      (DL_FUNC) &vec_match, 2},
+  {"vctrs_match",                      (DL_FUNC) &vctrs_match, 3},
   {"vctrs_typeof",                     (DL_FUNC) &vctrs_typeof, 2},
   {"vctrs_init_library",               (DL_FUNC) &vctrs_init_library, 1},
   {"vctrs_is_vector",                  (DL_FUNC) &vctrs_is_vector, 1},
@@ -151,10 +164,11 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_typeof2",                    (DL_FUNC) &vctrs_typeof2, 2},
   {"vctrs_typeof2_s3",                 (DL_FUNC) &vctrs_typeof2_s3, 2},
   {"vctrs_cast",                       (DL_FUNC) &vctrs_cast, 4},
-  {"vctrs_as_location",                (DL_FUNC) &vctrs_as_location, 7},
+  {"vctrs_as_location",                (DL_FUNC) &vctrs_as_location, 8},
   {"vctrs_slice",                      (DL_FUNC) &vctrs_slice, 2},
   {"vctrs_init",                       (DL_FUNC) &vctrs_init, 2},
   {"vctrs_chop",                       (DL_FUNC) &vctrs_chop, 2},
+  {"vctrs_unchop",                     (DL_FUNC) &vctrs_unchop, 5},
   {"vctrs_chop_seq",                   (DL_FUNC) &vctrs_chop_seq, 4},
   {"vctrs_slice_seq",                  (DL_FUNC) &vec_slice_seq, 4},
   {"vctrs_slice_rep",                  (DL_FUNC) &vec_slice_rep, 3},
@@ -196,6 +210,14 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_as_names",                   (DL_FUNC) &vctrs_as_names, 3},
   {"vctrs_is_partial",                 (DL_FUNC) &vctrs_is_partial, 1},
   {"vctrs_is_list",                    (DL_FUNC) &vctrs_is_list, 1},
+  {"vctrs_try_catch_callback",         (DL_FUNC) &vctrs_try_catch_callback, 2},
+  {"vctrs_is_coercible",               (DL_FUNC) &vctrs_is_coercible, 4},
+  {"vctrs_as_subscript",               (DL_FUNC) &vctrs_as_subscript, 5},
+  {"vctrs_as_subscript_result",        (DL_FUNC) &vctrs_as_subscript_result, 5},
+  {"vctrs_df_flat_width",              (DL_FUNC) &vctrs_df_flat_width, 1},
+  {"vctrs_df_flatten",                 (DL_FUNC) &df_flatten, 1},
+  {"vctrs_equal_scalar",               (DL_FUNC) &vctrs_equal_scalar, 5},
+  {"vctrs_linked_version",             (DL_FUNC) &vctrs_linked_version, 0},
   {NULL, NULL, 0}
 };
 
@@ -220,33 +242,30 @@ static const R_ExternalMethodDef ExtEntries[] = {
   {NULL, NULL, 0}
 };
 
-void R_init_vctrs(DllInfo *dll)
+export void R_init_vctrs(DllInfo *dll)
 {
     R_registerRoutines(dll, NULL, CallEntries, NULL, ExtEntries);
     R_useDynamicSymbols(dll, FALSE);
 
-    // Very experimental
-    R_RegisterCCallable("vctrs", "vec_proxy", (DL_FUNC) &vec_proxy);
-    R_RegisterCCallable("vctrs", "vec_restore", (DL_FUNC) &vec_restore);
-    R_RegisterCCallable("vctrs", "vec_assign_impl", (DL_FUNC) &vec_assign_impl);
-    R_RegisterCCallable("vctrs", "vec_slice_impl", (DL_FUNC) &vec_slice_impl);
-    R_RegisterCCallable("vctrs", "vec_names", (DL_FUNC) &vec_names);
-    R_RegisterCCallable("vctrs", "vec_set_names", (DL_FUNC) &vec_set_names);
-    R_RegisterCCallable("vctrs", "vec_chop", (DL_FUNC) &vec_chop);
+    // Maturing
+    // In the public header
+    R_RegisterCCallable("vctrs", "vec_is_vector",      (DL_FUNC) &vec_is_vector);
+    R_RegisterCCallable("vctrs", "short_vec_size",     (DL_FUNC) &short_vec_size);
+    R_RegisterCCallable("vctrs", "short_vec_recycle",  (DL_FUNC) &short_vec_recycle);
 
-    // Extremely experimental
-    // Exported but not directly available in the API header
-    R_RegisterCCallable("vctrs", "vctrs_cast", (DL_FUNC) &vctrs_cast);
-    R_RegisterCCallable("vctrs", "compact_seq", (DL_FUNC) &compact_seq);
-    R_RegisterCCallable("vctrs", "init_compact_seq", (DL_FUNC) &init_compact_seq);
-
-    // Extremely experimental as eventually these might support R_xlen_t
-    R_RegisterCCallable("vctrs", "short_vec_size", (DL_FUNC) &vec_size);
-    R_RegisterCCallable("vctrs", "short_vec_recycle", (DL_FUNC) &vec_recycle);
-    R_RegisterCCallable("vctrs", "short_vec_init", (DL_FUNC) &vec_init);
-
-    // Extremely experimental (for dplyr)
-    R_RegisterCCallable("vctrs", "vec_is_vector", (DL_FUNC) &vec_is_vector);
+    // Experimental
+    // Exported but not available in the public header
+    R_RegisterCCallable("vctrs", "exp_vec_cast",                (DL_FUNC) &exp_vec_cast);
+    R_RegisterCCallable("vctrs", "exp_vec_restore",             (DL_FUNC) &exp_vec_restore);
+    R_RegisterCCallable("vctrs", "exp_vec_proxy",               (DL_FUNC) &exp_vec_proxy);
+    R_RegisterCCallable("vctrs", "exp_vec_chop",                (DL_FUNC) &exp_vec_chop);
+    R_RegisterCCallable("vctrs", "exp_vec_proxy_assign",        (DL_FUNC) &exp_vec_proxy_assign);
+    R_RegisterCCallable("vctrs", "exp_vec_slice_impl",          (DL_FUNC) &exp_vec_slice_impl);
+    R_RegisterCCallable("vctrs", "exp_vec_names",               (DL_FUNC) &exp_vec_names);
+    R_RegisterCCallable("vctrs", "exp_vec_set_names",           (DL_FUNC) &exp_vec_set_names);
+    R_RegisterCCallable("vctrs", "exp_short_vec_init",          (DL_FUNC) &exp_short_vec_init);
+    R_RegisterCCallable("vctrs", "exp_short_compact_seq",       (DL_FUNC) &exp_short_compact_seq);
+    R_RegisterCCallable("vctrs", "exp_short_init_compact_seq",  (DL_FUNC) &exp_short_init_compact_seq);
 
     // Altrep classes
     vctrs_init_altrep_rle(dll);
@@ -260,6 +279,7 @@ void vctrs_init_names(SEXP ns);
 void vctrs_init_proxy_restore(SEXP ns);
 void vctrs_init_slice(SEXP ns);
 void vctrs_init_slice_assign(SEXP ns);
+void vctrs_init_subscript(SEXP ns);
 void vctrs_init_subscript_loc(SEXP ns);
 void vctrs_init_ptype2_dispatch(SEXP ns);
 void vctrs_init_type(SEXP ns);
@@ -275,6 +295,7 @@ SEXP vctrs_init_library(SEXP ns) {
   vctrs_init_proxy_restore(ns);
   vctrs_init_slice(ns);
   vctrs_init_slice_assign(ns);
+  vctrs_init_subscript(ns);
   vctrs_init_subscript_loc(ns);
   vctrs_init_ptype2_dispatch(ns);
   vctrs_init_type(ns);
