@@ -76,10 +76,6 @@ paste_line <- function (...) {
   paste(chr(...), collapse = "\n")
 }
 
-has_dim <- function(x) {
-  !is.null(attr(x, "dim"))
-}
-
 # Experimental
 result <- function(ok = NULL, err = NULL) {
   structure(
@@ -99,6 +95,8 @@ obj_type <- function(x) {
     vec_ptype_full(x)
   } else if (is.object(x)) {
     paste(class(x), collapse = "/")
+  } else if (is_function(x)) {
+    "function"
   } else {
     typeof(x)
   }
@@ -152,4 +150,14 @@ try_catch_impl <- function(data, ...) {
     .Call(vctrs_try_catch_callback, data, NULL),
     ...
   )
+}
+
+ns_methods <- function(name) {
+  ns_env(name)$.__S3MethodsTable__.
+}
+
+df_has_base_subset <- function(x) {
+  table <- ns_methods(.BaseNamespaceEnv)
+  method <- .Call(vctrs_s3_find_method, "[", x, table)
+  is_null(method) || identical(method, `[.data.frame`)
 }

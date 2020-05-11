@@ -15,7 +15,7 @@ expect_args <- function(x, y, x_arg, y_arg) {
   err <- catch_cnd(vec_ptype2(x, y, x_arg = x_arg, y_arg = y_arg), classes = "vctrs_error_incompatible_type")
   expect_true(!is_null(err))
 
-  expect_true(grepl(paste0("for `", x_arg, "`"), err$message, fixed = TRUE))
+  expect_true(grepl(paste0("combine `", x_arg, "`"), err$message, fixed = TRUE))
   expect_true(grepl(paste0("and `", y_arg, "`"), err$message, fixed = TRUE))
 
   expect_identical(list(err$x_arg, err$y_arg), list(x_arg, y_arg))
@@ -87,4 +87,26 @@ expect_error_cnd <- function(object, class, message = NULL, ..., .fixed = TRUE) 
   exp_fields <- list2(...)
   expect_true(is_empty(setdiff(!!names(exp_fields), names(cnd))))
   expect_equal(cnd[names(exp_fields)], exp_fields)
+}
+
+expect_incompatible_df <- function(x, fallback) {
+  if (is_true(peek_option("vctrs:::warn_on_fallback"))) {
+    x <- expect_df_fallback_warning(x)
+  }
+  expect_identical(x, fallback)
+}
+# Never warns so we don't get repeat warnings
+expect_incompatible_df_cast <- function(x, fallback) {
+  expect_identical(x, fallback)
+}
+
+expect_df_fallback_warning <- function(expr) {
+  expect_warning({{ expr }}, "falling back to (<data.frame>|<tibble>)")
+}
+expect_df_fallback_warning_maybe <- function(expr) {
+  if (is_true(peek_option("vctrs:::warn_on_fallback"))) {
+    expect_warning({{ expr }}, "falling back to (<data.frame>|<tibble>)")
+  } else {
+    expr
+  }
 }

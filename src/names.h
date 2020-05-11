@@ -12,18 +12,21 @@ enum name_repair_type {
 
 struct name_repair_opts {
   enum name_repair_type type;
+  struct vctrs_arg* arg;
   SEXP fn;
   bool quiet;
 };
 
-extern struct name_repair_opts default_unique_repair_opts_obj;
-static const struct name_repair_opts* const default_unique_repair_opts =
-  &default_unique_repair_opts_obj;
+extern struct name_repair_opts unique_repair_default_opts;
+extern struct name_repair_opts unique_repair_silent_opts;
+
+static struct name_repair_opts const * const p_unique_repair_default_opts = &unique_repair_default_opts;
+static struct name_repair_opts const * const p_unique_repair_silent_opts = &unique_repair_silent_opts;
 
 #define PROTECT_NAME_REPAIR_OPTS(opts) PROTECT((opts)->fn)
 
 SEXP vec_as_names(SEXP names, const struct name_repair_opts* opts);
-struct name_repair_opts new_name_repair_opts(SEXP name_repair, bool quiet);
+struct name_repair_opts new_name_repair_opts(SEXP name_repair, struct vctrs_arg* arg, bool quiet);
 const char* name_repair_arg_as_c_string(enum name_repair_type type);
 bool is_unique_names(SEXP names);
 SEXP vec_as_unique_names(SEXP names, bool quiet);

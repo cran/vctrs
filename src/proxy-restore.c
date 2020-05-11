@@ -8,10 +8,13 @@ static SEXP fns_vec_restore_dispatch = NULL;
 
 
 // Copy attributes except names and dim. This duplicates `x` if needed.
+// [[ include("vctrs.h") ]]
 SEXP vec_restore_default(SEXP x, SEXP to) {
   SEXP attrib = ATTRIB(to);
 
-  if (attrib == R_NilValue) {
+  const bool is_s4 = IS_S4_OBJECT(to);
+
+  if (attrib == R_NilValue && !is_s4) {
     return x;
   }
 
@@ -20,10 +23,8 @@ SEXP vec_restore_default(SEXP x, SEXP to) {
   attrib = PROTECT(Rf_shallow_duplicate(attrib));
   ++n_protect;
 
-  if (MAYBE_REFERENCED(x)) {
-    x = PROTECT(Rf_shallow_duplicate(x));
-    ++n_protect;
-  }
+  x = PROTECT(r_clone_referenced(x));
+  ++n_protect;
 
   // Remove vectorised attributes which might be incongruent after reshaping.
   // Shouldn't matter for GNU R but other R implementations might have checks.
@@ -45,13 +46,15 @@ SEXP vec_restore_default(SEXP x, SEXP to) {
         if (tag == R_ClassSymbol) {
           class = CAR(node);
         }
+
         if (prev == R_NilValue) {
           attrib = CDR(attrib);
-          node = CDR(node);
-          continue;
+        } else {
+          SETCDR(prev, CDR(node));
         }
 
-        SETCDR(prev, CDR(node));
+        node = CDR(node);
+        continue;
       }
 
       prev = node;
@@ -66,12 +69,20 @@ SEXP vec_restore_default(SEXP x, SEXP to) {
 
   if (dim == R_NilValue) {
     SEXP nms = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+
+    // Check if `to` is a data frame early. If `x` and `to` point
+    // to the same reference, then `SET_ATTRIB()` would alter `to`.
     SEXP rownms = PROTECT(df_rownames(x));
+    const bool restore_rownms = rownms != R_NilValue && is_data_frame(to);
 
     SET_ATTRIB(x, attrib);
 
     Rf_setAttrib(x, R_NamesSymbol, nms);
-    Rf_setAttrib(x, R_RowNamesSymbol, rownms);
+
+    // Don't restore row names if `to` isn't a data frame
+    if (restore_rownms) {
+      Rf_setAttrib(x, R_RowNamesSymbol, rownms);
+    }
     UNPROTECT(2);
   } else {
     SEXP dimnames = PROTECT(Rf_getAttrib(x, R_DimNamesSymbol));
@@ -87,6 +98,10 @@ SEXP vec_restore_default(SEXP x, SEXP to) {
     Rf_setAttrib(x, R_ClassSymbol, class);
   }
 
+  if (is_s4) {
+    r_mark_s4(x);
+  }
+
   UNPROTECT(n_protect);
   return x;
 }
@@ -99,7 +114,7 @@ static SEXP vec_restore_dispatch(SEXP x, SEXP to, SEXP n) {
 }
 
 static SEXP bare_df_restore_impl(SEXP x, SEXP to, R_len_t size) {
-  x = PROTECT(r_maybe_duplicate(x));
+  x = PROTECT(r_clone_referenced(x));
   x = PROTECT(vec_restore_default(x, to));
 
   if (Rf_getAttrib(x, R_NamesSymbol) == R_NilValue) {
@@ -143,6 +158,9 @@ SEXP vec_restore(SEXP x, SEXP to, SEXP n) {
   case vctrs_class_bare_factor:
   case vctrs_class_bare_ordered:
   case vctrs_class_none: return vec_restore_default(x, to);
+  case vctrs_class_bare_date: return vec_date_restore(x, to);
+  case vctrs_class_bare_posixct: return vec_posixct_restore(x, to);
+  case vctrs_class_bare_posixlt: return vec_posixlt_restore(x, to);
   case vctrs_class_bare_data_frame:
   case vctrs_class_bare_tibble: return vec_bare_df_restore(x, to, n);
   case vctrs_class_data_frame: return vec_df_restore(x, to, n);

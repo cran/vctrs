@@ -4,6 +4,7 @@
 #include "subscript-loc.h"
 #include "type-data-frame.h"
 #include "utils.h"
+#include "dim.h"
 
 // Initialised at load time
 SEXP syms_vec_slice_fallback = NULL;
@@ -426,8 +427,7 @@ SEXP vec_slice(SEXP x, SEXP subscript) {
 
 // [[ include("vctrs.h") ]]
 SEXP vec_init(SEXP x, R_len_t n) {
-  struct vctrs_arg x_arg = new_wrapper_arg(NULL, "x");
-  vec_assert(x, &x_arg);
+  vec_assert(x, NULL);
 
   SEXP i = PROTECT(compact_rep(NA_INTEGER, n));
 

@@ -168,6 +168,30 @@ test_that("vec_chop() falls back to `[` for shaped objects with no proxy when in
   expect_equal(result, x)
 })
 
+test_that("vec_chop() with data frame proxies always uses the proxy's length info", {
+  local_methods(
+    vec_proxy.vctrs_proxy = function(x) {
+      x <- proxy_deref(x)
+      new_data_frame(list(x = x$x, y = x$y))
+    },
+    vec_restore.vctrs_proxy = function(x, to, ...) {
+      new_proxy(list(x = x$x, y = x$y))
+    }
+  )
+
+  x <- new_proxy(list(x = 1:2, y = 3:4))
+  result <- vec_chop(x)
+
+  result1 <- result[[1]]
+  result2 <- result[[2]]
+
+  expect1 <- new_proxy(list(x = 1L, y = 3L))
+  expect2 <- new_proxy(list(x = 2L, y = 4L))
+
+  expect_identical(proxy_deref(result1), proxy_deref(expect1))
+  expect_identical(proxy_deref(result2), proxy_deref(expect2))
+})
+
 # vec_chop + compact_seq --------------------------------------------------
 
 # `start` is 0-based
@@ -381,14 +405,46 @@ test_that("not all inputs have to be named", {
   expect_named(vec_unchop(x, indices), c("", "a", "c"))
 })
 
-test_that("data frame row names are never kept", {
+test_that("data frame row names are kept", {
   df1 <- data.frame(x = 1:2, row.names = c("r1", "r2"))
   df2 <- data.frame(x = 3:4, row.names = c("r3", "r4"))
 
   x <- list(df1, df2)
   indices <- list(c(3, 1), c(2, 4))
 
-  expect_identical(.row_names_info(vec_unchop(x, indices)), -4L)
+  result <- vec_unchop(x, indices)
+  expect <- c("r2", "r3", "r1", "r4")
+
+  expect_identical(vec_names(result), expect)
+})
+
+test_that("individual data frame columns retain vector names", {
+  df1 <- data_frame(x = c(a = 1, b = 2))
+  df2 <- data_frame(x = c(c = 3))
+
+  x <- list(df1, df2)
+  indices <- list(c(1, 2), 3)
+
+  result <- vec_unchop(x, indices = indices)
+
+  expect_named(result$x, c("a", "b", "c"))
+
+  # Names should be identical to equivalent `vec_c()` call
+  expect_identical(vec_unchop(x, indices = indices), vec_c(!!!x))
+})
+
+test_that("df-col row names are repaired silently", {
+  df1 <- data_frame(x = new_data_frame(list(a = 1), row.names = "inner"))
+  df2 <- data_frame(x = new_data_frame(list(a = 2), row.names = "inner"))
+
+  x <- list(df1, df2)
+  indices <- list(1, 2)
+
+  expect_silent({
+    result <- vec_unchop(x, indices = indices)
+  })
+
+  expect_identical(vec_names(result$x), c("inner...1", "inner...2"))
 })
 
 test_that("monitoring - can technically assign to the same location twice", {
@@ -438,18 +494,27 @@ test_that("missing values propagate", {
   )
 })
 
-test_that("vec_unchop() falls back to c() for foreign classes", {
-  verify_errors({
-    expect_error(
-      vec_unchop(list(foobar(1), foobar(2))),
-      "concatenation"
-    )
-  })
-  expect_error(
-    vec_unchop(list(NULL, foobar(1), foobar(2)), list(integer(), 1, 2)),
-    "concatenation"
-  )
+test_that("vec_unchop() works with simple homogeneous foreign S3 classes", {
+  expect_identical(vec_unchop(list(foobar(1), foobar(2))), vec_c(foobar(c(1, 2))))
+})
 
+test_that("vec_unchop() fails with complex foreign S3 classes", {
+  verify_errors({
+    x <- structure(foobar(1), attr_foo = "foo")
+    y <- structure(foobar(2), attr_bar = "bar")
+    expect_error(vec_unchop(list(x, y)), class = "vctrs_error_incompatible_type")
+  })
+})
+
+test_that("vec_unchop() fails with complex foreign S4 classes", {
+  verify_errors({
+    joe <- .Counts(c(1L, 2L), name = "Joe")
+    jane <- .Counts(3L, name = "Jane")
+    expect_error(vec_unchop(list(joe, jane)), class = "vctrs_error_incompatible_type")
+  })
+})
+
+test_that("vec_unchop() falls back to c() if S3 method is available", {
   # Check off-by-one error
   expect_error(
     vec_unchop(list(foobar(1), "", foobar(2)), list(1, 2, 3)),
@@ -488,6 +553,17 @@ test_that("vec_unchop() falls back to c() for foreign classes", {
   expect_error(
     vec_unchop(list(foobar(1), foobar(2)), list(1, 3)),
     class = "vctrs_error_subscript_oob"
+  )
+
+  # Unassigned locations results in missing values.
+  # Repeated assignment uses the last assigned value.
+  expect_identical(
+    vec_unchop(list(foobar(c(1, 2)), foobar(3)), list(c(1, 3), 1)),
+    foobar(c(3, NA, 2))
+  )
+  expect_identical(
+    vec_unchop(list(foobar(c(1, 2)), foobar(3)), list(c(2, NA), NA)),
+    foobar(c(NA, 1, NA))
   )
 
   # Names are kept
@@ -537,23 +613,60 @@ test_that("vec_unchop() falls back to c() for foreign classes", {
   )
 })
 
-test_that("vec_unchop() fallback doesn't support `name_spec` or `ptype`", {
+test_that("vec_unchop() falls back for S4 classes with a registered c() method", {
+  joe <- .Counts(c(1L, 2L), name = "Joe")
+  jane <- .Counts(3L, name = "Jane")
+
   verify_errors({
     expect_error(
-      vec_unchop(list(foobar(1)), name_spec = "{outer}_{inner}"),
+      vec_unchop(list(joe, 1, jane), list(c(1, 2), 3, 4)),
+      class = "vctrs_error_incompatible_type"
+    )
+  })
+
+  local_c_counts()
+
+  expect_identical(
+    vec_unchop(list(joe, jane), list(c(1, 3), 2)),
+    .Counts(c(1L, 3L, 2L), name = "Dispatched")
+  )
+
+  expect_identical(
+    vec_unchop(list(NULL, joe, jane), list(integer(), c(1, 3), 2)),
+    .Counts(c(1L, 3L, 2L), name = "Dispatched")
+  )
+
+  # Unassigned locations results in missing values.
+  # Repeated assignment uses the last assigned value.
+  expect_identical(
+    vec_unchop(list(joe, jane), list(c(1, 3), 1)),
+    .Counts(c(3L, NA, 2L), name = "Dispatched")
+  )
+  expect_identical(
+    vec_unchop(list(joe, jane), list(c(2, NA), NA)),
+    .Counts(c(NA, 1L, NA), name = "Dispatched")
+  )
+})
+
+test_that("vec_unchop() fallback doesn't support `name_spec` or `ptype`", {
+  verify_errors({
+    foo <- structure(foobar(1), foo = "foo")
+    bar <- structure(foobar(2), bar = "bar")
+    expect_error(
+      with_c_foobar(vec_unchop(list(foo, bar), name_spec = "{outer}_{inner}")),
       "name specification"
     )
+    # Used to be an error about `ptype`
     expect_error(
-      vec_unchop(list(foobar(1)), ptype = ""),
-      "prototype"
+      with_c_foobar(vec_unchop(list(foobar(1)), ptype = "")),
+      class = "vctrs_error_incompatible_type"
     )
   })
 })
 
 test_that("vec_unchop() supports numeric S3 indices", {
   local_methods(
-    vec_ptype2.vctrs_foobar = function(x, y, ...) UseMethod("vec_ptype2.vctrs_foobar", y),
-    vec_ptype2.vctrs_foobar.default = function(x, y, ...) vec_default_ptype2(x, y),
+    vec_ptype2.vctrs_foobar = function(x, y, ...) UseMethod("vec_ptype2.vctrs_foobar"),
     vec_ptype2.vctrs_foobar.integer = function(x, y, ...) foobar(integer()),
     vec_cast.integer.vctrs_foobar = function(x, to, ...) vec_data(x)
   )
@@ -574,21 +687,74 @@ test_that("vec_unchop() does not support non-numeric S3 indices", {
   })
 })
 
+test_that("can ignore names in `vec_unchop()` by providing a `zap()` name-spec (#232)", {
+  expect_error(vec_unchop(list(a = c(b = 1:2))))
+  expect_identical(
+    vec_unchop(list(a = c(b = 1:2), b = 3L), name_spec = zap()),
+    1:3
+  )
+  expect_identical(
+    vec_unchop(
+      list(a = c(foo = 1:2), b = c(bar = 3L)),
+      indices = list(2:1, 3),
+      name_spec = zap()
+    ),
+    c(2L, 1L, 3L)
+  )
+
+  verify_errors({
+    expect_error(
+      vec_unchop(list(a = c(b = letters), b = 3L), name_spec = zap()),
+      class = "vctrs_error_incompatible_type"
+    )
+    expect_error(
+      vec_unchop(
+        list(a = c(foo = 1:2), b = c(bar = "")),
+        indices = list(2:1, 3),
+        name_spec = zap()
+      ),
+      class = "vctrs_error_incompatible_type"
+    )
+  })
+})
+
 test_that("vec_unchop() has informative error messages", {
   verify_output(test_path("error", "test-unchop.txt"), {
     "# vec_unchop() errors on unsupported location values"
     vec_unchop(list(1, 2), list(c(1, 2), 0))
     vec_unchop(list(1), list(-1))
 
-    "# vec_unchop() falls back to c() for foreign classes"
-    vec_unchop(list(foobar(1), foobar(2)))
+    "# vec_unchop() fails with complex foreign S3 classes"
+    x <- structure(foobar(1), attr_foo = "foo")
+    y <- structure(foobar(2), attr_bar = "bar")
+    vec_unchop(list(x, y))
+
+    "# vec_unchop() fails with complex foreign S4 classes"
+    joe <- .Counts(c(1L, 2L), name = "Joe")
+    jane <- .Counts(3L, name = "Jane")
+    vec_unchop(list(joe, jane))
+
+    "# vec_unchop() falls back for S4 classes with a registered c() method"
+    joe1 <- .Counts(c(1L, 2L), name = "Joe")
+    joe2 <- .Counts(3L, name = "Joe")
+    vec_unchop(list(joe1, 1, joe2), list(c(1, 2), 3, 4))
 
     "# vec_unchop() fallback doesn't support `name_spec` or `ptype`"
-    vec_unchop(list(foobar(1)), name_spec = "{outer}_{inner}")
-    vec_unchop(list(foobar(1)), ptype = "")
+    foo <- structure(foobar(1), foo = "foo")
+    bar <- structure(foobar(2), bar = "bar")
+    with_c_foobar(vec_unchop(list(foo, bar), name_spec = "{outer}_{inner}"))
+    with_c_foobar(vec_unchop(list(foobar(1)), ptype = ""))
 
     "# vec_unchop() does not support non-numeric S3 indices"
     vec_unchop(list(1), list(factor("x")))
     vec_unchop(list(1), list(foobar(1L)))
+
+    "# can ignore names in `vec_unchop()` by providing a `zap()` name-spec (#232)"
+    vec_unchop(list(a = c(b = letters), b = 3L), name_spec = zap())
+    vec_unchop(
+        list(a = c(foo = 1:2), b = c(bar = "")),
+        indices = list(2:1, 3),
+        name_spec = zap()
+      )
   })
 })

@@ -60,7 +60,12 @@ vec_ptype_full.data.frame <- function(x, ...) {
 
 #' @export
 vec_ptype_abbr.data.frame <- function(x, ...) {
-  paste0("df", vec_ptype_shape(x))
+  if (inherits_only(x, "data.frame")) {
+    abbr <- "df"
+  } else {
+    abbr <- class(x)[[1]]
+  }
+  paste0(abbr, vec_ptype_shape(x))
 }
 
 #' @export
@@ -69,23 +74,211 @@ vec_proxy_compare.data.frame <- function(x, ..., relax = FALSE) {
   new_data_frame(out, nrow(x))
 }
 
+df_is_coercible <- function(x, y, df_fallback = FALSE) {
+  vec_is_coercible(
+    new_data_frame(x),
+    new_data_frame(y),
+    df_fallback = df_fallback
+  )
+}
+
 
 # Coercion ----------------------------------------------------------------
+
+#' Coercion between two data frames
+#'
+#' `df_ptype2()` and `df_cast()` are the two functions you need to
+#' call from `vec_ptype2()` and `vec_cast()` methods for data frame
+#' subclasses. See [?howto-faq-coercion-data-frame][howto-faq-coercion-data-frame].
+#' Their main job is to determine the common type of two data frames,
+#' adding and coercing columns as needed, or throwing an incompatible
+#' type error when the columns are not compatible.
+#'
+#' @param x,y,to Subclasses of data frame.
+#' @inheritParams vec_ptype2
+#' @inheritParams vec_cast
+#'
+#' @return
+#' * When `x` and `y` are not compatible, an error of class
+#'   `vctrs_error_incompatible_type` is thrown.
+#' * When `x` and `y` are compatible, `df_ptype2()` returns the common
+#'   type as a bare data frame. `tib_ptype2()` returns the common type
+#'   as a bare tibble.
+#'
+#' @export
+df_ptype2 <- function(x, y, ..., x_arg = "", y_arg = "") {
+  .Call(vctrs_df_ptype2, x, y, x_arg, y_arg, df_fallback = FALSE)
+}
+#' @rdname df_ptype2
+#' @export
+df_cast <- function(x, to, ..., x_arg = "", to_arg = "") {
+  .Call(vctrs_df_cast_params, x, to, x_arg, to_arg, FALSE)
+}
+
+df_ptype2_params <- function(x,
+                             y,
+                             ...,
+                             x_arg = "",
+                             y_arg = "",
+                             df_fallback = FALSE) {
+  .Call(vctrs_df_ptype2, x, y, x_arg, y_arg, df_fallback)
+}
+df_cast_params <- function(x,
+                           to,
+                           ...,
+                           x_arg = "",
+                           to_arg = "",
+                           df_fallback = FALSE) {
+  .Call(vctrs_df_cast_params, x, to, x_arg, to_arg, df_fallback)
+}
 
 #' @rdname new_data_frame
 #' @export vec_ptype2.data.frame
 #' @method vec_ptype2 data.frame
 #' @export
-vec_ptype2.data.frame <- function(x, y, ...) UseMethod("vec_ptype2.data.frame", y)
+vec_ptype2.data.frame <- function(x, y, ...) {
+  UseMethod("vec_ptype2.data.frame")
+}
 #' @method vec_ptype2.data.frame data.frame
 #' @export
-vec_ptype2.data.frame.data.frame <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  .Call(vctrs_type2_df_df, x, y, x_arg, y_arg)
+vec_ptype2.data.frame.data.frame <- function(x, y, ...) {
+  df_ptype2(x, y, ...)
 }
-#' @method vec_ptype2.data.frame default
-#' @export
-vec_ptype2.data.frame.default <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  vec_default_ptype2(x, y, x_arg = x_arg, y_arg = y_arg)
+
+vec_ptype2_df_fallback_normalise <- function(x, y) {
+  x_orig <- x
+  y_orig <- y
+
+  ptype <- df_ptype2_params(x, y, df_fallback = TRUE)
+
+  x <- x[0, , drop = FALSE]
+  y <- y[0, , drop = FALSE]
+
+  x[seq_along(ptype)] <- ptype
+  y[seq_along(ptype)] <- ptype
+
+  # Names might have been repaired by `[<-`
+  names(x) <- names(ptype)
+  names(y) <- names(ptype)
+
+  # Restore attributes if no `[` method is implemented
+  if (df_has_base_subset(x)) {
+    x <- vec_restore(x, x_orig)
+  }
+  if (df_has_base_subset(y)) {
+    y <- vec_restore(y, y_orig)
+  }
+
+  list(x = x, y = y)
+}
+vec_cast_df_fallback_normalise <- function(x, to) {
+  orig <- x
+  cast <- df_cast_params(x, to, df_fallback = TRUE)
+
+  # Seq-assign should be more widely implemented than empty-assign?
+  x[seq_along(to)] <- cast
+
+  # Names might have been repaired by `[<-`
+  names(x) <- names(cast)
+
+  # Restore attributes if no `[` method is implemented
+  if (df_has_base_subset(x)) {
+    x <- vec_restore(x, orig)
+  }
+
+  x
+}
+
+df_needs_normalisation <- function(x, y) {
+  is.data.frame(x) &&
+    is.data.frame(y) &&
+    df_is_coercible(x, y, df_fallback = TRUE)
+}
+
+# Fallback for data frame subclasses (#981)
+vec_ptype2_df_fallback <- function(x, y, df_fallback, x_arg = "", y_arg = "") {
+  seen_tibble <- inherits(x, "tbl_df") || inherits(y, "tbl_df")
+
+  ptype <- vec_ptype2_params(
+    new_data_frame(x),
+    new_data_frame(y),
+    df_fallback = TRUE
+  )
+
+  classes <- NULL
+  if (is_df_fallback(x)) {
+    classes <- c(classes, known_classes(x))
+    x <- df_fallback_as_df(x)
+  }
+  if (is_df_fallback(y)) {
+    classes <- c(classes, known_classes(y))
+    y <- df_fallback_as_df(y)
+  }
+  x_class <- class(x)[[1]]
+  y_class <- class(y)[[1]]
+
+  if (needs_fallback_warning(df_fallback) &&
+      !all(c(x_class, y_class) %in% c(classes, "tbl_df"))) {
+    fallback_class <- if (seen_tibble) "<tibble>" else "<data.frame>"
+    msg <- cnd_type_message(
+      x, y,
+      x_arg, y_arg,
+      NULL,
+      "combine",
+      NULL,
+      fallback = fallback_class
+    )
+
+    if (identical(x_class, y_class)) {
+      msg <- c(
+        msg,
+        incompatible_attrib_bullets()
+      )
+    }
+
+    warn(msg)
+  }
+
+  # Return a fallback class so we don't warn multiple times. This
+  # fallback class is stripped in `vec_ptype_finalise()`.
+  new_fallback_df(
+    ptype,
+    known_classes = unique(c(classes, x_class, y_class)),
+    seen_tibble = seen_tibble
+  )
+}
+
+is_df_subclass <- function(x) {
+  inherits(x, "data.frame") && !identical(class(x), "data.frame")
+}
+is_df_fallback <- function(x) {
+  inherits(x, "vctrs:::df_fallback")
+}
+new_fallback_df <- function(x, known_classes, seen_tibble = FALSE, n = nrow(x)) {
+  class <- "vctrs:::df_fallback"
+  if (seen_tibble) {
+    class <- c(class, "tbl_df", "tbl")
+  }
+
+  new_data_frame(
+    x,
+    n = n,
+    known_classes = known_classes,
+    seen_tibble = seen_tibble,
+    class = class
+  )
+}
+df_fallback_as_df <- function(x) {
+  if (inherits(x, "tbl_df")) {
+    new_data_frame(x, class = c("tbl_df", "tbl", "data.frame"))
+  } else {
+    new_data_frame(x)
+  }
+}
+known_classes <- function(x) {
+  if (is_df_fallback(x)) {
+    attr(x, "known_classes")
+  }
 }
 
 
@@ -100,38 +293,13 @@ vec_cast.data.frame <- function(x, to, ...) {
 }
 #' @export
 #' @method vec_cast.data.frame data.frame
-vec_cast.data.frame.data.frame <- function(x, to, ..., x_arg = "x", to_arg = "to") {
-  .Call(vctrs_df_as_dataframe, x, to, x_arg, to_arg)
-}
-#' @export
-#' @method vec_cast.data.frame list
-vec_cast.data.frame.list <- function(x, to, ..., x_arg = "x", to_arg = "to") {
-  vec_list_cast(x, to, x_arg = x_arg, to_arg = to_arg)
-}
-#' @export
-#' @method vec_cast.data.frame default
-vec_cast.data.frame.default <- function(x, to, ..., x_arg = "x", to_arg = "to") {
-  vec_default_cast(x, to, x_arg = x_arg, to_arg = to_arg)
+vec_cast.data.frame.data.frame <- function(x, to, ..., x_arg = "", to_arg = "") {
+  df_cast(x, to, x_arg = x_arg, to_arg = to_arg)
 }
 
 #' @export
 vec_restore.data.frame <- function(x, to, ..., n = NULL) {
   .Call(vctrs_bare_df_restore, x, to, n)
-}
-
-
-# AsIS --------------------------------------------------------------------
-
-# Arises with base df ctor: `data.frame(x = I(list(1, 2:3)))`
-
-#' @export
-vec_proxy.AsIs <- function(x, ...) {
-  class(x) <- setdiff(class(x), "AsIs")
-  vec_proxy(x)
-}
-#' @export
-vec_restore.AsIs <- function(x, to, ...) {
-  I(x)
 }
 
 # Helpers -----------------------------------------------------------------
@@ -140,7 +308,7 @@ df_size <- function(x) {
   .Call(vctrs_df_size, x)
 }
 
-df_lossy_cast <- function(out, x, to) {
+df_lossy_cast <- function(out, x, to, ..., x_arg = "", to_arg = "") {
   extra <- setdiff(names(x), names(to))
 
   maybe_lossy_cast(
@@ -149,7 +317,13 @@ df_lossy_cast <- function(out, x, to) {
     to = to,
     lossy = length(extra) > 0,
     locations = int(),
+    x_arg = x_arg,
+    to_arg = to_arg,
     details = inline_list("Dropped variables: ", extra, quote = "`"),
     class = "vctrs_error_cast_lossy_dropped"
   )
+}
+
+is_informative_error.vctrs_error_cast_lossy_dropped <- function(x, ...) {
+  FALSE
 }

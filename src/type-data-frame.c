@@ -2,6 +2,9 @@
 #include "type-data-frame.h"
 #include "utils.h"
 
+static SEXP syms_df_lossy_cast = NULL;
+static SEXP fns_df_lossy_cast = NULL;
+
 static SEXP new_compact_rownames(R_len_t n);
 
 
@@ -38,7 +41,7 @@ bool is_bare_tibble(SEXP x) {
 
 // [[ include("type-data-frame.h") ]]
 SEXP new_data_frame(SEXP x, R_len_t n) {
-  x = PROTECT(r_maybe_duplicate(x));
+  x = PROTECT(r_clone_referenced(x));
   init_data_frame(x, n);
 
   UNPROTECT(1);
@@ -69,7 +72,7 @@ SEXP vctrs_new_data_frame(SEXP args) {
   bool has_rownames = false;
   R_len_t size = df_size_from_list(x, n);
 
-  SEXP out = PROTECT(r_maybe_duplicate(x));
+  SEXP out = PROTECT(r_clone_referenced(x));
 
   for (SEXP node = attrib; node != R_NilValue; node = CDR(node)) {
     SEXP tag = TAG(node);
@@ -86,7 +89,7 @@ SEXP vctrs_new_data_frame(SEXP args) {
 
     if (tag == R_RowNamesSymbol) {
       // "row.names" is checked for consistency with n (if provided)
-      if (size != rownames_size(CAR(node))) {
+      if (size != rownames_size(CAR(node)) && n != R_NilValue) {
         Rf_errorcall(R_NilValue, "`n` and `row.names` must be consistent.");
       }
 
@@ -273,17 +276,312 @@ SEXP df_rownames(SEXP x) {
   return R_NilValue;
 }
 
-SEXP df_container_type(SEXP x) {
-  SEXP type = PROTECT(Rf_allocVector(VECSXP, 0));
 
-  SET_ATTRIB(type, Rf_shallow_duplicate(ATTRIB(x)));
-  SET_OBJECT(type, OBJECT(x));
-  Rf_setAttrib(type, R_NamesSymbol, vctrs_shared_empty_chr);
+// vctrs type methods ------------------------------------------------
 
-  init_compact_rownames(type, df_size(x));
+// [[ register() ]]
+SEXP vctrs_df_ptype2(SEXP x, SEXP y, SEXP x_arg, SEXP y_arg, SEXP df_fallback) {
+  struct vctrs_arg x_arg_ = vec_as_arg(x_arg);
+  struct vctrs_arg y_arg_ = vec_as_arg(y_arg);;
+
+  const struct ptype2_opts opts = {
+    .x = x,
+    .y = y,
+    .x_arg = &x_arg_,
+    .y_arg = &y_arg_,
+    .df_fallback = r_lgl_get(df_fallback, 0)
+  };
+
+  return df_ptype2(&opts);
+}
+
+static
+SEXP df_ptype2_match(const struct ptype2_opts* opts,
+                     SEXP x_names,
+                     SEXP y_names);
+
+static
+SEXP df_ptype2_loop(const struct ptype2_opts* opts,
+                    SEXP y_names);
+
+// [[ include("type-data-frame.h") ]]
+SEXP df_ptype2(const struct ptype2_opts* opts) {
+  SEXP x_names = PROTECT(r_names(opts->x));
+  SEXP y_names = PROTECT(r_names(opts->y));
+
+  SEXP out = R_NilValue;
+
+  if (equal_object(x_names, y_names)) {
+    out = df_ptype2_loop(opts, x_names);
+  } else {
+    out = df_ptype2_match(opts, x_names, y_names);
+  }
+
+  UNPROTECT(2);
+  return out;
+}
+
+SEXP df_ptype2_match(const struct ptype2_opts* opts,
+                     SEXP x_names,
+                     SEXP y_names) {
+  SEXP x = opts->x;
+  SEXP y = opts->y;
+
+  SEXP x_dups_pos = PROTECT(vec_match(x_names, y_names));
+  SEXP y_dups_pos = PROTECT(vec_match(y_names, x_names));
+
+  int* x_dups_pos_data = INTEGER(x_dups_pos);
+  int* y_dups_pos_data = INTEGER(y_dups_pos);
+
+  R_len_t x_len = Rf_length(x_names);
+  R_len_t y_len = Rf_length(y_names);
+
+  // Count columns that are only in `y`
+  R_len_t rest_len = 0;
+  for (R_len_t i = 0; i < y_len; ++i) {
+    if (y_dups_pos_data[i] == NA_INTEGER) {
+      ++rest_len;
+    }
+  }
+
+  R_len_t out_len = x_len + rest_len;
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, out_len));
+  SEXP nms = PROTECT(Rf_allocVector(STRSXP, out_len));
+  Rf_setAttrib(out, R_NamesSymbol, nms);
+
+  R_len_t i = 0;
+
+  // Fill in prototypes of all the columns that are in `x`, in order
+  for (; i < x_len; ++i) {
+    R_len_t dup = x_dups_pos_data[i];
+
+    struct arg_data_index x_arg_data = new_index_arg_data(r_chr_get_c_string(x_names, i),
+                                                          opts->x_arg);
+    struct vctrs_arg named_x_arg = new_index_arg(opts->x_arg, &x_arg_data);
+
+    SEXP type;
+    if (dup == NA_INTEGER) {
+      type = vec_ptype(VECTOR_ELT(x, i), &named_x_arg);
+    } else {
+      --dup; // 1-based index
+
+      struct arg_data_index y_arg_data = new_index_arg_data(r_chr_get_c_string(y_names, dup),
+                                                            opts->y_arg);
+      struct vctrs_arg named_y_arg = new_index_arg(opts->y_arg, &y_arg_data);
+
+      const struct ptype2_opts col_opts = {
+        .x = VECTOR_ELT(x, i),
+        .y = VECTOR_ELT(y, dup),
+        .x_arg = &named_x_arg,
+        .y_arg = &named_y_arg,
+        .df_fallback = opts->df_fallback
+      };
+      int _left;
+      type = vec_ptype2_opts(&col_opts, &_left);
+    }
+
+    SET_VECTOR_ELT(out, i, type);
+    SET_STRING_ELT(nms, i, STRING_ELT(x_names, i));
+  }
+
+  // Fill in prototypes of the columns that are only in `y`
+  for (R_len_t j = 0; i < out_len; ++j) {
+    R_len_t dup = y_dups_pos_data[j];
+    if (dup == NA_INTEGER) {
+      struct arg_data_index y_arg_data = new_index_arg_data(r_chr_get_c_string(y_names, j),
+                                                            opts->y_arg);
+      struct vctrs_arg named_y_arg = new_index_arg(opts->y_arg, &y_arg_data);
+
+      SET_VECTOR_ELT(out, i, vec_ptype(VECTOR_ELT(y, j), &named_y_arg));
+      SET_STRING_ELT(nms, i, STRING_ELT(y_names, j));
+      ++i;
+    }
+  }
+
+  init_data_frame(out, 0);
+
+  UNPROTECT(4);
+  return out;
+}
+
+static
+SEXP df_ptype2_loop(const struct ptype2_opts* opts,
+                    SEXP names) {
+  SEXP x = opts->x;
+  SEXP y = opts->y;
+
+  R_len_t len = Rf_length(names);
+
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, len));
+  Rf_setAttrib(out, R_NamesSymbol, names);
+
+  for (R_len_t i = 0; i < len; ++i) {
+    const char* name = r_chr_get_c_string(names, i);
+
+    struct arg_data_index x_arg_data = new_index_arg_data(name, opts->x_arg);
+    struct arg_data_index y_arg_data = new_index_arg_data(name, opts->y_arg);
+    struct vctrs_arg named_x_arg = new_index_arg(opts->x_arg, &x_arg_data);
+    struct vctrs_arg named_y_arg = new_index_arg(opts->y_arg, &y_arg_data);
+
+    const struct ptype2_opts col_opts = {
+      .x = VECTOR_ELT(x, i),
+      .y = VECTOR_ELT(y, i),
+      .x_arg = &named_x_arg,
+      .y_arg = &named_y_arg,
+      .df_fallback = opts->df_fallback
+    };
+    int _left;
+
+    SEXP type = vec_ptype2_opts(&col_opts, &_left);
+
+    SET_VECTOR_ELT(out, i, type);
+  }
+
+  init_data_frame(out, 0);
 
   UNPROTECT(1);
-  return type;
+  return out;
+}
+
+// [[ register() ]]
+SEXP vctrs_df_cast_params(SEXP x, SEXP to, SEXP x_arg_, SEXP to_arg_, SEXP df_fallback_) {
+  struct vctrs_arg x_arg = vec_as_arg(x_arg_);
+  struct vctrs_arg to_arg = vec_as_arg(to_arg_);;
+  enum df_fallback df_fallback = r_int_get(df_fallback_, 0);
+
+  const struct cast_opts opts = {
+    .x = x,
+    .to = to,
+    .x_arg = &x_arg,
+    .to_arg = &to_arg,
+    .df_fallback = df_fallback
+  };
+
+  return df_cast_opts(&opts);
+}
+
+static SEXP df_cast_match(const struct cast_opts* opts,
+                          SEXP x_names,
+                          SEXP to_names);
+
+static SEXP df_cast_loop(const struct cast_opts* opts, SEXP names);
+
+// Take all columns of `to` and preserve the order. Common columns are
+// cast to their types in `to`. Extra `x` columns are dropped and
+// cause a lossy cast. Extra `to` columns are filled with missing
+// values.
+// [[ include("cast.h") ]]
+SEXP df_cast_opts(const struct cast_opts* opts) {
+  SEXP x_names = PROTECT(r_names(opts->x));
+  SEXP to_names = PROTECT(r_names(opts->to));
+
+  if (x_names == R_NilValue || to_names == R_NilValue) {
+    Rf_error("Internal error in `df_cast()`: Data frame must have names.");
+  }
+
+  SEXP out = R_NilValue;
+
+  if (equal_object(x_names, to_names)) {
+    out = df_cast_loop(opts, x_names);
+  } else {
+    out = df_cast_match(opts, x_names, to_names);
+  }
+
+  UNPROTECT(2);
+  return out;
+}
+
+static SEXP df_cast_match(const struct cast_opts* opts,
+                          SEXP x_names,
+                          SEXP to_names) {
+  SEXP x = opts->x;
+  SEXP to = opts->to;
+
+  SEXP to_dups_pos = PROTECT(vec_match(to_names, x_names));
+  int* to_dups_pos_data = INTEGER(to_dups_pos);
+
+  R_len_t to_len = Rf_length(to_dups_pos);
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, to_len));
+  Rf_setAttrib(out, R_NamesSymbol, to_names);
+
+  R_len_t size = df_size(x);
+  R_len_t common_len = 0;
+
+  for (R_len_t i = 0; i < to_len; ++i) {
+    R_len_t pos = to_dups_pos_data[i];
+
+    SEXP col;
+    if (pos == NA_INTEGER) {
+      col = vec_init(VECTOR_ELT(to, i), size);
+    } else {
+      --pos; // 1-based index
+      struct arg_data_index x_arg_data = new_index_arg_data(r_chr_get_c_string(x_names, pos), opts->x_arg);
+      struct arg_data_index to_arg_data = new_index_arg_data(r_chr_get_c_string(to_names, i), opts->to_arg);
+      struct vctrs_arg named_x_arg = new_index_arg(opts->x_arg, &x_arg_data);
+      struct vctrs_arg named_to_arg = new_index_arg(opts->to_arg, &to_arg_data);
+      ++common_len;
+      col = vec_cast_params(VECTOR_ELT(x, pos),
+                            VECTOR_ELT(to, i),
+                            &named_x_arg,
+                            &named_to_arg,
+                            opts->df_fallback);
+    }
+
+    SET_VECTOR_ELT(out, i, col);
+  }
+
+  // Restore data frame size before calling `vec_restore()`. `x` and
+  // `to` might not have any columns to compute the original size.
+  init_data_frame(out, size);
+  Rf_setAttrib(out, R_RowNamesSymbol, df_rownames(x));
+
+  R_len_t extra_len = Rf_length(x) - common_len;
+  if (extra_len) {
+    out = vctrs_dispatch3(syms_df_lossy_cast, fns_df_lossy_cast,
+                          syms_out, out,
+                          syms_x, x,
+                          syms_to, to);
+  }
+
+  UNPROTECT(2);
+  return out;
+}
+
+static SEXP df_cast_loop(const struct cast_opts* opts, SEXP names) {
+  SEXP x = opts->x;
+  SEXP to = opts->to;
+
+  R_len_t len = Rf_length(names);
+
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, len));
+  Rf_setAttrib(out, R_NamesSymbol, names);
+
+  R_len_t size = df_size(x);
+
+  for (R_len_t i = 0; i < len; ++i) {
+    const char* name = r_chr_get_c_string(names, i);
+
+    struct arg_data_index x_arg_data = new_index_arg_data(name, opts->x_arg);
+    struct arg_data_index to_arg_data = new_index_arg_data(name, opts->to_arg);
+    struct vctrs_arg named_x_arg = new_index_arg(opts->x_arg, &x_arg_data);
+    struct vctrs_arg named_to_arg = new_index_arg(opts->to_arg, &to_arg_data);
+
+    SEXP col = vec_cast_params(VECTOR_ELT(x, i),
+                               VECTOR_ELT(to, i),
+                               &named_x_arg,
+                               &named_to_arg,
+                               opts->df_fallback);
+
+    SET_VECTOR_ELT(out, i, col);
+  }
+
+  // Restore data frame size before calling `vec_restore()`. `x` and
+  // `to` might not have any columns to compute the original size.
+  init_data_frame(out, size);
+  Rf_setAttrib(out, R_RowNamesSymbol, df_rownames(x));
+
+  UNPROTECT(1);
+  return out;
 }
 
 // If negative index, value is appended
@@ -390,11 +688,17 @@ SEXP df_repair_names(SEXP x, struct name_repair_opts* name_repair) {
   // update metadata and check invariants when special columns are
   // renamed?
   if (nms != repaired) {
-    x = PROTECT(r_maybe_duplicate(x));
+    x = PROTECT(r_clone_referenced(x));
     r_poke_names(x, repaired);
     UNPROTECT(1);
   }
 
   UNPROTECT(2);
   return x;
+}
+
+
+void vctrs_init_type_data_frame(SEXP ns) {
+  syms_df_lossy_cast = Rf_install("df_lossy_cast");
+  fns_df_lossy_cast = Rf_findVar(syms_df_lossy_cast, ns);
 }

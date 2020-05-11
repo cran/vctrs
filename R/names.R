@@ -51,6 +51,8 @@
 #'   The `"check_unique"` option doesn't perform any name repair.
 #'   Instead, an error is raised if the names don't suit the
 #'   `"unique"` criteria.
+#' @param repair_arg If specified and `repair = "check_unique"`, any errors
+#'   will include a hint to set the `repair_arg`.
 #' @param quiet By default, the user is informed of any renaming
 #'   caused by repairing the names. This only concerns unique and
 #'   universal repairing. Set `quiet` to `TRUE` to silence the
@@ -151,11 +153,12 @@
 vec_as_names <- function(names,
                          ...,
                          repair = c("minimal", "unique", "universal", "check_unique"),
+                         repair_arg = "",
                          quiet = FALSE) {
   if (!missing(...)) {
     ellipsis::check_dots_empty()
   }
-  .Call(vctrs_as_names, names, repair, quiet)
+  .Call(vctrs_as_names, names, repair, repair_arg, quiet)
 }
 
 validate_name_repair_arg <- function(repair) {
@@ -164,24 +167,30 @@ validate_name_repair_arg <- function(repair) {
 validate_minimal_names <- function(names, n = NULL) {
   .Call(vctrs_validate_minimal_names, names, n)
 }
-validate_unique <- function(names, n = NULL) {
+validate_unique <- function(names, arg = "", n = NULL) {
   validate_minimal_names(names, n)
 
-  empty_names <- which(names == "")
+  empty_names <- detect_empty_names(names)
   if (has_length(empty_names)) {
-    stop_names_cannot_be_empty(empty_names)
+    stop_names_cannot_be_empty(names)
   }
 
-  dot_dot_name <- grep("^[.][.](?:[.]|[1-9][0-9]*)$", names)
+  dot_dot_name <- detect_dot_dot(names)
   if (has_length(dot_dot_name)) {
-    stop_names_cannot_be_dot_dot(dot_dot_name)
+    stop_names_cannot_be_dot_dot(names)
   }
 
   if (anyDuplicated(names)) {
-    stop_names_must_be_unique(which(duplicated(names)))
+    stop_names_must_be_unique(names, arg)
   }
 
   invisible(names)
+}
+detect_empty_names <- function(names) {
+  which(names == "")
+}
+detect_dot_dot <- function(names) {
+  grep("^[.][.](?:[.]|[1-9][0-9]*)$", names)
 }
 
 #' Extract repaired names from a vector
@@ -374,19 +383,18 @@ describe_repair <- function(orig_names, names) {
   new_names <- names != as_minimal_names(orig_names)
   if (any(new_names)) {
     msg <- bullets(
-      "New names:",
+      header = "New names:",
       paste0(
         tick_if_needed(orig_names[new_names]),
         " -> ",
-        tick_if_needed(names[new_names]),
-        .problem = ""
+        tick_if_needed(names[new_names])
       )
     )
     message(msg)
   }
 }
 
-bullets <- function(header, ..., .problem) {
+bullets <- function(..., header = NULL) {
   problems <- c(...)
   MAX_BULLETS <- 6L
   if (length(problems) >= MAX_BULLETS) {
@@ -395,10 +403,13 @@ bullets <- function(header, ..., .problem) {
     length(problems) <- MAX_BULLETS
   }
 
-  paste0(
-    header, "\n",
-    paste0("* ", problems, collapse = "\n")
-  )
+  info <- paste0("* ", problems, collapse = "\n")
+
+  if (!is.null(header)) {
+    info <- paste0(header, "\n", info)
+  }
+
+  info
 }
 
 tick <- function(x) {

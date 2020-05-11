@@ -87,11 +87,12 @@ vec_as_subscript2_result <- function(i,
     character = character
   )
 
-  # Return a subclass of subscript error
+  # Return a child of subscript error. The child error messages refer
+  # to single subscripts instead of subscript vectors.
   if (!is_null(result$err)) {
     parent <- result$err$parent
     if (inherits(parent, "vctrs_error_cast_lossy")) {
-      bullets <- cnd_bullets_subscript_lossy_cast
+      bullets <- new_cnd_bullets_subscript_lossy_cast(parent)
     } else {
       bullets <- cnd_body.vctrs_error_subscript_type
     }
@@ -191,7 +192,7 @@ cnd_header.vctrs_error_subscript_type <- function(cnd) {
 }
 #' @export
 cnd_body.vctrs_error_subscript_type <- function(cnd) {
-  arg <- append_arg("The subscript", cnd$subscript_arg)
+  arg <- append_arg("Subscript", cnd$subscript_arg)
   type <- obj_type(cnd$i)
   expected_types <- collapse_subscript_type(cnd)
 
@@ -200,8 +201,10 @@ cnd_body.vctrs_error_subscript_type <- function(cnd) {
     i = glue::glue("It must be {expected_types}.")
   ))
 }
-cnd_bullets_subscript_lossy_cast <- function(cnd, ...) {
-  format_error_bullets(c(x = cnd_header(cnd$parent)))
+new_cnd_bullets_subscript_lossy_cast <- function(lossy_err) {
+  function(cnd, ...) {
+    format_error_bullets(c(x = cnd_header(lossy_err)))
+  }
 }
 
 collapse_subscript_type <- function(cnd) {
@@ -247,7 +250,25 @@ new_error_subscript2_type <- function(i,
   )
 }
 
-cnd_subscript_element <- function(cnd) {
+cnd_body_subscript_dim <- function(cnd, ...) {
+  arg <- append_arg("Subscript", cnd$subscript_arg)
+
+  dim <- length(dim(cnd$i))
+  if (dim < 2) {
+    abort("Internal error: Unexpected dimensionality in `cnd_body_subcript_dim()`.")
+  }
+  if (dim == 2) {
+    shape <- "a matrix"
+  } else {
+    shape <- "an array"
+  }
+
+  format_error_bullets(c(
+    x = glue::glue("{arg} must be a simple vector, not {shape}.")
+  ))
+}
+
+cnd_subscript_element <- function(cnd, capital = FALSE) {
   elt <- cnd$subscript_elt %||% "element"
 
   if (!is_string(elt, c("element", "row", "column"))) {
@@ -257,11 +278,19 @@ cnd_subscript_element <- function(cnd) {
     ))
   }
 
-  switch(elt,
-    element = c("element", "elements"),
-    row = c("row", "rows"),
-    column = c("column", "columns")
-  )
+  if (capital) {
+    switch(elt,
+      element = c("Element", "Elements"),
+      row = c("Row", "Rows"),
+      column = c("Column", "Columns")
+    )
+  } else {
+    switch(elt,
+      element = c("element", "elements"),
+      row = c("row", "rows"),
+      column = c("column", "columns")
+    )
+  }
 }
 
 subscript_actions <- c(

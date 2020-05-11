@@ -15,17 +15,14 @@
 
 enum vctrs_class_type {
   vctrs_class_list,
-  vctrs_class_list_of,
   vctrs_class_data_frame,
   vctrs_class_bare_data_frame,
   vctrs_class_bare_tibble,
   vctrs_class_bare_factor,
   vctrs_class_bare_ordered,
-  vctrs_class_rcrd,
   vctrs_class_bare_date,
   vctrs_class_bare_posixct,
   vctrs_class_bare_posixlt,
-  vctrs_class_posixlt,
   vctrs_class_unknown,
   vctrs_class_none
 };
@@ -61,6 +58,14 @@ SEXP vctrs_eval_mask5(SEXP fn,
                       SEXP x4_sym, SEXP x4,
                       SEXP x5_sym, SEXP x5,
                       SEXP env);
+SEXP vctrs_eval_mask6(SEXP fn,
+                      SEXP x1_sym, SEXP x1,
+                      SEXP x2_sym, SEXP x2,
+                      SEXP x3_sym, SEXP x3,
+                      SEXP x4_sym, SEXP x4,
+                      SEXP x5_sym, SEXP x5,
+                      SEXP x6_sym, SEXP x6,
+                      SEXP env);
 
 SEXP vctrs_dispatch_n(SEXP fn_sym, SEXP fn,
                       SEXP* syms, SEXP* args);
@@ -88,24 +93,48 @@ enum vctrs_class_type class_type(SEXP x);
 bool is_data_frame(SEXP x);
 bool is_bare_data_frame(SEXP x);
 bool is_bare_tibble(SEXP x);
-bool is_record(SEXP x);
 
 SEXP vec_unique_names(SEXP x, bool quiet);
 SEXP vec_unique_colnames(SEXP x, bool quiet);
 
-// Returns S3 method for `generic` suitable for the class of `x`. The
+// Returns S3 / S4 method for `generic` suitable for the class of `x`. The
 // inheritance hierarchy is explored except for the default method.
+SEXP s3_get_method(const char* generic, const char* cls, SEXP table);
+SEXP s3_sym_get_method(SEXP sym, SEXP table);
 SEXP s3_find_method(const char* generic, SEXP x, SEXP table);
+SEXP s3_find_method_xy(const char* generic,
+                       SEXP x,
+                       SEXP y,
+                       SEXP table,
+                       SEXP* method_sym_out);
+SEXP s3_find_method2(const char* generic,
+                     SEXP x,
+                     SEXP table,
+                     SEXP* method_sym_out);
+SEXP s3_paste_method_sym(const char* generic, const char* cls);
+SEXP s3_bare_class(SEXP x);
+SEXP s4_find_method(SEXP x, SEXP table);
 bool vec_implements_ptype2(SEXP x);
 
+SEXP r_env_get(SEXP env, SEXP sym);
+
+extern SEXP syms_s3_methods_table;
+static inline SEXP s3_get_table(SEXP env) {
+  return r_env_get(env, syms_s3_methods_table);
+}
+
+
 SEXP list_first_non_null(SEXP xs, R_len_t* non_null_i);
-bool list_is_s3_homogeneous(SEXP xs);
+bool list_is_homogeneously_classed(SEXP xs);
 
 // Destructive compacting
 SEXP node_compact_d(SEXP xs);
 
-extern struct vctrs_arg* args_empty;
-SEXP arg_validate(SEXP arg, const char* arg_nm);
+extern struct vctrs_arg args_empty_;
+static struct vctrs_arg* const args_empty = &args_empty_;
+
+extern struct vctrs_arg args_dot_ptype_;
+static struct vctrs_arg* const args_dot_ptype = &args_dot_ptype_;
 
 void never_reached(const char* fn) __attribute__((noreturn));
 
@@ -113,9 +142,6 @@ enum vctrs_type2 vec_typeof2_impl(enum vctrs_type type_x, enum vctrs_type type_y
 enum vctrs_type2_s3 vec_typeof2_s3_impl(SEXP x, SEXP y, enum vctrs_type type_x, enum vctrs_type type_y, int* left);
 
 enum vctrs_class_type class_type(SEXP x);
-
-SEXP new_list_of(SEXP x, SEXP ptype);
-void init_list_of(SEXP x, SEXP ptype);
 
 SEXP new_empty_factor(SEXP levels);
 SEXP new_empty_ordered(SEXP levels);
@@ -181,7 +207,8 @@ bool r_is_true(SEXP x);
 bool r_is_string(SEXP x);
 bool r_is_number(SEXP x);
 SEXP r_peek_option(const char* option);
-SEXP r_maybe_duplicate(SEXP x);
+SEXP r_clone_referenced(SEXP x);
+SEXP r_clone_shared(SEXP x);
 
 SEXP r_pairlist(SEXP* tags, SEXP* cars);
 SEXP r_call(SEXP fn, SEXP* tags, SEXP* cars);
@@ -198,12 +225,25 @@ static inline SEXP r_class(SEXP x) {
 static inline SEXP r_poke_class(SEXP x, SEXP names) {
   return Rf_setAttrib(x, R_ClassSymbol, names);
 }
+static inline SEXP r_dim(SEXP x) {
+  return Rf_getAttrib(x, R_DimSymbol);
+}
+static inline SEXP r_poke_dim(SEXP x, SEXP dim) {
+  return Rf_setAttrib(x, R_DimSymbol, dim);
+}
+static inline SEXP r_mark_s4(SEXP x) {
+  SET_S4_OBJECT(x);
+  return(x);
+}
+static inline SEXP r_unmark_s4(SEXP x) {
+  UNSET_S4_OBJECT(x);
+  return(x);
+}
 
 bool r_has_name_at(SEXP names, R_len_t i);
 bool r_is_names(SEXP names);
 bool r_is_minimal_names(SEXP x);
 bool r_is_empty_names(SEXP x);
-SEXP r_env_get(SEXP env, SEXP sym);
 bool r_is_function(SEXP x);
 bool r_chr_has_string(SEXP x, SEXP str);
 
@@ -240,6 +280,7 @@ static inline void* r_vec_unwrap(SEXPTYPE type, SEXP x) {
 #define r_lgl Rf_ScalarLogical
 #define r_int Rf_ScalarInteger
 #define r_str Rf_mkChar
+#define r_chr Rf_mkString
 #define r_sym Rf_install
 
 static inline SEXP r_list(SEXP x) {
@@ -305,9 +346,12 @@ static inline SEXP r_result_get(SEXP x, ERR err) {
 static inline struct vctrs_arg vec_as_arg(SEXP x) {
   if (x == R_NilValue) {
     return *args_empty;
-  } else {
-    return new_wrapper_arg(NULL, r_chr_get_c_string(x, 0));
   }
+
+  if (!r_is_string(x)) {
+    Rf_errorcall(R_NilValue, "Argument tag must be a string.");
+  }
+  return new_wrapper_arg(NULL, r_chr_get_c_string(x, 0));
 }
 
 extern SEXP fns_quote;
@@ -333,6 +377,8 @@ static inline const void* vec_type_missing_value(enum vctrs_type type) {
   }
 }
 
+void c_print_backtrace();
+
 
 extern SEXP vctrs_ns_env;
 extern SEXP vctrs_shared_empty_str;
@@ -344,7 +390,6 @@ extern SEXP classes_ordered;
 extern SEXP classes_date;
 extern SEXP classes_posixct;
 extern SEXP classes_tibble;
-extern SEXP classes_list_of;
 extern SEXP classes_vctrs_group_rle;
 
 extern SEXP strings_dots;
@@ -352,15 +397,12 @@ extern SEXP strings_empty;
 extern SEXP strings_tbl;
 extern SEXP strings_tbl_df;
 extern SEXP strings_data_frame;
-extern SEXP strings_vctrs_rcrd;
 extern SEXP strings_date;
 extern SEXP strings_posixct;
 extern SEXP strings_posixlt;
 extern SEXP strings_posixt;
 extern SEXP strings_factor;
 extern SEXP strings_ordered;
-extern SEXP strings_vctrs_vctr;
-extern SEXP strings_vctrs_list_of;
 extern SEXP strings_list;
 extern SEXP strings_none;
 extern SEXP strings_minimal;
@@ -379,16 +421,27 @@ extern SEXP chrs_assign;
 extern SEXP chrs_rename;
 extern SEXP chrs_remove;
 extern SEXP chrs_negate;
-extern SEXP chrs_numeric;
+extern SEXP chrs_logical;
+extern SEXP chrs_integer;
+extern SEXP chrs_double;
+extern SEXP chrs_complex;
 extern SEXP chrs_character;
+extern SEXP chrs_raw;
+extern SEXP chrs_list;
+extern SEXP chrs_numeric;
+extern SEXP chrs_function;
 extern SEXP chrs_empty;
 extern SEXP chrs_cast;
 extern SEXP chrs_error;
+extern SEXP chrs_combine;
+extern SEXP chrs_convert;
 
 extern SEXP syms_i;
 extern SEXP syms_n;
 extern SEXP syms_x;
 extern SEXP syms_y;
+extern SEXP syms_x_size;
+extern SEXP syms_y_size;
 extern SEXP syms_to;
 extern SEXP syms_dots;
 extern SEXP syms_bracket;
@@ -396,6 +449,7 @@ extern SEXP syms_arg;
 extern SEXP syms_x_arg;
 extern SEXP syms_y_arg;
 extern SEXP syms_to_arg;
+extern SEXP syms_times_arg;
 extern SEXP syms_subscript_arg;
 extern SEXP syms_out;
 extern SEXP syms_value;
@@ -421,6 +475,11 @@ extern SEXP syms_numeric;
 extern SEXP syms_character;
 extern SEXP syms_body;
 extern SEXP syms_parent;
+extern SEXP syms_from_dispatch;
+extern SEXP syms_df_fallback;
+extern SEXP syms_stop_incompatible_type;
+extern SEXP syms_stop_incompatible_size;
+extern SEXP syms_action;
 
 #define syms_names R_NamesSymbol
 
@@ -431,6 +490,7 @@ extern SEXP fns_names;
 
 extern SEXP vctrs_method_table;
 extern SEXP base_method_table;
+extern SEXP s4_c_method_table;
 
 
 #endif

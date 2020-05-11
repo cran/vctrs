@@ -356,26 +356,18 @@ SEXP vec_proxy(SEXP x);
 SEXP vec_proxy_equal(SEXP x);
 SEXP vec_proxy_recursive(SEXP x, enum vctrs_proxy_kind kind);
 SEXP vec_restore(SEXP x, SEXP to, SEXP i);
+SEXP vec_restore_default(SEXP x, SEXP to);
 R_len_t vec_size(SEXP x);
 R_len_t vec_size_common(SEXP xs, R_len_t absent);
-SEXP vec_dim(SEXP x);
-R_len_t vec_dim_n(SEXP x);
-SEXP vec_bare_dim(SEXP x);
-R_len_t vec_bare_dim_n(SEXP x);
-SEXP vec_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
 SEXP vec_cast_common(SEXP xs, SEXP to);
-SEXP vec_coercible_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
-SEXP vec_coercible_cast_e(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg, ERR* err);
-bool vec_is_coercible(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg, int* dir);
 SEXP vec_slice(SEXP x, SEXP subscript);
 SEXP vec_slice_impl(SEXP x, SEXP subscript);
 SEXP vec_chop(SEXP x, SEXP indices);
 SEXP vec_slice_shaped(enum vctrs_type type, SEXP x, SEXP index);
-SEXP vec_assign(SEXP x, SEXP index, SEXP value);
 SEXP vec_proxy_assign(SEXP proxy, SEXP index, SEXP value);
 bool vec_requires_fallback(SEXP x, struct vctrs_proxy_info info);
 SEXP vec_init(SEXP x, R_len_t n);
-SEXP vec_type(SEXP x);
+SEXP vec_ptype(SEXP x, struct vctrs_arg* x_arg);
 SEXP vec_ptype_finalise(SEXP x);
 bool vec_is_unspecified(SEXP x);
 SEXP vec_recycle(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
@@ -383,10 +375,22 @@ SEXP vec_recycle_fallback(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
 SEXP vec_recycle_common(SEXP xs, R_len_t size);
 SEXP vec_names(SEXP x);
 SEXP vec_group_loc(SEXP x);
-SEXP vec_match_params(SEXP needles, SEXP haystack, bool na_equal);
+SEXP vec_match_params(SEXP needles, SEXP haystack, bool na_equal,
+                      struct vctrs_arg* needles_arg, struct vctrs_arg* haystack_arg);
+
+#include "cast.h"
+static inline SEXP vec_cast(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg) {
+  struct cast_opts opts = {
+    .x = x,
+    .to = to,
+    .x_arg = x_arg,
+    .to_arg = to_arg
+  };
+  return vec_cast_opts(&opts);
+}
 
 static inline SEXP vec_match(SEXP needles, SEXP haystack) {
-  return vec_match_params(needles, haystack, true);
+  return vec_match_params(needles, haystack, true, NULL, NULL);
 }
 
 
@@ -395,40 +399,10 @@ SEXP vec_c(SEXP xs,
            SEXP name_spec,
            const struct name_repair_opts* name_repair);
 
-SEXP vec_c_fallback(SEXP xs, SEXP ptype, SEXP name_spec);
-bool needs_vec_c_fallback(SEXP xs);
-
-SEXP vec_type2(SEXP x,
-               SEXP y,
-               struct vctrs_arg* x_arg,
-               struct vctrs_arg* y_arg,
-               int* left);
-
-SEXP vec_ptype2_dispatch(SEXP x, SEXP y,
-                         enum vctrs_type x_type,
-                         enum vctrs_type y_type,
-                         struct vctrs_arg* x_arg,
-                         struct vctrs_arg* y_arg,
-                         int* left);
-
-SEXP vec_ptype2_dispatch_s3(SEXP x,
-                            SEXP y,
-                            struct vctrs_arg* x_arg,
-                            struct vctrs_arg* y_arg);
-
-SEXP vec_cast_dispatch(SEXP x,
-                       SEXP to,
-                       enum vctrs_type x_type,
-                       enum vctrs_type to_type,
-                       bool* lossy,
-                       struct vctrs_arg* x_arg,
-                       struct vctrs_arg* to_arg);
-
-SEXP df_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
-SEXP df_as_dataframe(SEXP x, SEXP to, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
+SEXP vec_c_fallback(SEXP xs, SEXP name_spec);
+bool needs_vec_c_fallback(SEXP xs, SEXP ptype);
 
 bool is_data_frame(SEXP x);
-bool is_record(SEXP x);
 
 R_len_t df_size(SEXP x);
 R_len_t df_rownames_size(SEXP x);
@@ -436,10 +410,6 @@ R_len_t df_raw_size(SEXP x);
 R_len_t df_raw_size_from_list(SEXP x);
 SEXP vec_bare_df_restore(SEXP x, SEXP to, SEXP n);
 SEXP vec_df_restore(SEXP x, SEXP to, SEXP n);
-
-SEXP chr_assign(SEXP out, SEXP index, SEXP value);
-SEXP list_assign(SEXP out, SEXP index, SEXP value);
-SEXP df_assign(SEXP out, SEXP index, SEXP value);
 
 // equal_object() never propagates missingness, so
 // it can return a `bool`
@@ -470,15 +440,13 @@ void hash_fill(uint32_t* p, R_len_t n, SEXP x, bool na_equal);
 SEXP vec_unique(SEXP x);
 bool duplicated_any(SEXP names);
 
-// Rowwise operations -------------------------------------------
+// Data frame column iteration ----------------------------------
 
 // Used in functions that treat data frames as vectors of rows, but
-// iterate over them column wise. Examples are `vec_equal()` and
+// iterate over columns. Examples are `vec_equal()` and
 // `vec_compare()`.
 
 /**
- * @member out A vector of size `n_row` containing the output of the
- *   row wise data frame operation.
  * @member row_known A boolean array of size `n_row`. Allocated on the R heap.
  *   Initially, all values are initialized to `false`. As we iterate along the
  *   columns, we flip the corresponding row's `row_known` value to `true` if we
@@ -490,19 +458,37 @@ bool duplicated_any(SEXP names);
  * @member remaining The number of `row_known` values that are still `false`.
  *   If this hits `0` before we traverse the entire data frame, we can exit
  *   immediately because all `out` values are already known.
+ * @member size The number of rows in the data frame.
  */
-struct vctrs_df_rowwise_info {
-  SEXP out;
+struct df_short_circuit_info {
   SEXP row_known;
   bool* p_row_known;
   R_len_t remaining;
+  R_len_t size;
 };
 
-#define PROTECT_DF_ROWWISE_INFO(info, n) do {  \
-  PROTECT((info)->out);                        \
-  PROTECT((info)->row_known);                  \
-  *n += 2;                                     \
+#define PROTECT_DF_SHORT_CIRCUIT_INFO(info, n) do {  \
+  PROTECT((info)->row_known);                        \
+  *n += 1;                                           \
 } while (0)
+
+static inline struct df_short_circuit_info new_df_short_circuit_info(R_len_t size) {
+  SEXP row_known = PROTECT(Rf_allocVector(RAWSXP, size * sizeof(bool)));
+  bool* p_row_known = (bool*) RAW(row_known);
+
+  // To begin with, no rows have a known comparison value
+  memset(p_row_known, false, size * sizeof(bool));
+
+  struct df_short_circuit_info info = {
+    .row_known = row_known,
+    .p_row_known = p_row_known,
+    .remaining = size,
+    .size = size
+  };
+
+  UNPROTECT(1);
+  return info;
+}
 
 // Missing values -----------------------------------------------
 
@@ -542,28 +528,38 @@ enum vctrs_dbl_class dbl_classify(double x);
 
 // Factor methods -----------------------------------------------
 
-SEXP fct_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
-SEXP ord_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
+SEXP chr_as_factor(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* to_arg);
+SEXP chr_as_ordered(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* to_arg);
 
 SEXP fct_as_character(SEXP x, struct vctrs_arg* x_arg);
-SEXP ord_as_character(SEXP x, struct vctrs_arg* x_arg);
-
-SEXP chr_as_factor(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* to_arg);
 SEXP fct_as_factor(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
 
-SEXP chr_as_ordered(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* to_arg);
-SEXP ord_as_ordered(SEXP x, SEXP to, bool* lossy, struct vctrs_arg* x_arg, struct vctrs_arg* to_arg);
+SEXP ord_as_character(SEXP x, struct vctrs_arg* x_arg);
 
 // Datetime methods ---------------------------------------------
+
+SEXP date_as_date(SEXP x);
+SEXP date_as_posixct(SEXP x, SEXP to);
+SEXP date_as_posixlt(SEXP x, SEXP to);
+SEXP posixct_as_date(SEXP x, bool* lossy);
+SEXP posixlt_as_date(SEXP x, bool* lossy);
+SEXP posixct_as_posixct(SEXP x, SEXP to);
+SEXP posixlt_as_posixct(SEXP x, SEXP to);
+SEXP posixct_as_posixlt(SEXP x, SEXP to);
+SEXP posixlt_as_posixlt(SEXP x, SEXP to);
+
+SEXP vec_date_restore(SEXP x, SEXP to);
+SEXP vec_posixct_restore(SEXP x, SEXP to);
+SEXP vec_posixlt_restore(SEXP x, SEXP to);
 
 SEXP date_datetime_ptype2(SEXP x, SEXP y);
 SEXP datetime_datetime_ptype2(SEXP x, SEXP y);
 
-// Tibble methods ----------------------------------------------
+// Tibble methods ----------------------------------------------------
 
-SEXP tibble_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
+SEXP tib_cast(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
 
-// Character translation ----------------------------------------
+// Character translation ---------------------------------------------
 
 SEXP obj_maybe_translate_encoding(SEXP x, R_len_t size);
 SEXP obj_maybe_translate_encoding2(SEXP x, R_len_t x_size, SEXP y, R_len_t y_size);
@@ -602,25 +598,29 @@ static inline void growable_push_int(struct growable* g, int i) {
 
 #define UNPROTECT_GROWABLE(g) do { UNPROTECT(1);} while(0)
 
-
-// Shape --------------------------------------------------------
-
-bool has_dim(SEXP x);
-
-
 // Conditions ---------------------------------------------------
 
 void vctrs_stop_unsupported_type(enum vctrs_type, const char* fn) __attribute__((noreturn));
 void stop_scalar_type(SEXP x, struct vctrs_arg* arg) __attribute__((noreturn));
 void vec_assert(SEXP x, struct vctrs_arg* arg);
+__attribute__((noreturn))
 void stop_incompatible_size(SEXP x, SEXP y,
                             R_len_t x_size, R_len_t y_size,
                             struct vctrs_arg* x_arg,
-                            struct vctrs_arg* y_arg)
-  __attribute__((noreturn));
+                            struct vctrs_arg* y_arg);
+__attribute__((noreturn))
+void stop_incompatible_type(SEXP x,
+                            SEXP y,
+                            struct vctrs_arg* x_arg,
+                            struct vctrs_arg* y_arg,
+                            bool cast);
+__attribute__((noreturn))
 void stop_recycle_incompatible_size(R_len_t x_size, R_len_t size,
-                                    struct vctrs_arg* x_arg)
-  __attribute__((noreturn));
+                                    struct vctrs_arg* x_arg);
+__attribute__((noreturn))
+void stop_incompatible_shape(SEXP x, SEXP y,
+                             R_len_t x_size, R_len_t y_size, int axis,
+                             struct vctrs_arg* p_x_arg, struct vctrs_arg* p_y_arg);
 void stop_corrupt_factor_levels(SEXP x, struct vctrs_arg* arg) __attribute__((noreturn));
 void stop_corrupt_ordered_levels(SEXP x, struct vctrs_arg* arg) __attribute__((noreturn));
 

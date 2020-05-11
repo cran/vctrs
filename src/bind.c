@@ -1,9 +1,12 @@
 #include "vctrs.h"
+#include "dim.h"
+#include "ptype-common.h"
+#include "slice-assign.h"
 #include "type-data-frame.h"
 #include "utils.h"
 
 
-static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP id, struct name_repair_opts* name_repair);
+static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP id, struct name_repair_opts* name_repair, SEXP name_spec);
 static SEXP as_df_row(SEXP x, struct name_repair_opts* name_repair);
 static SEXP as_df_row_impl(SEXP x, struct name_repair_opts* name_repair);
 struct name_repair_opts validate_bind_name_repair(SEXP name_repair, bool allow_minimal);
@@ -17,29 +20,35 @@ SEXP vctrs_rbind(SEXP call, SEXP op, SEXP args, SEXP env) {
   SEXP xs = PROTECT(rlang_env_dots_list(env));
   SEXP ptype = PROTECT(Rf_eval(CAR(args), env)); args = CDR(args);
   SEXP names_to = PROTECT(Rf_eval(CAR(args), env)); args = CDR(args);
-  SEXP name_repair = PROTECT(Rf_eval(CAR(args), env));
+  SEXP name_repair = PROTECT(Rf_eval(CAR(args), env)); args = CDR(args);
+  SEXP name_spec = PROTECT(Rf_eval(CAR(args), env));
 
   if (names_to != R_NilValue) {
-    if (!r_is_string(names_to)) {
-      Rf_errorcall(R_NilValue, "`.names_to` must be `NULL` or a string.");
+    if (Rf_inherits(names_to, "rlang_zap")) {
+      r_poke_names(xs, R_NilValue);
+      names_to = R_NilValue;
+    } else if (r_is_string(names_to)) {
+      names_to = r_chr_get(names_to, 0);
+    } else {
+      Rf_errorcall(R_NilValue, "`.names_to` must be `NULL`, a string, or an `rlang::zap()` object.");
     }
-    names_to = r_chr_get(names_to, 0);
   }
 
   struct name_repair_opts name_repair_opts = validate_bind_name_repair(name_repair, false);
   PROTECT_NAME_REPAIR_OPTS(&name_repair_opts);
 
-  SEXP out = vec_rbind(xs, ptype, names_to, &name_repair_opts);
+  SEXP out = vec_rbind(xs, ptype, names_to, &name_repair_opts, name_spec);
 
-  UNPROTECT(5);
+  UNPROTECT(6);
   return out;
 }
 
 
-// From type.c
-SEXP vctrs_type_common_impl(SEXP dots, SEXP ptype);
-
-static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opts* name_repair) {
+static SEXP vec_rbind(SEXP xs,
+                      SEXP ptype,
+                      SEXP names_to,
+                      struct name_repair_opts* name_repair,
+                      SEXP name_spec) {
   int nprot = 0;
   R_len_t n = Rf_length(xs);
 
@@ -50,7 +59,8 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opt
   // The common type holds information about common column names,
   // types, etc. Each element of `xs` needs to be cast to that type
   // before assignment.
-  ptype = PROTECT_N(vctrs_type_common_impl(xs, ptype), &nprot);
+  ptype = vec_ptype_common_params(xs, ptype, DF_FALLBACK_DEFAULT);
+  PROTECT_N(ptype, &nprot);
 
   if (ptype == R_NilValue) {
     UNPROTECT(nprot);
@@ -145,6 +155,10 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opt
   // Compact sequences use 0-based counters
   R_len_t counter = 0;
 
+  const struct vec_assign_opts bind_assign_opts = {
+    .assign_names = true
+  };
+
   for (R_len_t i = 0; i < n; ++i) {
     R_len_t size = ns[i];
     if (!size) {
@@ -152,9 +166,14 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opt
     }
     SEXP x = VECTOR_ELT(xs, i);
 
-    SEXP tbl = PROTECT(vec_cast(x, ptype, args_empty, args_empty));
+    SEXP tbl = vec_cast_params(x, ptype,
+                               args_empty, args_empty,
+                               DF_FALLBACK_DEFAULT);
+    PROTECT(tbl);
     init_compact_seq(idx_ptr, counter, size, true);
-    out = df_assign(out, idx, tbl);
+
+    // Total ownership of `out` because it was freshly created with `vec_init()`
+    out = df_assign(out, idx, tbl, vctrs_ownership_total, &bind_assign_opts);
     REPROTECT(out, out_pi);
 
     if (has_rownames) {
@@ -162,7 +181,7 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opt
 
       if (has_names && nms_p[i] != strings_empty && !has_names_to) {
         if (rownames_type(rn) == ROWNAMES_IDENTIFIERS) {
-          rn = r_chr_paste_prefix(rn, CHAR(nms_p[i]), "...");
+          rn = apply_name_spec(name_spec, nms_p[i], rn, size);
         } else if (size > 1) {
           rn = r_seq_chr(CHAR(nms_p[i]), size);
         } else {
@@ -172,7 +191,7 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opt
       PROTECT(rn);
 
       if (rownames_type(rn) == ROWNAMES_IDENTIFIERS) {
-        rownames = chr_assign(rownames, idx, rn);
+        rownames = chr_assign(rownames, idx, rn, vctrs_ownership_total);
         REPROTECT(rownames, rownames_pi);
       }
 
@@ -191,10 +210,16 @@ static SEXP vec_rbind(SEXP xs, SEXP ptype, SEXP names_to, struct name_repair_opt
   }
 
   if (has_rownames) {
-    rownames = vec_as_names(rownames, default_unique_repair_opts);
+    const struct name_repair_opts rownames_repair = {
+      .type = name_repair_unique,
+      .fn = R_NilValue,
+      .quiet = true
+    };
+    rownames = vec_as_names(rownames, &rownames_repair);
     REPROTECT(rownames, rownames_pi);
     Rf_setAttrib(out, R_RowNamesSymbol, rownames);
   }
+
   if (has_names_to) {
     out = df_poke(out, names_to_loc, names_to_col);
   }
@@ -238,7 +263,7 @@ static SEXP as_df_row_impl(SEXP x, struct name_repair_opts* name_repair) {
 
   // Remove names as they are promoted to data frame column names
   if (nms != R_NilValue) {
-    x = PROTECT_N(r_maybe_duplicate(x), &nprot);
+    x = PROTECT_N(r_clone_referenced(x), &nprot);
     r_poke_names(x, R_NilValue);
   }
 
@@ -317,7 +342,7 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, struct name_repair_opts* n
   SEXP containers = PROTECT(map_with_data(xs, &cbind_container_type, &rownames));
   ptype = PROTECT(cbind_container_type(ptype, &rownames));
 
-  SEXP type = PROTECT(vctrs_type_common_impl(containers, ptype));
+  SEXP type = PROTECT(vec_ptype_common_params(containers, ptype, DF_FALLBACK_DEFAULT));
   if (type == R_NilValue) {
     type = new_data_frame(vctrs_shared_empty_list, 0);
   } else if (!is_data_frame(type)) {
@@ -405,12 +430,14 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, struct name_repair_opts* n
 
     R_len_t xn = Rf_length(x);
     init_compact_seq(idx_ptr, counter, xn, true);
-    out = list_assign(out, idx, x);
+
+    // Total ownership of `out` because it was freshly created with `Rf_allocVector()`
+    out = list_assign(out, idx, x, vctrs_ownership_total);
     REPROTECT(out, out_pi);
 
     SEXP xnms = PROTECT(r_names(x));
     if (xnms != R_NilValue) {
-      names = chr_assign(names, idx, xnms);
+      names = chr_assign(names, idx, xnms, vctrs_ownership_total);
       REPROTECT(names, names_pi);
     }
     UNPROTECT(1);
@@ -431,6 +458,16 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, struct name_repair_opts* n
   return out;
 }
 
+SEXP syms_vec_cbind_frame_ptype = NULL;
+SEXP fns_vec_cbind_frame_ptype = NULL;
+
+SEXP vec_cbind_frame_ptype(SEXP x) {
+  return vctrs_dispatch1(syms_vec_cbind_frame_ptype,
+                         fns_vec_cbind_frame_ptype,
+                         syms_x,
+                         x);
+}
+
 static SEXP cbind_container_type(SEXP x, void* data) {
   if (is_data_frame(x)) {
     SEXP rn = df_rownames(x);
@@ -441,12 +478,10 @@ static SEXP cbind_container_type(SEXP x, void* data) {
 
       if (learned_rn == R_NilValue) {
         *learned_rn_p = rn;
-      } else if (!equal_object(rn, learned_rn)) {
-        Rf_errorcall(R_NilValue, "Can't column-bind data frames with different row names.");
       }
     }
 
-    return df_container_type(x);
+    return vec_cbind_frame_ptype(x);
   } else {
     return R_NilValue;
   }
@@ -516,7 +551,7 @@ static SEXP vec_as_df_col(SEXP x, SEXP outer) {
 }
 
 struct name_repair_opts validate_bind_name_repair(SEXP name_repair, bool allow_minimal) {
-  struct name_repair_opts opts = new_name_repair_opts(name_repair, false);
+  struct name_repair_opts opts = new_name_repair_opts(name_repair, args_empty, false);
 
   switch (opts.type) {
   case name_repair_custom:
@@ -541,4 +576,9 @@ struct name_repair_opts validate_bind_name_repair(SEXP name_repair, bool allow_m
   }
 
   return opts;
+}
+
+void vctrs_init_bind(SEXP ns) {
+  syms_vec_cbind_frame_ptype = Rf_install("vec_cbind_frame_ptype");
+  fns_vec_cbind_frame_ptype = r_env_get(ns, syms_vec_cbind_frame_ptype);
 }

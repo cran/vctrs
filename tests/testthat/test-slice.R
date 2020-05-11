@@ -4,8 +4,10 @@ test_that("vec_slice throws error with non-vector inputs", {
 })
 
 test_that("vec_slice throws error with non-vector subscripts", {
-  expect_error(vec_slice(1:3, Sys.Date()), class = "vctrs_error_subscript_type")
-  expect_error(vec_slice(1:3, matrix(TRUE, nrow = 1)), "must have one dimension")
+  verify_errors({
+    expect_error(vec_slice(1:3, Sys.Date()), class = "vctrs_error_subscript_type")
+    expect_error(vec_slice(1:3, matrix(TRUE, nrow = 1)), class = "vctrs_error_subscript_type")
+  })
 })
 
 test_that("can subset base vectors", {
@@ -187,13 +189,6 @@ test_that("can slice with symbols", {
   expect_identical(vec_as_location(quote(b), 26, letters), 2L)
 })
 
-test_that("vec_as_location() checks type", {
-  expect_error(vec_as_location("foo", "bar"), class = "vctrs_error_incompatible_type")
-  expect_error(vec_as_location("foo", 1L, names = 1L), "must be a character vector")
-  expect_error(vec_as_location(Sys.Date(), 3L), class = "vctrs_error_subscript_type")
-  expect_error(vec_as_location(matrix(TRUE, nrow = 1), 3L), "must have one dimension")
-})
-
 test_that("can `vec_slice()` S3 objects without dispatch infloop", {
   expect_identical(new_vctr(1:3)[1], new_vctr(1L))
   expect_identical(new_vctr(as.list(1:3))[1], new_vctr(list(1L)))
@@ -274,6 +269,16 @@ test_that("can call `vec_slice()` from `[` methods with shaped objects without i
   exp <- foobar(c(1L, 3L))
   dim(exp) <- c(1, 2)
   expect_identical(x[1], exp)
+})
+
+test_that("vec_slice() restores attributes on shaped S3 objects correctly", {
+  x <- factor(c("a", "b", "c", "d", "e", "f"))
+  dim(x) <- c(3, 2)
+
+  expect <- factor(c("a", "c", "d", "f"), levels = levels(x))
+  dim(expect) <- c(2, 2)
+
+  expect_identical(vec_slice(x, c(1, 3)), expect)
 })
 
 test_that("vec_slice() falls back to `[` with S3 objects", {
@@ -383,10 +388,6 @@ test_that("missing indices don't create NA names", {
   expect_identical(vec_slice(x, 1:2), x)
 })
 
-test_that("vec_slice throws error with non-vector inputs", {
-  expect_error(vec_slice(environment(), 1L), class = "vctrs_error_scalar_type")
-})
-
 test_that("vec_slice() asserts vectorness (#301)", {
   expect_error(vec_slice(NULL, 1), class = "vctrs_error_scalar_type")
 })
@@ -422,6 +423,7 @@ test_that("slice has informative error messages", {
 
     "# oob error messages are properly constructed"
     vec_slice(c(bar = 1), "foo")
+
     "Multiple OOB indices"
     vec_slice(letters, c(100, 1000))
     vec_slice(letters, c(1, 100:103, 2, 104:110))
@@ -431,6 +433,10 @@ test_that("slice has informative error messages", {
     "# Can't index beyond the end of a vector"
     vec_slice(1:2, 3L)
     vec_slice(1:2, -3L)
+
+    "# vec_slice throws error with non-vector subscripts"
+    vec_slice(1:3, Sys.Date())
+    vec_slice(1:3, matrix(TRUE, ncol = 1))
   })
 })
 

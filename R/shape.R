@@ -3,32 +3,26 @@
 # * all other dimensions = the shape parameter of the type
 # These helpers work with the shape parameter
 
-new_shape <- function(type, shape = NULL) {
-  if (length(shape) == 0L) {
-    type
-  } else {
-    structure(type, dim = c(0L, shape))
+new_shape <- function(type, shape = integer()) {
+  structure(type, dim = c(0L, shape))
+}
+
+vec_shaped_ptype  <- function(ptype, x, y, ..., x_arg = "", y_arg = "") {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
   }
+  .Call(vctrs_shaped_ptype, ptype, x, y, x_arg, y_arg)
 }
 
-shape_common <- function(x, y) {
-  shape <- n_dim2(shape(x), shape(y))
-  map2_int(shape$x, shape$y, axis2)
-}
-
-axis2 <- function(nx, ny) {
-  if (nx == ny) {
-    nx
-  } else if (nx == 1L) {
-    ny
-  } else if (ny == 1L) {
-    nx
-  } else {
-    abort(paste0("Incompatible lengths: ", nx, ", ", ny, "."))
+vec_shape2 <- function(x, y, ..., x_arg = "", y_arg = "") {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
   }
+  .Call(vctrs_shape2, x, y, x_arg, y_arg)
 }
 
-shape_broadcast <- function(x, to) {
+# Should take same signature as `vec_cast()`
+shape_broadcast <- function(x, to, ..., x_arg, to_arg) {
   if (is.null(x) || is.null(to)) {
     return(x)
   }
@@ -42,14 +36,26 @@ shape_broadcast <- function(x, to) {
   }
 
   if (length(dim_x) > length(dim_to)) {
-    stop_incompatible_cast(x, to, details = "Can not decrease dimensions")
+    stop_incompatible_cast(
+      x,
+      to,
+      details = "Cannot decrease dimensions.",
+      x_arg = x_arg,
+      to_arg = to_arg
+    )
   }
 
   dim_x <- n_dim2(dim_x, dim_to)$x
   dim_to[[1]] <- dim_x[[1]] # don't change number of observations
   ok <- dim_x == dim_to | dim_x == 1
   if (any(!ok)) {
-    stop_incompatible_cast(x, to, details = "Non-recyclable dimensions")
+    stop_incompatible_cast(
+      x,
+      to,
+      details = "Non-recyclable dimensions.",
+      x_arg = x_arg,
+      to_arg = to_arg
+    )
   }
 
   # Increase dimensionality if required
@@ -71,10 +77,6 @@ shape_broadcast <- function(x, to) {
 }
 
 # Helpers -----------------------------------------------------------------
-
-shape <- function(x) {
-  vec_dim(x)[-1]
-}
 
 n_dim2 <- function(x, y) {
   nx <- length(x)

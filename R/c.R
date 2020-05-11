@@ -7,7 +7,10 @@
 #' * `vec_ptype(vec_c(x, y)) == vec_ptype_common(x, y)`.
 #'
 #' @param ... Vectors to coerce.
-#' @param .name_repair How to repair names, see `repair` options in [vec_as_names()].
+#' @param .name_repair How to repair names, see `repair` options in
+#'   [vec_as_names()].  Can also be [rlang::zap()] to ignore names
+#'   during concatenation. The names are still used to give
+#'   informative error messages, e.g. with coercion errors.
 #' @return A vector with class given by `.ptype`, and length equal to the
 #'   sum of the `vec_size()` of the contents of `...`.
 #'
@@ -22,7 +25,6 @@
 #' @export
 #' @examples
 #' vec_c(FALSE, 1L, 1.5)
-#' vec_c(FALSE, 1L, "x", .ptype = character())
 #'
 #' # Date/times --------------------------
 #' c(Sys.Date(), Sys.time())

@@ -142,6 +142,21 @@ test_that("can rbind POSIXlt objects into POSIXct objects", {
   expect_named(vec_rbind(datetime_named, datetime_named), "col")
 })
 
+test_that("can rbind table objects (#913)", {
+  x <- new_table(1:4, c(2L, 2L))
+  y <- x
+
+  colnames <- c("c1", "c2")
+  rownames <- c("r1", "r2", "r3", "r4")
+
+  dimnames(x) <- list(rownames[1:2], colnames)
+  dimnames(y) <- list(rownames[3:4], colnames)
+
+  expect <- data.frame(c1 = c(1:2, 1:2), c2 = c(3:4, 3:4), row.names = rownames)
+
+  expect_identical(vec_rbind(x, y), expect)
+})
+
 test_that("can rbind missing vectors", {
   expect_identical(vec_rbind(na_int), data_frame(...1 = na_int))
   expect_identical(vec_rbind(na_int, na_int), data_frame(...1 = int(na_int, na_int)))
@@ -204,10 +219,24 @@ test_that("can assign row names in vec_rbind()", {
   df1 <- mtcars[1:3, ]
   df2 <- mtcars[4:5, ]
 
+  expect_error(
+    vec_rbind(
+      foo = df1,
+      df2,
+      .names_to = NULL
+    ),
+    "specification"
+  )
+
   # Combination
-  out <- vec_rbind(foo = df1, df2)
+  out <- vec_rbind(
+    foo = df1,
+    df2,
+    .names_to = NULL,
+    .name_spec = "{outer}_{inner}"
+  )
   exp <- mtcars[1:5, ]
-  row.names(exp) <- c(paste0("foo...", row.names(df1)), row.names(df2))
+  row.names(exp) <- c(paste0("foo_", row.names(df1)), row.names(df2))
   expect_identical(out, exp)
 
   out <- vec_rbind(foo = df1, df2, .names_to = "id")
@@ -216,18 +245,38 @@ test_that("can assign row names in vec_rbind()", {
   expect_identical(out, exp)
 
   # Sequence
-  out <- vec_rbind(foo = unrownames(df1), df2, bar = unrownames(mtcars[6, ]))
+  out <- vec_rbind(
+    foo = unrownames(df1),
+    df2,
+    bar = unrownames(mtcars[6, ]),
+    .names_to = NULL
+  )
   exp <- mtcars[1:6, ]
   row.names(exp) <- c(paste0("foo", 1:3), row.names(df2), "bar")
   expect_identical(out, exp)
 
-  out <- vec_rbind(foo = unrownames(df1), df2, bar = unrownames(mtcars[6, ]), .names_to = "id")
+  out <- vec_rbind(
+    foo = unrownames(df1),
+    df2,
+    bar = unrownames(mtcars[6, ]),
+    .names_to = "id"
+  )
   exp <- mtcars[1:6, ]
   exp <- vec_cbind(id = c(rep("foo", 3), rep("", 2), "bar"), exp)
   row.names(exp) <- c(paste0("...", 1:3), row.names(df2), "...6")
   expect_identical(out, exp)
 })
 
+test_that("monitoring: name repair while rbinding doesn't modify in place", {
+  df <- new_data_frame(list(x = 1, x = 1))
+  expect <- new_data_frame(list(x = 1, x = 1))
+
+  # Name repair occurs
+  expect_named(vec_rbind(df), c("x...1", "x...2"))
+
+  # No changes to `df`
+  expect_identical(df, expect)
+})
 
 # cols --------------------------------------------------------------------
 
@@ -414,24 +463,46 @@ test_that("vec_cbind() fails with arrays of dimensionality > 3", {
   expect_error(vec_cbind(x = a), "Can't bind arrays")
 })
 
+test_that("monitoring: name repair while cbinding doesn't modify in place", {
+  df <- new_data_frame(list(x = 1, x = 1))
+  expect <- new_data_frame(list(x = 1, x = 1))
+
+  # Name repair occurs
+  expect_named(vec_cbind(df), c("x...1", "x...2"))
+
+  # No changes to `df`
+  expect_identical(df, expect)
+})
+
 test_that("vec_rbind() consistently handles unnamed outputs", {
   # Name repair of columns is a little weird but unclear we can do better
   expect_identical(
-    vec_rbind(1, 2),
+    vec_rbind(1, 2, .names_to = NULL),
     data.frame(...1 = c(1, 2))
   )
   expect_identical(
-    vec_rbind(1, 2, ...10 = 3),
+    vec_rbind(1, 2, ...10 = 3, .names_to = NULL),
     data.frame(...1 = c(1, 2, 3), row.names = c("...1", "...2", "...3"))
   )
 
   expect_identical(
-    vec_rbind(a = 1, b = 2),
+    vec_rbind(a = 1, b = 2, .names_to = NULL),
     data.frame(...1 = c(1, 2), row.names = c("a", "b"))
   )
   expect_identical(
-    vec_rbind(c(a = 1), c(b = 2)),
+    vec_rbind(c(a = 1), c(b = 2), .names_to = NULL),
     data.frame(a = c(1, NA), b = c(NA, 2))
+  )
+})
+
+test_that("vec_rbind() ignores named inputs by default (#966)", {
+  expect_identical(
+    vec_rbind(foo = c(a = 1)),
+    data.frame(a = 1)
+  )
+  expect_identical(
+    vec_rbind(foo = c(a = 1), .names_to = NULL),
+    data.frame(a = 1, row.names = "foo")
   )
 })
 
@@ -457,15 +528,23 @@ test_that("vec_cbind() consistently handles unnamed outputs", {
 test_that("rbind() and cbind() have informative outputs when repairing names", {
   verify_output(test_path("output", "bind-name-repair.txt"), {
     "# vec_rbind()"
-
-    "Suboptimal"
     vec_rbind(1, 2)
+    vec_rbind(1, 2, .names_to = NULL)
 
-    "Suboptimal"
     vec_rbind(1, 2, ...10 = 3)
+    vec_rbind(1, 2, ...10 = 3, .names_to = NULL)
 
     vec_rbind(a = 1, b = 2)
+    vec_rbind(a = 1, b = 2, .names_to = NULL)
+
     vec_rbind(c(a = 1), c(b = 2))
+    vec_rbind(c(a = 1), c(b = 2), .names_to = NULL)
+
+    "Silent when assigning duplicate row names of df-cols"
+    df <- new_data_frame(list(x = mtcars[1:3, 1, drop = FALSE]))
+    vec_rbind(df, df)
+
+    vec_rbind(mtcars[1:4, ], mtcars[1:3, ])
 
     "# vec_cbind()"
     vec_cbind(1, 2)
@@ -493,11 +572,20 @@ test_that("cbind() deals with row names", {
   exp[[1]] <- exp[[1, 1]]
   row.names(exp) <- paste0(c("Mazda RX4..."), 1:3)
   expect_identical(out, exp)
+})
 
-  # Should work once we have frame prototyping
-  expect_error(
-    vec_cbind(mtcars[1:3], vec_slice(mtcars[4], nrow(mtcars):1)),
-    "different row names"
+test_that("prefer row names of first named input (#1058)", {
+  df0 <- unrownames(mtcars[1:5, 1:3])
+  df1 <- mtcars[1:5, 4:6]
+  df2 <- mtcars[5:1, 7:9]
+
+  expect_identical(
+    row.names(vec_cbind(df0, df1, df2)),
+    row.names(df1)
+  )
+  expect_identical(
+    row.names(vec_cbind(df0, df2, df1)),
+    row.names(df2)
   )
 })
 
@@ -516,4 +604,99 @@ test_that("rbind repairs names of data frames (#704)", {
     vec_rbind(df, df, .name_repair = "check_unique"),
     class = "vctrs_error_names_must_be_unique"
   )
+})
+
+test_that("vec_rbind() works with simple homogeneous foreign S3 classes", {
+  expect_identical(
+    vec_rbind(set_names(foobar(1), "x"), set_names(foobar(2), "x")),
+    data_frame(x = foobar(c(1, 2)))
+  )
+})
+
+test_that("vec_rbind() works with simple homogeneous foreign S4 classes", {
+  skip_if_cant_set_names_on_s4()
+
+  joe1 <- .Counts(1L, name = "Joe")
+  joe2 <- .Counts(2L, name = "Joe")
+
+  expect_identical(
+    vec_rbind(set_names(joe1, "x"), set_names(joe2, "x")),
+    data_frame(x = .Counts(1:2, name = "Joe"))
+  )
+})
+
+test_that("vec_rbind() fails with complex foreign S3 classes", {
+  verify_errors({
+    x <- structure(foobar(1), attr_foo = "foo")
+    y <- structure(foobar(2), attr_bar = "bar")
+    expect_error(
+      vec_rbind(set_names(x, "x"), set_names(y, "x")),
+      class = "vctrs_error_incompatible_type"
+    )
+  })
+})
+
+test_that("vec_rbind() fails with complex foreign S4 classes", {
+  verify_errors({
+    joe <- .Counts(1L, name = "Joe")
+    jane <- .Counts(2L, name = "Jane")
+    expect_error(vec_rbind(joe, jane), class = "vctrs_error_incompatible_type")
+  })
+})
+
+test_that("vec_rbind() falls back to c() if S3 method is available", {
+  skip("TODO")
+})
+
+test_that("vec_rbind() falls back to c() if S4 method is available", {
+  skip("TODO")
+})
+
+test_that("vec_cbind() and vec_rbind() have informative error messages", {
+  skip_if_cant_set_names_on_s4()
+
+  verify_output(test_path("error", "test-bind.txt"), {
+    "# vec_rbind() fails with complex foreign S3 classes"
+    x <- structure(foobar(1), attr_foo = "foo")
+    y <- structure(foobar(2), attr_bar = "bar")
+    vec_rbind(set_names(x, "x"), set_names(y, "x"))
+
+    "# vec_rbind() fails with complex foreign S4 classes"
+    joe <- .Counts(1L, name = "Joe")
+    jane <- .Counts(2L, name = "Jane")
+    vec_rbind(set_names(joe, "x"), set_names(jane, "x"))
+  })
+})
+
+test_that("rbind supports names and inner names (#689)", {
+  out <- vec_rbind(
+    data_frame(x = list(a = 1, b = 2)),
+    data_frame(x = list(3)),
+    data_frame(x = list(d = 4))
+  )
+  expect_identical(out$x, list(a = 1, b = 2, 3, d = 4))
+
+  vec_x <- set_names(1:3, letters[1:3])
+  vec_y <- c(FOO = 4L)
+  oo_x <- set_names(as.POSIXlt(c("2020-01-01", "2020-01-02", "2020-01-03")), letters[1:3])
+  oo_y <- c(FOO = as.POSIXlt(c("2020-01-04")))
+  df_x <- new_data_frame(list(x = 1:3), row.names = letters[1:3])
+  df_y <- new_data_frame(list(x = 4L), row.names = "d")
+  mat_x <- matrix(1:3, 3, dimnames = list(letters[1:3]))
+  mat_y <- matrix(4L, 1, dimnames = list("d"))
+  nested_x <- new_data_frame(
+    list(df = df_x, mat = mat_x, vec = vec_x, oo = oo_x),
+    row.names = c("foo", "bar", "baz")
+  )
+  nested_y <- new_data_frame(
+    list(df = df_y, mat = mat_y, vec = vec_y, oo = oo_y),
+    row.names = c("quux")
+  )
+
+  nested_out <- vec_rbind(nested_x, nested_y)
+  expect_identical(row.names(nested_out), c("foo", "bar", "baz", "quux"))
+  expect_identical(row.names(nested_out$df), c("a", "b", "c", "d"))
+  expect_identical(row.names(nested_out$mat), c("a", "b", "c", "d"))
+  expect_identical(names(nested_out$vec), c("a", "b", "c", "FOO"))
+  expect_identical(names(nested_out$oo), c("a", "b", "c", "FOO"))
 })

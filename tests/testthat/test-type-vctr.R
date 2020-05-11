@@ -33,6 +33,18 @@ test_that("Can opt out of base type", {
   expect_s3_class(x, c("x", "vctrs_vctr"), exact = TRUE)
 })
 
+test_that("base type is always set for lists", {
+  expect_s3_class(new_vctr(list()), "list")
+})
+
+test_that("cannot opt out of the base type with lists", {
+  expect_error(new_vctr(list(), inherit_base_type = FALSE), "must inherit from the base type")
+})
+
+test_that("data frames are not allowed", {
+  expect_error(new_vctr(mtcars), "can't be a data frame")
+})
+
 test_that("attributes must be named", {
   expect_error(vec_set_attributes(1, list(1)), "must be named")
   expect_error(vec_set_attributes(1, list(y = 1, 2)), "2 does not")
@@ -67,7 +79,7 @@ test_that("and fails if attributes are different", {
   x1 <- new_vctr(1, class = "x", a = 1, b = 2)
   x2 <- new_vctr(2, class = "x", a = 2, b = 2)
 
-  expect_error(vec_cast(x1, x2), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(x1, x2), class = "vctrs_error_incompatible_type")
 })
 
 test_that("restoring to atomic vector of same type preserves attributes", {
@@ -80,20 +92,20 @@ test_that("restoring to atomic vector of same type preserves attributes", {
 test_that("restoring to atomic vector of different type throws error", {
   x1 <- new_vctr(1, class = "x")
 
-  expect_error(vec_restore("x", x1), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_restore("x", x1), class = "vctrs_error_incompatible_type")
 })
 
 test_that("base coercion methods mapped to vec_cast", {
   x <- new_vctr(1, inherit_base_type = FALSE)
 
-  expect_error(as.logical(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.integer(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.logical(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.double(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.character(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.Date(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.POSIXct(x), class = "vctrs_error_incompatible_cast")
-  expect_error(as.POSIXlt(x), class = "vctrs_error_incompatible_cast")
+  expect_error(as.logical(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.integer(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.logical(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.double(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.character(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.Date(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.POSIXct(x), class = "vctrs_error_incompatible_type")
+  expect_error(as.POSIXlt(x), class = "vctrs_error_incompatible_type")
 
   expect_equal(as.list(x), list(x))
 })
@@ -105,6 +117,31 @@ test_that("as.data.frame creates data frame", {
   expect_s3_class(df, "data.frame")
   expect_equal(nrow(df), 3)
   expect_named(df, "x")
+})
+
+test_that("as.data.frame on shaped vctrs doesn't bring along extra attributes", {
+  x <- new_vctr(1:3, foo = "bar", dim = c(3L, 1L))
+  df <- as.data.frame(x)
+  expect_null(attr(df, "foo", exact = TRUE))
+})
+
+test_that("as.data.frame2() unclasses input to avoid dispatch on as.data.frame()", {
+  x <- structure(1:2, dim = c(1L, 2L), dimnames = list("r1", c("c1", "c2")), class = "foo")
+  expect <- data.frame(c1 = 1L, c2 = 2L, row.names = "r1")
+
+  local_methods(as.data.frame.foo = function(x, ...) "dispatched!")
+
+  expect_identical(as.data.frame2(x), expect)
+})
+
+test_that("as.list() chops vectors", {
+  expect_identical(
+    as.list(new_vctr(1:3)),
+    list(new_vctr(1L), new_vctr(2L), new_vctr(3L))
+  )
+
+  x <- new_vctr(as.list(1:3))
+  expect_identical(as.list(x), as.list(1:3))
 })
 
 
@@ -125,12 +162,25 @@ test_that("equality functions remapped", {
 
 test_that("is.na<-() supported", {
   x <- new_vctr(1:4)
-
   is.na(x) <- c(FALSE, FALSE, TRUE, NA)
   expect_identical(x, new_vctr(c(1:2, NA, 4L)))
 
+  x <- new_vctr(1:4)
   is.na(x) <- TRUE
   expect_identical(x, new_vctr(rep(NA_integer_, 4)))
+
+  x <- new_vctr(1:4)
+  is.na(x) <- c(2, 3)
+  expect_identical(x, new_vctr(c(1L, NA, NA, 4L)))
+
+  names <- c("a", "b", "c", "d")
+  x <- set_names(new_vctr(1:4), names)
+  is.na(x) <- c("d", "b", "b")
+  expect_identical(x, set_names(new_vctr(c(1L, NA, 3L, NA)), names))
+
+  x <- new_vctr(1:4)
+  expect_error(is.na(x) <- "x", "character names to index an unnamed vector")
+  expect_error(is.na(x) <- 5, class = "vctrs_error_subscript_oob")
 })
 
 test_that("comparison functions remapped", {
@@ -216,7 +266,7 @@ test_that("can not provide invalid names", {
 
 test_that("can use [ and [[ with names", {
   local_methods(
-    vec_ptype2.vctrs_vctr = function(...) dbl(),
+    vec_ptype2.vctrs_vctr.double = function(...) dbl(),
     vec_ptype2.double.vctrs_vctr = function(...) dbl()
   )
   x <- new_vctr(c(a = 1, b = 2))
@@ -378,11 +428,11 @@ test_that("can put in data frame", {
 test_that("base coercions default to vec_cast", {
   local_hidden()
   h <- new_hidden(1)
-  expect_error(as.character(h), class = "vctrs_error_incompatible_cast")
-  expect_error(as.integer(h), class = "vctrs_error_incompatible_cast")
-  expect_error(generics::as.factor(h), class = "vctrs_error_incompatible_cast")
-  expect_error(generics::as.ordered(h), class = "vctrs_error_incompatible_cast")
-  expect_error(generics::as.difftime(h), class = "vctrs_error_incompatible_cast")
+  expect_error(as.character(h), class = "vctrs_error_incompatible_type")
+  expect_error(as.integer(h), class = "vctrs_error_incompatible_type")
+  expect_error(generics::as.factor(h), class = "vctrs_error_incompatible_type")
+  expect_error(generics::as.ordered(h), class = "vctrs_error_incompatible_type")
+  expect_error(generics::as.difftime(h), class = "vctrs_error_incompatible_type")
   expect_equal(as.logical(h), TRUE)
   expect_equal(as.double(h), 1)
 })

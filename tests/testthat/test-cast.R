@@ -1,11 +1,20 @@
 context("test-cast")
 
+test_that("vec_cast() has helpful error messages", {
+  verify_output(test_path("error", "test-cast.txt"), {
+    "# Casting to named argument mentions 'match type <foo>'"
+    vec_cast(1, "", x_arg = "foo", to_arg = "bar")
+    vec_cast(1, "", x_arg = "foo")
+  })
+})
+
+
 # vec_cast ---------------------------------------------------------------
 
 test_that("new classes are uncoercible by default", {
   x <- structure(1:10, class = "vctrs_nonexistant")
-  expect_error(vec_cast(1, x), class = "vctrs_error_incompatible_cast")
-  expect_error(vec_cast(x, 1), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(1, x), class = "vctrs_error_incompatible_type")
+  expect_error(vec_cast(x, 1), class = "vctrs_error_incompatible_type")
 })
 
 test_that("casting requires vectors", {
@@ -30,7 +39,7 @@ test_that("dimensionality matches output" ,{
   expect_dim(vec_cast(TRUE, x2), c(1, 2))
 
   x <- matrix(1, nrow = 2, ncol = 2)
-  expect_error(vec_cast(x, logical()), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(x, logical()), class = "vctrs_error_incompatible_type")
 })
 
 test_that("empty input to vec_cast_common() returns list()", {
@@ -40,12 +49,6 @@ test_that("empty input to vec_cast_common() returns list()", {
 
 test_that("identical structures can be cast to each other", {
   expect_identical(vec_cast(foobar("foo"), foobar("bar")), foobar("foo"))
-  expect_identical(vec_coercible_cast(foobar("foo"), foobar("bar")), foobar("foo"))
-})
-
-test_that("inputs to vec_coercible_cast() are checked", {
-  expect_error(vec_coercible_cast("", "", x_arg = 1), "must be a string")
-  expect_error(vec_coercible_cast("", "", to_arg = chr()), "must be a string")
 })
 
 test_that("cast common preserves names", {
@@ -77,6 +80,28 @@ test_that("cast errors create helpful messages (#57, #225)", {
   })
 })
 
+test_that("unspecified can be cast to shaped vectors", {
+  x <- matrix(letters[1:4], 2)
+  expect_identical(vec_cast(NA, x), matrix(chr(NA, NA), 1))
+
+  x <- foobar(c(1:4))
+  dim(x) <- c(2, 2)
+  out <- vec_cast(NA, x)
+
+  exp <- foobar(int(c(NA, NA)))
+  dim(exp) <- c(1, 2)
+  expect_identical(out, exp)
+})
+
+test_that("vec_cast() only falls back when casting to base type", {
+  expect_incompatible_df_cast(vec_cast(foobar(mtcars), mtcars), mtcars)
+  expect_error(
+    vec_cast(mtcars, foobar(mtcars)),
+    class = "vctrs_error_incompatible_type"
+  )
+})
+
+
 # Conditions --------------------------------------------------------------
 
 test_that("can suppress cast errors selectively", {
@@ -94,7 +119,15 @@ test_that("can signal deprecation warnings for lossy casts", {
   local_lifecycle_warnings()
 
   lossy_cast <- function() {
-    maybe_lossy_cast(TRUE, factor("foo"), factor("bar"), lossy = TRUE, .deprecation = TRUE)
+    maybe_lossy_cast(
+      TRUE,
+      factor("foo"),
+      factor("bar"),
+      lossy = TRUE,
+      .deprecation = TRUE,
+      x_arg = "x",
+      to_arg = "to"
+    )
   }
 
   expect_true(expect_warning(lossy_cast(), "detected a lossy transformation"))

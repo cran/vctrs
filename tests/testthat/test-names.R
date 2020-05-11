@@ -5,8 +5,12 @@ context("test-names")
 test_that("vec_names() retrieves names", {
   expect_null(vec_names(letters))
   expect_identical(vec_names(set_names(letters)), letters)
-  expect_null(vec_names(mtcars))
+
+  expect_identical(vec_names(mtcars), row.names(mtcars))
+  expect_null(vec_names(unrownames(mtcars)))
+
   expect_identical(vec_names(Titanic), dimnames(Titanic)[[1]])
+
   x <- matrix(1L, dimnames = list("row", "col"))
   expect_identical(vec_names(x), dimnames(x)[[1]])
 })
@@ -45,8 +49,13 @@ test_that("vec_names2() repairs names", {
 })
 
 test_that("vec_names2() treats data frames and arrays as vectors", {
-  expect_identical(vec_names2(mtcars), rep_len("", nrow(mtcars)))
+  expect_identical(vec_names2(mtcars), row.names(mtcars))
   expect_identical(vec_names2(as.matrix(mtcars)), row.names(mtcars))
+
+  df <- unrownames(mtcars)
+  exp <- rep_len("", nrow(mtcars))
+  expect_identical(vec_names2(df), exp)
+  expect_identical(vec_names2(as.matrix(df)), exp)
 })
 
 test_that("vec_names2() accepts and checks repair function", {
@@ -120,6 +129,9 @@ test_that("vec_as_names() is noisy by default", {
 
     # Quiet name repair
     vec_as_names(c("x", "x"), repair = "unique", quiet = TRUE)
+
+    # Hint at repair argument, if known
+    vec_as_names(c("x", "x"), repair = "check_unique", repair_arg = "repair")
   })
 })
 
@@ -145,6 +157,16 @@ test_that("vec_as_names_validate() validates repair arguments", {
   expect_identical(
     validate_name_repair_arg(~ toupper(.))(letters),
     LETTERS
+  )
+})
+
+test_that("vec_as_names() is quiet when function is supplied (#1018)", {
+  expect_silent(
+    vctrs::vec_as_names(
+      c("a", "b"),
+      repair = function(x) paste0(x, "a"),
+      quiet = FALSE
+    )
   )
 })
 
@@ -186,14 +208,16 @@ test_that("vec_set_names() sets matrix/array names", {
   expect_equal(vec_set_names(y, names), exp)
 })
 
-test_that("vec_set_names() does not set row names on data frames", {
-  x <- data.frame(a = 1, b = 2)
-  expect_equal(vec_set_names(x, "r1"), x)
-})
+test_that("vec_set_names() sets row names on data frames", {
+  expect_identical(
+    vec_set_names(data_frame(x = 1), "foo"),
+    new_data_frame(list(x = 1), row.names = "foo")
+  )
 
-test_that("vec_set_names() leaves existing data frame row names intact", {
-  x <- data.frame(a = 1, b = 2, row.names = "original")
-  expect_equal(rownames(vec_set_names(x, "new")), "original")
+  expect_identical(
+    vec_set_names(data_frame(x = 1:2), c("foo", "foo")),
+    new_data_frame(list(x = 1:2), row.names = c("foo...1", "foo...2"))
+  )
 })
 
 test_that("vec_set_names() correctly sets names on POSIXlt objects", {
@@ -272,8 +296,13 @@ test_that("as_minimal_names() is idempotent", {
 })
 
 test_that("minimal_names() treats data frames and arrays as vectors", {
-  expect_identical(minimal_names(mtcars), rep_len("", nrow(mtcars)))
+  expect_identical(minimal_names(mtcars), row.names(mtcars))
   expect_identical(minimal_names(as.matrix(mtcars)), row.names(mtcars))
+
+  df <- unrownames(mtcars)
+  exp <- rep_len("", nrow(mtcars))
+  expect_identical(minimal_names(df), exp)
+  expect_identical(minimal_names(as.matrix(df)), exp)
 })
 
 test_that("as_minimal_names() copies on write", {
@@ -691,28 +720,28 @@ test_that("Name repair works with non-UTF-8 names", {
 
 test_that("names cannot be empty", {
   expect_error_cnd(
-    stop_names_cannot_be_empty(1:3),
+    stop_names_cannot_be_empty(c("", "")),
     class = c("vctrs_error_names_cannot_be_empty", "vctrs_error_names", "vctrs_error"),
-    message = "Names must not be empty.",
-    locations = 1:3
+    message = "Names can't be empty.",
+    names = c("", "")
   )
 })
 
 test_that("names cannot be dot dot", {
   expect_error_cnd(
-    stop_names_cannot_be_dot_dot(1:3),
+    stop_names_cannot_be_dot_dot(c("..1", "..2")),
     class = c("vctrs_error_names_cannot_be_dot_dot", "vctrs_error_names", "vctrs_error"),
-    message = "Names must not be of the form `...` or `..j`.",
-    locations = 1:3
+    message = "Names can't be of the form `...` or `..j`.",
+    names = c("..1", "..2")
   )
 })
 
 test_that("names must be unique", {
   expect_error_cnd(
-    stop_names_must_be_unique(1:3),
+    stop_names_must_be_unique(c("x", "y", "y", "x")),
     class = c("vctrs_error_names_must_be_unique", "vctrs_error_names", "vctrs_error"),
     message = "Names must be unique.",
-    locations = 1:3
+    names = c("x", "y", "y", "x")
   )
 })
 

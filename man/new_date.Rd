@@ -5,7 +5,8 @@
 \alias{new_datetime}
 \alias{new_duration}
 \alias{vec_ptype2.Date}
-\alias{vec_ptype2.POSIXt}
+\alias{vec_ptype2.POSIXct}
+\alias{vec_ptype2.POSIXlt}
 \alias{vec_ptype2.difftime}
 \alias{vec_cast.Date}
 \alias{vec_cast.POSIXct}
@@ -13,6 +14,7 @@
 \alias{vec_cast.difftime}
 \alias{vec_arith.Date}
 \alias{vec_arith.POSIXct}
+\alias{vec_arith.POSIXlt}
 \alias{vec_arith.difftime}
 \title{Date, date-time, and duration S3 classes}
 \usage{
@@ -24,7 +26,9 @@ new_duration(x = double(), units = c("secs", "mins", "hours", "days", "weeks"))
 
 \method{vec_ptype2}{Date}(x, y, ...)
 
-\method{vec_ptype2}{POSIXt}(x, y, ...)
+\method{vec_ptype2}{POSIXct}(x, y, ...)
+
+\method{vec_ptype2}{POSIXlt}(x, y, ...)
 
 \method{vec_ptype2}{difftime}(x, y, ...)
 
@@ -39,6 +43,8 @@ new_duration(x = double(), units = c("secs", "mins", "hours", "days", "weeks"))
 \method{vec_arith}{Date}(op, x, y, ...)
 
 \method{vec_arith}{POSIXct}(op, x, y, ...)
+
+\method{vec_arith}{POSIXlt}(op, x, y, ...)
 
 \method{vec_arith}{difftime}(op, x, y, ...)
 }

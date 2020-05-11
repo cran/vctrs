@@ -56,6 +56,13 @@ static SEXP vec_proxy_unwrap(SEXP x) {
   return x;
 }
 
+// [[ register() ]]
+SEXP vctrs_unset_s4(SEXP x) {
+  x = r_clone_referenced(x);
+  r_unmark_s4(x);
+  return x;
+}
+
 SEXP vec_proxy_equal_dispatch(SEXP x) {
   if (vec_typeof(x) == vctrs_type_s3) {
     return vctrs_dispatch1(syms_vec_proxy_equal_dispatch, fns_vec_proxy_equal_dispatch,
@@ -75,7 +82,7 @@ SEXP vec_proxy_recursive(SEXP x, enum vctrs_proxy_kind kind) {
   PROTECT(x);
 
   if (is_data_frame(x)) {
-    x = PROTECT(r_maybe_duplicate(x));
+    x = PROTECT(r_clone_referenced(x));
     R_len_t n = Rf_length(x);
 
     for (R_len_t i = 0; i < n; ++i) {

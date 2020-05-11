@@ -31,15 +31,14 @@ test_that("vec_proxy() transforms records to data frames", {
 
 # coercion ----------------------------------------------------------------
 
-test_that("can cast list to rcrd", {
+test_that("can't cast list to rcrd", {
   l <- list(
     new_rcrd(list(a = "1", b = 3L)),
     new_rcrd(list(b = "4", a = 2))
   )
-
-  expect_equal(
+  expect_error(
     vec_cast(l, new_rcrd(list(a = 1L, b = 2L))),
-    new_rcrd(list(a = 1:2, b = 3:4))
+    class = "vctrs_error_incompatible_type"
   )
 })
 
@@ -52,27 +51,16 @@ test_that("can recast rcrd from list", {
   )
 })
 
-test_that("can cast rcrd to list", {
+test_that("can't cast rcrd to list", {
   r <- new_rcrd(list(x = 1:2, y = 2:3))
-
-  expect_identical(
-    vec_cast(r, list()),
-    list(
-      new_rcrd(list(x = 1L, y = 2L)),
-      new_rcrd(list(x = 2L, y = 3L))
-    )
-  )
-
-  expect_identical(
-    vec_cast(r, list()),
-    as.list(r)
-  )
+  expect_error(vec_cast(r, list()), class = "vctrs_error_incompatible_type")
+  expect_error(vec_cast(r, list()), class = "vctrs_error_incompatible_type")
 })
 
 test_that("default casts are implemented correctly", {
   r <- new_rcrd(list(x = 1, y = 1))
 
-  expect_error(vec_cast(1, r), error = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(1, r), error = "vctrs_error_incompatible_type")
   expect_equal(vec_cast(NULL, r), NULL)
 })
 
@@ -82,22 +70,21 @@ test_that("can't cast incompatible rcrd", {
       new_rcrd(list(a = "1", b = 3L)),
       new_rcrd(list(a = "1"))
     ),
-    class = "vctrs_error_incompatible_cast"
+    class = "vctrs_error_incompatible_type"
   )
   expect_error(
     vec_cast(
       new_rcrd(list(a = "1", b = 3L)),
       new_rcrd(list(a = "1", c = 3L))
     ),
-    class = "vctrs_error_incompatible_cast"
+    class = "vctrs_error_incompatible_type"
   )
-  expect_lossy(
+  expect_error(
     vec_cast(
       new_rcrd(list(a = "a", b = 3L)),
       new_rcrd(list(a = 1, b = 3L))
     ),
-    new_rcrd(list(a = na_dbl, b = 3L)),
-    chr(), dbl()
+    class = "vctrs_error_incompatible_type"
   )
 })
 
@@ -200,11 +187,12 @@ test_that("can use dictionary methods on a rcrd", {
   expect_equal(anyDuplicated(x), TRUE)
 })
 
-test_that("can round trip through list", {
+test_that("cannot round trip through list", {
   local_tuple_methods()
   t <- tuple(1:2, 3:4)
-  l <- expect_equal(vec_cast(t, list()), list(tuple(1, 3), tuple(2, 4)))
-  expect_equal(vec_cast(l, t), t)
+
+  # Used to be allowed
+  expect_error(vec_cast(t, list()), class = "vctrs_error_incompatible_type")
 })
 
 test_that("dangerous methods marked as unimplemented", {

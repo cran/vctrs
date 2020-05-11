@@ -12,6 +12,11 @@
 #' @param value Replacement values. `value` is cast to the type of
 #'   `x`, but only if they have a common type. See below for examples
 #'   of this rule.
+#' @param x_arg,value_arg Argument names for `x` and `value`. These are used
+#'   in error messages to inform the user about the locations of
+#'   incompatible types and sizes (see [stop_incompatible_type()] and
+#'   [stop_incompatible_size()]).
+#' @param ... These dots are for future extensions and must be empty.
 #' @return A vector of the same type as `x`.
 #'
 #' @section Genericity:
@@ -74,15 +79,17 @@
 #'
 #'
 #' # Note that the types must be coercible for the cast to happen.
-#' # For instance, you can cast a character vector to an integer:
-#' vec_cast("1", integer())
+#' # For instance, you can cast a double vector of whole numbers to an
+#' # integer vector:
+#' vec_cast(1, integer())
 #'
-#' # But these types are not coercible:
-#' try(vec_ptype2("1", integer()))
+#' # But not fractional doubles:
+#' try(vec_cast(1.5, integer()))
 #'
-#' # Hence you cannot assign character values to an integer or double
+#' # For this reason you can't assign fractional values in an integer
 #' # vector:
-#' try(vec_slice(x, 2) <- "20")
+#' x <- 1:3
+#' try(vec_slice(x, 2) <- 1.5)
 vec_slice <- function(x, i) {
   .Call(vctrs_slice, x, i)
 }
@@ -149,12 +156,15 @@ vec_slice_dispatch_integer64 <- function(x, i) {
 #' @rdname vec_slice
 #' @export
 `vec_slice<-` <- function(x, i, value) {
-  .Call(vctrs_assign, x, i, value)
+  .Call(vctrs_assign, x, i, value, "", "")
 }
 #' @rdname vec_slice
 #' @export
-vec_assign <- function(x, i, value) {
-  .Call(vctrs_assign, x, i, value)
+vec_assign <- function(x, i, value, ..., x_arg = "", value_arg = "") {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
+  }
+  .Call(vctrs_assign, x, i, value, x_arg, value_arg)
 }
 vec_assign_fallback <- function(x, i, value) {
   # Work around bug in base `[<-`
@@ -166,6 +176,15 @@ vec_assign_fallback <- function(x, i, value) {
   miss_args <- rep(list(missing_arg()), d - 1)
   eval_bare(expr(x[i, !!!miss_args] <- value))
   x
+}
+
+# `start` is 0-based
+vec_assign_seq <- function(x, value, start, size, increasing = TRUE) {
+  .Call(vctrs_assign_seq, x, value, start, size, increasing)
+}
+
+vec_assign_params <- function(x, i, value, assign_names = FALSE) {
+  .Call(vctrs_assign_params, x, i, value, assign_names)
 }
 
 vec_remove <- function(x, i) {

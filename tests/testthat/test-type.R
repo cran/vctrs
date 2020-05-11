@@ -140,8 +140,6 @@ test_that("class_type() detects classes", {
   expect_identical(class_type(foobar(list())), "unknown")
   expect_identical(class_type(structure(list(), class = "list")), "list")
   expect_identical(class_type(subclass(structure(list(), class = "list"))), "list")
-  expect_identical(class_type(new_list_of()), "list_of")
-  expect_identical(class_type(subclass(new_list_of())), "list_of")
 
   expect_identical(class_type(data.frame()), "bare_data_frame")
   expect_identical(class_type(tibble::tibble()), "bare_tibble")
@@ -158,10 +156,6 @@ test_that("class_type() detects classes", {
   expect_identical(class_type(as.POSIXlt(new_date())), "bare_posixlt")
   expect_identical(class_type(subclass(new_date())), "unknown")
   expect_identical(class_type(subclass(new_datetime())), "unknown")
-  expect_identical(class_type(subclass(as.POSIXlt(new_date()))), "posixlt")
-
-  expect_identical(class_type(new_rcrd(list(a = 1))), "rcrd")
-  expect_identical(class_type(subclass(new_rcrd(list(a = 1)))), "rcrd")
 
   expect_identical(class_type(NA), "none")
   expect_identical(class_type(foobar()), "unknown")
@@ -226,4 +220,12 @@ test_that("vec_ptype_finalise() can handle data frame columns", {
 test_that("vec_ptype_finalise() requires vector types", {
   expect_error(vec_ptype_finalise(quote(name)), class = "vctrs_error_scalar_type")
   expect_error(vec_ptype_finalise(foobar()), class = "vctrs_error_scalar_type")
+})
+
+# This might change in the future if we decide that prototypes don't
+# have names
+test_that("vec_ptype() preserves type of names and row names", {
+  expect_identical(vec_ptype(c(foo = 1)), named(dbl()))
+  expect_identical(vec_ptype(mtcars), mtcars[0, ])
+  expect_identical(vec_ptype(foobar(mtcars)), foobar(mtcars[0, ]))
 })

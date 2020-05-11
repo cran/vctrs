@@ -1,9 +1,16 @@
 #' vctr (vector) S3 class
 #'
+#' @description
 #' This abstract class provides a set of useful default methods that makes it
 #' considerably easier to get started with a new S3 vector class. See
 #' `vignette("s3-vector")` to learn how to use it to create your own S3
 #' vector classes.
+#'
+#' @details
+#' List vctrs are special cases. When created through `new_vctr()`, the
+#' resulting list vctr should always be recognized as a list by
+#' `vec_is_list()`. Because of this, if `inherit_base_type` is `FALSE`
+#' an error is thrown.
 #'
 #' @section Base methods:
 #' The vctr class provides methods for many base generics using a smaller
@@ -50,20 +57,39 @@
 #' @param ... Name-value pairs defining attributes
 #' @param class Name of subclass.
 #' @param inherit_base_type \Sexpr[results=rd, stage=render]{vctrs:::lifecycle("experimental")}
-#'   Does this class extend the base type of `.data`?  i.e. does the
-#'   resulting object extend the behaviour the underlying type?
+#'   A single logical, or `NULL`. Does this class extend the base type of
+#'   `.data`? i.e. does the resulting object extend the behaviour of the
+#'   underlying type? Defaults to `FALSE` for all types except lists, which
+#'   are required to inherit from the base type.
 #' @export
 #' @keywords internal
 #' @aliases vctr
 new_vctr <- function(.data,
                      ...,
                      class = character(),
-                     inherit_base_type = FALSE) {
+                     inherit_base_type = NULL) {
   if (!is_vector(.data)) {
     abort("`.data` must be a vector type.")
   }
 
   nms <- validate_names(.data)
+
+  if (is_list(.data)) {
+    if (is.data.frame(.data)) {
+      abort("`.data` can't be a data frame.")
+    }
+
+    if (is.null(inherit_base_type)) {
+      inherit_base_type <- TRUE
+    } else if (is_false(inherit_base_type)) {
+      abort("List `.data` must inherit from the base type.")
+    }
+  }
+
+  # Default to `FALSE` in all cases except lists
+  if (is.null(inherit_base_type)) {
+    inherit_base_type <- FALSE
+  }
 
   class <- c(class, "vctrs_vctr", if (inherit_base_type) typeof(.data))
   attrib <- list(names = nms, ..., class = class)
@@ -100,53 +126,30 @@ vec_proxy.vctrs_vctr <- function(x, ...) {
 #' @export
 vec_restore.vctrs_vctr <- function(x, to, ..., i = NULL) {
   if (typeof(x) != typeof(to)) {
-    stop_incompatible_cast(x, to)
+    stop_incompatible_cast(x, to, x_arg = "", to_arg = "")
   }
   NextMethod()
 }
 
-#' @method vec_ptype2 vctrs_vctr
-#' @export
-vec_ptype2.vctrs_vctr <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  # This method is redundant with `vec_ptype2.default()` but it
-  # instructs `vec_c()` that it isn't a foreign type. This avoids
-  # infinite recursion through `c.vctrs_vctr()`.
-  if (has_same_type(x, y)) {
-    vec_ptype(x)
-  } else {
-    vec_default_ptype2(x, y, ..., x_arg = x_arg, y_arg = y_arg)
-  }
-}
-
 #' @method vec_cast vctrs_vctr
 #' @export
-vec_cast.vctrs_vctr <- function(x, to, ...) UseMethod("vec_cast.vctrs_vctr")
+vec_cast.vctrs_vctr <- function(x, to, ...) {
+  UseMethod("vec_cast.vctrs_vctr")
+}
 
-#' @method vec_cast.vctrs_vctr default
-#' @export
-vec_cast.vctrs_vctr.default <- function(x, to, ...) {
+vctr_cast <- function(x, to, ..., x_arg = "", to_arg = "") {
   # These are not strictly necessary, but make bootstrapping a new class
   # a bit simpler
   if (is.object(x)) {
-    attr_x <- utils::modifyList(attributes(x), list(names = NULL))
-    attr_y <- utils::modifyList(attributes(to), list(names = NULL))
-
-    if (identical(attr_x, attr_y)) {
-      return(x)
+    if (is_same_type(x, to)) {
+      x
     } else {
-      stop_incompatible_cast(x, to)
+      stop_incompatible_cast(x, to, x_arg = x_arg, to_arg = to_arg)
     }
+  } else {
+    # FIXME: `vec_restore()` should only be called on proxies
+    vec_restore(x, to)
   }
-
-  vec_restore(x, to)
-}
-
-#' @export
-#' @method vec_cast.list vctrs_vctr
-vec_cast.list.vctrs_vctr <- function(x, to, ...) {
-  # FIXME: Coercion to list should be disallowed. Current
-  # implementation can be achieved with `vec_chop()`.
-  vec_cast_list_default(x, to, ...)
 }
 
 #' @export
@@ -240,7 +243,7 @@ diff.vctrs_vctr <- function(x, lag = 1L, differences = 1L, ...) {
 #' @export
 `[[<-.vctrs_vctr` <- function(x, ..., value) {
   if (!is.list(x)) {
-    value <- vec_coercible_cast(value, x, x_arg = "x", to_arg = "value")
+    value <- vec_cast(value, x)
   }
   NextMethod()
 }
@@ -257,7 +260,7 @@ diff.vctrs_vctr <- function(x, lag = 1L, differences = 1L, ...) {
 
 #' @export
 `[<-.vctrs_vctr` <- function(x, i, value) {
-  value <- vec_coercible_cast(value, x, x_arg = "x", to_arg = "value")
+  value <- vec_cast(value, x)
   NextMethod()
 }
 
@@ -295,7 +298,13 @@ as.character.vctrs_vctr <- function(x, ...) {
 
 #' @export
 as.list.vctrs_vctr <- function(x, ...) {
-  vec_cast(x, list())
+  out <- vec_chop(x)
+
+  if (vec_is_list(x)) {
+    out <- lapply(out, `[[`, 1)
+  }
+
+  out
 }
 
 #' @export
@@ -314,8 +323,13 @@ as.POSIXlt.vctrs_vctr <- function(x, tz = "", ...) {
   vec_cast(x, to)
 }
 
-# Work around inconsistencies in as.data.frame() for 1D arrays
+# Work around inconsistencies in as.data.frame()
 as.data.frame2 <- function(x) {
+  # Unclass to avoid dispatching on `as.data.frame()` methods that break size
+  # invariants, like `as.data.frame.table()` (#913). This also prevents infinite
+  # recursion with shaped vctrs in `as.data.frame.vctrs_vctr()`.
+  x <- unclass(x)
+
   out <- as.data.frame(x)
 
   if (vec_dim_n(x) == 1) {
@@ -338,7 +352,7 @@ as.data.frame.vctrs_vctr <- function(x,
   force(nm)
 
   if (has_dim(x)) {
-    return(as.data.frame2(vec_data(x)))
+    return(as.data.frame2(x))
   }
 
   cols <- list(x)
@@ -643,12 +657,7 @@ levels.vctrs_vctr <- function(x) {
 
 #' @export
 `is.na<-.vctrs_vctr` <- function(x, value) {
-  # No support for other arguments than logical for now,
-  # even if base R is more lenient here.
-  vec_assert(value, logical())
-
-  vec_slice(x, value) <- vec_init(x)
-  x
+  vec_assign(x, value, vec_init(x))
 }
 
 # Helpers -----------------------------------------------------------------
@@ -664,8 +673,7 @@ format.hidden <- function(x, ...) rep("xxx", length(x))
 
 local_hidden <- function(frame = caller_env()) {
   local_bindings(.env = global_env(), .frame = frame,
-    vec_ptype2.hidden         = function(x, y, ...) UseMethod("vec_ptype2.hidden", y),
-    vec_ptype2.hidden.default = function(x, y, ...) stop_incompatible_type(x, y, ...),
+    vec_ptype2.hidden         = function(x, y, ...) UseMethod("vec_ptype2.hidden"),
     vec_ptype2.hidden.hidden  = function(x, y, ...) new_hidden(),
     vec_ptype2.hidden.double  = function(x, y, ...) new_hidden(),
     vec_ptype2.double.hidden  = function(x, y, ...) new_hidden(),
@@ -673,7 +681,6 @@ local_hidden <- function(frame = caller_env()) {
     vec_ptype2.logical.hidden = function(x, y, ...) new_hidden(),
 
     vec_cast.hidden          = function(x, to, ...) UseMethod("vec_cast.hidden"),
-    vec_cast.hidden.default  = function(x, to, ...) stop_incompatible_cast(x, to, ...),
     vec_cast.hidden.hidden   = function(x, to, ...) x,
     vec_cast.hidden.double   = function(x, to, ...) new_hidden(vec_data(x)),
     vec_cast.double.hidden   = function(x, to, ...) vec_data(x),

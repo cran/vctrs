@@ -23,6 +23,14 @@ test_that("slicing factors uses a proxy to not go through `[.factor`", {
   expect_identical(vec_slice(y, 1), y)
 })
 
+test_that("`vec_c()` throws the right error with subclassed factors (#1015)", {
+  a <- subclass(factor("a"))
+  b <- subclass(factor("b"))
+
+  expect_identical(vec_c(a, a), subclass(factor(c("a", "a"))))
+  expect_error(vec_c(a, b), class = "vctrs_error_incompatible_type")
+})
+
 # Coercion ----------------------------------------------------------------
 
 test_that("factor/character coercions are symmetric and unchanging", {
@@ -97,6 +105,45 @@ test_that("vec_ptype2() errors with malformed ordered factors", {
   expect_error(vec_ptype2(y, x, y_arg = "z"), "`z` is a corrupt ordered factor")
 })
 
+test_that("ordered factors with different levels are not compatible", {
+  expect_error(
+    vec_ptype2(ordered("a"), ordered("b")),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_ptype2(ordered("a"), ordered(c("a", "b"))),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_cast(ordered("a"), ordered("b")),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_cast(ordered("a"), ordered(c("a", "b"))),
+    class = "vctrs_error_incompatible_type"
+  )
+})
+
+test_that("factors and ordered factors are not compatible", {
+  expect_error(
+    vec_ptype2(factor("a"), ordered("a")),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_ptype2(ordered("a"), factor("a")),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_cast(factor("a"), ordered("a")),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_cast(ordered("a"), factor("a")),
+    class = "vctrs_error_incompatible_type"
+  )
+})
+
+
 # Casting -----------------------------------------------------------------
 
 test_that("safe casts work as expected", {
@@ -112,7 +159,8 @@ test_that("safe casts work as expected", {
   expect_equal(vec_cast("a", factor()), fa)
   expect_equal(vec_cast(fa, factor()), fa)
 
-  expect_equal(vec_cast(list("a", "b"), fab), fab)
+  # This used to be allowed
+  expect_error(vec_cast(list("a", "b"), fab), class = "vctrs_error_incompatible_type")
 })
 
 test_that("can cast to character", {
@@ -136,19 +184,16 @@ test_that("lossy factor casts fail", {
 })
 
 test_that("invalid casts generate error", {
-  expect_error(vec_cast(double(), factor("a")), class = "vctrs_error_incompatible_cast")
-  expect_error(vec_cast(factor("a"), logical()), class = "vctrs_error_incompatible_cast")
-  expect_error(vec_cast(ordered("a"), logical()), class = "vctrs_error_incompatible_cast")
-  expect_error(vec_cast(logical(), factor("a")), class = "vctrs_error_incompatible_cast")
-  expect_error(vec_cast(logical(), ordered("a")), class = "vctrs_error_incompatible_cast")
+  expect_error(vec_cast(double(), factor("a")), class = "vctrs_error_incompatible_type")
+  expect_error(vec_cast(factor("a"), logical()), class = "vctrs_error_incompatible_type")
+  expect_error(vec_cast(ordered("a"), logical()), class = "vctrs_error_incompatible_type")
+  expect_error(vec_cast(logical(), factor("a")), class = "vctrs_error_incompatible_type")
+  expect_error(vec_cast(logical(), ordered("a")), class = "vctrs_error_incompatible_type")
 })
 
 test_that("orderedness of factor is preserved", {
-  fct <- factor("a")
-  ord <- ordered("a")
-
-  expect_equal(vec_cast(fct, ord), ord)
-  expect_equal(vec_cast("a", ord), ord)
+  ord <- ordered(c("a", "b"), levels = c("b", "a"))
+  expect_equal(vec_cast("a", ord), ordered("a", levels = c("b", "a")))
 })
 
 test_that("NA are not considered lossy in factor cast (#109)", {
@@ -160,6 +205,24 @@ test_that("Casting to a factor with explicit NA levels retains them", {
   f <- factor(c("x", NA), exclude = NULL)
   expect_identical(vec_cast(f, f), f)
   expect_identical(vec_cast(f, factor()), f)
+})
+
+test_that("characters can be cast to ordered", {
+  expect_identical(vec_cast("a", ordered("a")), ordered("a"))
+  expect_error(vec_cast(c("a", "b"), ordered("a")), class = "vctrs_error_cast_lossy")
+})
+
+
+# Proxy / restore ---------------------------------------------------------
+
+test_that("subclassed factors / ordered factors can be restored (#1015)", {
+  x <- subclass(factor("a"))
+  proxy <- vec_proxy(x)
+  expect_identical(vec_restore(proxy, x), x)
+
+  y <- subclass(ordered("a"))
+  proxy <- vec_proxy(y)
+  expect_identical(vec_restore(proxy, y), y)
 })
 
 # Arithmetic and factor ---------------------------------------------------

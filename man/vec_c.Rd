@@ -37,7 +37,10 @@ are passed as second argument.
 
 See the \link[=name_spec]{name specification topic}.}
 
-\item{.name_repair}{How to repair names, see \code{repair} options in \code{\link[=vec_as_names]{vec_as_names()}}.}
+\item{.name_repair}{How to repair names, see \code{repair} options in
+\code{\link[=vec_as_names]{vec_as_names()}}.  Can also be \code{\link[rlang:zap]{rlang::zap()}} to ignore names
+during concatenation. The names are still used to give
+informative error messages, e.g. with coercion errors.}
 }
 \value{
 A vector with class given by \code{.ptype}, and length equal to the
@@ -61,7 +64,6 @@ Combine all arguments into a new vector of common type.
 
 \examples{
 vec_c(FALSE, 1L, 1.5)
-vec_c(FALSE, 1L, "x", .ptype = character())
 
 # Date/times --------------------------
 c(Sys.Date(), Sys.time())

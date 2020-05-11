@@ -124,7 +124,8 @@ test_that("vec_compare() calls vec_proxy_compare()", {
     vec_proxy_compare.vctrs_foobar = function(x) rev(x),
     vec_ptype2.integer.vctrs_foobar = function(...) foobar(int()),
     vec_ptype2.vctrs_foobar = function(...) foobar(int()),
-    vec_cast.vctrs_foobar = function(x, ...) x
+    vec_cast.vctrs_foobar = function(...) NULL,
+    vec_cast.vctrs_foobar.integer = function(x, ...) x,
   )
   expect_identical(vec_compare(1:3, 1:3), int(0, 0, 0))
   expect_identical(vec_compare(1:3, foobar(1:3)), int(-1, 0, 1))
@@ -154,6 +155,16 @@ test_that("vec_proxy_compare() handles data frame with a POSIXlt column", {
 test_that("vec_proxy_compare.POSIXlt() correctly orders (#720)", {
   dates <- as.POSIXlt(seq.Date(as.Date("2019-12-30"), as.Date("2020-01-03"), by = "day"))
   expect_equal(vec_order(dates), 1:5)
+})
+
+test_that("vec_proxy_compare.POSIXlt() correctly orders around DST", {
+  # 1am in EDT
+  x <- as.POSIXlt("2020-11-01 01:00:00", tz = "America/New_York")
+
+  # "falls back" to 1am again, but in EST
+  y <- as.POSIXlt(x + 3600)
+
+  expect_equal(vec_order(c(y, x)), c(2, 1))
 })
 
 test_that("error is thrown with data frames with 0 columns", {
@@ -217,6 +228,13 @@ test_that("can compare unspecified", {
 
 test_that("can't supply NA as `na_equal`", {
   expect_error(vec_compare(NA, NA, na_equal = NA), "single `TRUE` or `FALSE`")
+})
+
+test_that("vec_compare() silently falls back to base data frame", {
+  expect_silent(expect_identical(
+    vec_compare(foobar(mtcars), foobar(tibble::as_tibble(mtcars))),
+    rep(0L, 32)
+  ))
 })
 
 # order/sort --------------------------------------------------------------

@@ -1,33 +1,61 @@
 #include "vctrs.h"
+#include "ptype2.h"
 #include "type-data-frame.h"
 #include "utils.h"
+#include "shape.h"
 
-// [[ include("vctrs.h") ]]
-SEXP vec_type2(SEXP x, SEXP y,
-               struct vctrs_arg* x_arg,
-               struct vctrs_arg* y_arg,
-               int* left) {
+static
+SEXP vec_ptype2_switch_native(const struct ptype2_opts* opts,
+                              enum vctrs_type x_type,
+                              enum vctrs_type y_type,
+                              int* left);
+
+// [[ register() ]]
+SEXP vctrs_ptype2_params(SEXP x,
+                         SEXP y,
+                         SEXP x_arg,
+                         SEXP y_arg,
+                         SEXP df_fallback) {
+  struct vctrs_arg x_arg_ = vec_as_arg(x_arg);
+  struct vctrs_arg y_arg_ = vec_as_arg(y_arg);
+
+  const struct ptype2_opts opts = {
+    .x = x,
+    .y = y,
+    .x_arg = &x_arg_,
+    .y_arg = &y_arg_,
+    .df_fallback = r_int_get(df_fallback, 0)
+  };
+
+  int _left;
+  return vec_ptype2_opts(&opts, &_left);
+}
+
+SEXP vec_ptype2_opts(const struct ptype2_opts* opts,
+                     int* left) {
+  SEXP x = opts->x;
+  SEXP y = opts->y;
+  struct vctrs_arg* x_arg = opts->x_arg;
+  struct vctrs_arg* y_arg = opts->y_arg;
+
   if (x == R_NilValue) {
-    if (!vec_is_partial(y)) {
-      vec_assert(y, y_arg);
-    }
     *left = y == R_NilValue;
-    return vec_type(y);
+    return vec_ptype(y, y_arg);
   }
   if (y == R_NilValue) {
-    if (!vec_is_partial(x)) {
-      vec_assert(x, x_arg);
-    }
     *left = x == R_NilValue;
-    return vec_type(x);
-  }
-
-  if (has_dim(x) || has_dim(y)) {
-    return vec_ptype2_dispatch_s3(x, y, x_arg, y_arg);
+    return vec_ptype(x, x_arg);
   }
 
   enum vctrs_type type_x = vec_typeof(x);
   enum vctrs_type type_y = vec_typeof(y);
+
+  if (type_x == vctrs_type_unspecified) {
+    return vec_ptype(y, y_arg);
+  }
+  if (type_y == vctrs_type_unspecified) {
+    return vec_ptype(x, x_arg);
+  }
 
   if (type_x == vctrs_type_scalar) {
     stop_scalar_type(x, x_arg);
@@ -36,149 +64,123 @@ SEXP vec_type2(SEXP x, SEXP y,
     stop_scalar_type(y, y_arg);
   }
 
-  if (type_x == vctrs_type_unspecified) {
-    return vec_type(y);
-  }
-  if (type_y == vctrs_type_unspecified) {
-    return vec_type(x);
-  }
-
   if (type_x == vctrs_type_s3 || type_y == vctrs_type_s3) {
-    return vec_ptype2_dispatch(x, y, type_x, type_y, x_arg, y_arg, left);
+    return vec_ptype2_dispatch(opts, type_x, type_y, left);
+  } else {
+    return vec_ptype2_switch_native(opts, type_x, type_y, left);
   }
+}
 
-  enum vctrs_type2 type2 = vec_typeof2_impl(type_x, type_y, left);
+static
+SEXP vec_ptype2_switch_native(const struct ptype2_opts* opts,
+                              enum vctrs_type x_type,
+                              enum vctrs_type y_type,
+                              int* left) {
+  SEXP x = opts->x;
+  SEXP y = opts->y;
+  struct vctrs_arg* x_arg = opts->x_arg;
+  struct vctrs_arg* y_arg = opts->y_arg;
+
+  enum vctrs_type2 type2 = vec_typeof2_impl(x_type, y_type, left);
 
   switch (type2) {
   case vctrs_type2_null_null:
     return R_NilValue;
 
   case vctrs_type2_logical_logical:
-    return vctrs_shared_empty_lgl;
+    return vec_shaped_ptype(vctrs_shared_empty_lgl, x, y, x_arg, y_arg);
 
   case vctrs_type2_logical_integer:
   case vctrs_type2_integer_integer:
-    return vctrs_shared_empty_int;
+    return vec_shaped_ptype(vctrs_shared_empty_int, x, y, x_arg, y_arg);
 
   case vctrs_type2_logical_double:
   case vctrs_type2_integer_double:
   case vctrs_type2_double_double:
-    return vctrs_shared_empty_dbl;
+    return vec_shaped_ptype(vctrs_shared_empty_dbl, x, y, x_arg, y_arg);
+
+  case vctrs_type2_integer_complex:
+  case vctrs_type2_double_complex:
+  case vctrs_type2_complex_complex:
+    return vec_shaped_ptype(vctrs_shared_empty_cpl, x, y, x_arg, y_arg);
 
   case vctrs_type2_character_character:
-    return vctrs_shared_empty_chr;
+    return vec_shaped_ptype(vctrs_shared_empty_chr, x, y, x_arg, y_arg);
 
   case vctrs_type2_raw_raw:
-    return vctrs_shared_empty_raw;
+    return vec_shaped_ptype(vctrs_shared_empty_raw, x, y, x_arg, y_arg);
 
   case vctrs_type2_list_list:
-    return vctrs_shared_empty_list;
+    return vec_shaped_ptype(vctrs_shared_empty_list, x, y, x_arg, y_arg);
 
   case vctrs_type2_dataframe_dataframe:
-    return df_ptype2(x, y, x_arg, y_arg);
+    return df_ptype2(opts);
 
   default:
-    return vec_ptype2_dispatch_s3(x, y, x_arg, y_arg);
+    return vec_ptype2_dispatch_s3(opts);
   }
 }
 
-// [[ include("vctrs.h") ]]
-SEXP df_ptype2(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg) {
-  SEXP x_names = PROTECT(r_names(x));
-  SEXP y_names = PROTECT(r_names(y));
 
-  SEXP x_dups_pos = PROTECT(vec_match(x_names, y_names));
-  SEXP y_dups_pos = PROTECT(vec_match(y_names, x_names));
+struct is_coercible_data {
+  const struct ptype2_opts* opts;
+  int* dir;
+};
 
-  int* x_dups_pos_data = INTEGER(x_dups_pos);
-  int* y_dups_pos_data = INTEGER(y_dups_pos);
+static
+void vec_is_coercible_cb(void* data_) {
+  struct is_coercible_data* data = (struct is_coercible_data*) data_;
+  vec_ptype2_opts(data->opts, data->dir);
+}
 
-  R_len_t x_len = Rf_length(x_dups_pos);
-  R_len_t y_len = Rf_length(y_dups_pos);
+static
+void vec_is_coercible_e(const struct ptype2_opts* opts,
+                        int* dir,
+                        ERR* err) {
+  struct is_coercible_data data = {
+    .opts = opts,
+    .dir = dir,
+  };
 
-  // Count columns that are only in `y`
-  R_len_t rest_len = 0;
-  for (R_len_t i = 0; i < y_len; ++i) {
-    if (y_dups_pos_data[i] == NA_INTEGER) {
-      ++rest_len;
-    }
-  }
+  *err = r_try_catch(&vec_is_coercible_cb,
+                     &data,
+                     syms_vctrs_error_incompatible_type,
+                     NULL,
+                     NULL);
+}
 
-  R_len_t out_len = x_len + rest_len;
-  SEXP out = PROTECT(Rf_allocVector(VECSXP, out_len));
-  SEXP nms = PROTECT(Rf_allocVector(STRSXP, out_len));
-  Rf_setAttrib(out, R_NamesSymbol, nms);
-
-  R_len_t i = 0;
-
-  // Fill in prototypes of all the columns that are in `x`, in order
-  for (; i < x_len; ++i) {
-    R_len_t dup = x_dups_pos_data[i];
-
-    SEXP type;
-    if (dup == NA_INTEGER) {
-      type = vec_type(VECTOR_ELT(x, i));
-    } else {
-      --dup; // 1-based index
-      struct arg_data_index x_arg_data = new_index_arg_data(r_chr_get_c_string(x_names, i), x_arg);
-      struct arg_data_index y_arg_data = new_index_arg_data(r_chr_get_c_string(y_names, dup), y_arg);
-      struct vctrs_arg named_x_arg = new_index_arg(x_arg, &x_arg_data);
-      struct vctrs_arg named_y_arg = new_index_arg(y_arg, &y_arg_data);
-      int _left;
-      type = vec_type2(VECTOR_ELT(x, i),
-                       VECTOR_ELT(y, dup),
-                       &named_x_arg,
-                       &named_y_arg,
-                       &_left);
-    }
-
-    SET_VECTOR_ELT(out, i, type);
-    SET_STRING_ELT(nms, i, STRING_ELT(x_names, i));
-  }
-
-  // Fill in prototypes of the columns that are only in `y`
-  for (R_len_t j = 0; i < out_len; ++j) {
-    R_len_t dup = y_dups_pos_data[j];
-    if (dup == NA_INTEGER) {
-      SET_VECTOR_ELT(out, i, vec_type(VECTOR_ELT(y, j)));
-      SET_STRING_ELT(nms, i, STRING_ELT(y_names, j));
-      ++i;
-    }
-  }
-
-  init_data_frame(out, 0);
-
-  UNPROTECT(6);
-  return out;
+// [[ include("ptype2.h") ]]
+bool vec_is_coercible(const struct ptype2_opts* opts,
+                      int* dir) {
+  ERR err = NULL;
+  vec_is_coercible_e(opts, dir, &err);
+  return !err;
 }
 
 // [[ register() ]]
-SEXP vctrs_type2(SEXP x, SEXP y, SEXP x_arg, SEXP y_arg) {
-  if (!r_is_string(x_arg)) {
-    Rf_errorcall(R_NilValue, "`x_arg` must be a string");
-  }
-  if (!r_is_string(y_arg)) {
-    Rf_errorcall(R_NilValue, "`y_arg` must be a string");
-  }
+SEXP vctrs_is_coercible(SEXP x, SEXP y, SEXP x_arg_, SEXP y_arg_, SEXP df_fallback_) {
+  struct vctrs_arg x_arg = vec_as_arg(x_arg_);
+  struct vctrs_arg y_arg = vec_as_arg(y_arg_);;
+  enum df_fallback df_fallback = r_int_get(df_fallback_, 0);
 
-  struct vctrs_arg x_arg_ = new_wrapper_arg(NULL, r_chr_get_c_string(x_arg, 0));
-  struct vctrs_arg y_arg_ = new_wrapper_arg(NULL, r_chr_get_c_string(y_arg, 0));
+  const struct ptype2_opts opts = {
+    .x = x,
+    .y = y,
+    .x_arg = &x_arg,
+    .y_arg = &y_arg,
+    .df_fallback = df_fallback
+  };
+
+  int dir = 0;
+  return r_lgl(vec_is_coercible(&opts, &dir));
+}
+
+
+// [[ register() ]]
+SEXP vctrs_ptype2(SEXP x, SEXP y, SEXP x_arg, SEXP y_arg) {
+  struct vctrs_arg x_arg_ = vec_as_arg(x_arg);
+  struct vctrs_arg y_arg_ = vec_as_arg(y_arg);
 
   int _left;
-  return vec_type2(x, y, &x_arg_, &y_arg_, &_left);
-}
-
-// [[ register() ]]
-SEXP vctrs_type2_df_df(SEXP x, SEXP y, SEXP x_arg, SEXP y_arg) {
-  if (!r_is_string(x_arg)) {
-    Rf_errorcall(R_NilValue, "`x_arg` must be a string");
-  }
-  if (!r_is_string(y_arg)) {
-    Rf_errorcall(R_NilValue, "`y_arg` must be a string");
-  }
-
-  struct vctrs_arg x_arg_ = new_wrapper_arg(NULL, r_chr_get_c_string(x_arg, 0));
-  struct vctrs_arg y_arg_ = new_wrapper_arg(NULL, r_chr_get_c_string(y_arg, 0));
-
-  return df_ptype2(x, y, &x_arg_, &y_arg_);
+  return vec_ptype2(x, y, &x_arg_, &y_arg_, &_left);
 }

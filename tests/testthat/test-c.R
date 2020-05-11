@@ -33,8 +33,11 @@ test_that("different types are coerced to common", {
   expect_equal(vec_c(TRUE, 2:4), 1:4)
 })
 
-test_that("specified .ptypes allows more casts", {
-  expect_equal(vec_c(TRUE, .ptype = character()), "TRUE")
+test_that("specified .ptypes do not allow more casts", {
+  expect_error(
+    vec_c(TRUE, .ptype = character()),
+    class = "vctrs_error_incompatible_type"
+  )
 })
 
 test_that("combines outer an inner names", {
@@ -117,10 +120,35 @@ test_that("vec_c() doesn't use outer names for data frames (#524)", {
   expect_equal(vec_c(foo = a, bar = b), data.frame(x = 1:2))
 })
 
-test_that("vec_c() drops data frame row names", {
+test_that("vec_c() preserves row names and inner names", {
   x <- data.frame(a = 1, row.names = "r1")
   y <- data.frame(a = 2, row.names = "r2")
-  expect_equal(rownames(vec_c(x, y)), c("1", "2"))
+  expect_equal(rownames(vec_c(x, y)), c("r1", "r2"))
+  expect_equal(rownames(vec_c(x, x)), c("r1...1", "r1...2"))
+
+  vec_x <- set_names(1:3, letters[1:3])
+  vec_y <- c(FOO = 4L)
+  oo_x <- set_names(as.POSIXlt(c("2020-01-01", "2020-01-02", "2020-01-03")), letters[1:3])
+  oo_y <- as.POSIXlt(c(FOO = "2020-01-04"))
+  df_x <- new_data_frame(list(x = 1:3), row.names = letters[1:3])
+  df_y <- new_data_frame(list(x = 4L), row.names = "d")
+  mat_x <- matrix(1:3, 3, dimnames = list(letters[1:3]))
+  mat_y <- matrix(4L, 1, dimnames = list("d"))
+  nested_x <- new_data_frame(
+    list(df = df_x, mat = mat_x, vec = vec_x, oo = oo_x),
+    row.names = c("foo", "bar", "baz")
+  )
+  nested_y <- new_data_frame(
+    list(df = df_y, mat = mat_y, vec = vec_y, oo = oo_y),
+    row.names = c("quux")
+  )
+
+  nested_out <- vec_c(nested_x, nested_y)
+  expect_identical(row.names(nested_out), c("foo", "bar", "baz", "quux"))
+  expect_identical(row.names(nested_out$df), c("a", "b", "c", "d"))
+  expect_identical(row.names(nested_out$mat), c("a", "b", "c", "d"))
+  expect_identical(names(nested_out$vec), c("a", "b", "c", "FOO"))
+  expect_identical(names(nested_out$oo), c("a", "b", "c", "FOO"))
 })
 
 test_that("vec_c() outer names work with proxied objects", {
@@ -139,18 +167,34 @@ test_that("vec_c() outer names work with proxied objects", {
   expect_equal(vec_c(outer = xs, .name_spec = "{outer}_{inner}"), exp)
 })
 
-test_that("vec_c() falls back to c() for foreign classes", {
-  verify_errors({
-    expect_error(
-      vec_c(foobar(1), foobar(2)),
-      "concatenation"
-    )
-  })
-  expect_error(
-    vec_c(NULL, foobar(1), foobar(2)),
-    "concatenation"
-  )
+test_that("vec_c() works with simple homogeneous foreign S3 classes", {
+  expect_identical(vec_c(foobar(1), foobar(2)), vec_c(foobar(c(1, 2))))
+  expect_identical(vec_c(NULL, foobar(1), foobar(2)), vec_c(foobar(c(1, 2))))
+})
 
+test_that("vec_c() works with simple homogeneous foreign S4 classes", {
+  joe1 <- .Counts(c(1L, 2L), name = "Joe")
+  joe2 <- .Counts(3L, name = "Joe")
+  expect_identical(vec_c(joe1, joe2), .Counts(1:3, name = "Joe"))
+})
+
+test_that("vec_c() fails with complex foreign S3 classes", {
+  verify_errors({
+    x <- structure(foobar(1), attr_foo = "foo")
+    y <- structure(foobar(2), attr_bar = "bar")
+    expect_error(vec_c(x, y), class = "vctrs_error_incompatible_type")
+  })
+})
+
+test_that("vec_c() fails with complex foreign S4 classes", {
+  verify_errors({
+    joe <- .Counts(c(1L, 2L), name = "Joe")
+    jane <- .Counts(3L, name = "Jane")
+    expect_error(vec_c(joe, jane), class = "vctrs_error_incompatible_type")
+  })
+})
+
+test_that("vec_c() falls back to c() if S3 method is available", {
   # Check off-by-one error
   expect_error(
     vec_c(foobar(1), "", foobar(2)),
@@ -188,26 +232,126 @@ test_that("vec_c() falls back to c() for foreign classes", {
   )
 })
 
+test_that("vec_c() falls back to c() if S4 method is available", {
+  joe1 <- .Counts(c(1L, 2L), name = "Joe")
+  joe2 <- .Counts(3L, name = "Joe")
+
+  c_counts <- function(x, ...) {
+    xs <- list(x, ...)
+
+    xs_data <- lapply(xs, function(x) x@.Data)
+    new_data <- do.call(c, xs_data)
+
+    .Counts(new_data, name = x@name)
+  }
+
+  local_s4_method("c", methods::signature(x = "vctrs_Counts"), c_counts)
+
+  expect_identical(
+    vec_c(joe1, joe2),
+    .Counts(c(1L, 2L, 3L), name = "Joe")
+  )
+
+  expect_identical(
+    vec_c(NULL, joe1, joe2),
+    .Counts(c(1L, 2L, 3L), name = "Joe")
+  )
+})
+
 test_that("vec_c() fallback doesn't support `name_spec` or `ptype`", {
   verify_errors({
     expect_error(
-      vec_c(foobar(1), foobar(2), .name_spec = "{outer}_{inner}"),
+      with_c_foobar(vec_c(foobar(1), foobar(2), .name_spec = "{outer}_{inner}")),
       "name specification"
     )
+    # Used to be an error about `ptype`
     expect_error(
-      vec_c(foobar(1), foobar(2), .ptype = ""),
-      "prototype"
+      with_c_foobar(vec_c(foobar(1), foobar(2), .ptype = "")),
+      class = "vctrs_error_incompatible_type"
+    )
+  })
+})
+
+test_that("vec_c() doesn't fall back when ptype2 is implemented", {
+  new_quux <- function(x) structure(x, class = "vctrs_quux")
+
+  with_methods(
+    vec_ptype2.vctrs_foobar.vctrs_foobar = function(x, y, ...) new_quux(int()),
+    vec_cast.vctrs_quux.vctrs_foobar = function(x, to, ...) new_quux(x),
+    vec_restore.vctrs_quux = function(x, ...) new_quux(x),
+    c.vctrs_foobar = function(...) foobar(NextMethod()),
+    {
+      expect_is(c(foobar(1:3), foobar(4L)), "vctrs_foobar")
+      expect_is(vec_c(foobar(1:3), foobar(4L)), "vctrs_quux")
+    }
+  )
+})
+
+test_that("vec_c() falls back even when ptype is supplied", {
+  expect_foobar(vec_c(foobar(1), foobar(2), .ptype = foobar(dbl())))
+
+  with_methods(
+    c.vctrs_foobar = function(...) quux(NextMethod()),
+    {
+      expect_quux(vec_c(foobar(1), foobar(2), .ptype = foobar(dbl())))
+      expect_quux(vec_c(foobar(1, foo = TRUE), foobar(2, bar = TRUE), .ptype = foobar(dbl())))
+    }
+  )
+})
+
+test_that("vec_implements_ptype2() is FALSE for scalars", {
+  expect_false(vec_implements_ptype2(quote(foo)))
+})
+
+test_that("vec_implements_ptype2() and vec_c() fallback are compatible with old registration", {
+  foo <- structure(NA, class = "vctrs_implements_ptype2_false")
+  expect_false(vec_implements_ptype2(foo))
+
+  vec_ptype2.vctrs_implements_ptype2_true <- function(...) NULL
+  s3_register(
+    "vctrs::vec_ptype2",
+    "vctrs_implements_ptype2_true",
+    vec_ptype2.vctrs_implements_ptype2_true
+  )
+
+  bar <- structure(NA, class = "vctrs_implements_ptype2_true")
+  expect_true(vec_implements_ptype2(bar))
+
+  local_methods(
+    `c.vctrs_implements_ptype2_true` = function(...) stop("never called")
+  )
+
+  expect_identical(vec_c(bar), bar)
+})
+
+test_that("can ignore names in `vec_c()` by providing a `zap()` name-spec (#232)", {
+  expect_error(vec_c(a = c(b = 1:2)))
+  expect_identical(vec_c(a = c(b = 1:2), b = 3L, .name_spec = zap()), 1:3)
+  verify_errors({
+    expect_error(
+      vec_c(a = c(b = letters), b = 1, .name_spec = zap()),
+      class = "vctrs_error_incompatible_type"
     )
   })
 })
 
 test_that("vec_c() has informative error messages", {
   verify_output(test_path("error", "test-c.txt"), {
-    "# vec_c() falls back to c() for foreign classes"
-    vec_c(foobar(1), foobar(2))
+    "# vec_c() fails with complex foreign S3 classes"
+    x <- structure(foobar(1), attr_foo = "foo")
+    y <- structure(foobar(2), attr_bar = "bar")
+    vec_c(x, y)
+
+    "# vec_c() fails with complex foreign S4 classes"
+    joe <- .Counts(c(1L, 2L), name = "Joe")
+    jane <- .Counts(3L, name = "Jane")
+    vec_c(joe, jane)
 
     "# vec_c() fallback doesn't support `name_spec` or `ptype`"
-    vec_c(foobar(1), foobar(2), .name_spec = "{outer}_{inner}")
-    vec_c(foobar(1), foobar(2), .ptype = "")
+    with_c_foobar(vec_c(foobar(1), foobar(2), .name_spec = "{outer}_{inner}"))
+    with_c_foobar(vec_c(foobar(1), foobar(2), .ptype = ""))
+
+    "# can ignore names by providing a `zap()` name-spec (#232)"
+    vec_c(a = c(b = letters), b = 1, .name_spec = zap())
   })
 })

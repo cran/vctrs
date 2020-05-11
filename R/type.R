@@ -5,7 +5,13 @@
 #' `vec_ptype_show()` nicely prints the common type of any number of
 #' inputs, and is designed for interactive exploration.
 #'
-#' @param ...,x Vectors inputs
+#' @param x A vector
+#' @param ... For `vec_ptype()`, these dots are for future extensions and must
+#'   be empty.
+#'
+#'   For `vec_ptype_common()` and `vec_ptype_show()`, vector inputs.
+#' @param x_arg Argument name for `x`. This is used in error messages to inform
+#'   the user about the locations of incompatible types.
 #' @param .ptype If `NULL`, the default, the output type is determined by
 #'   computing the common type across all elements of `...`.
 #'
@@ -77,14 +83,22 @@
 #'   data.frame(y = 2),
 #'   data.frame(z = "a")
 #' )
-vec_ptype <- function(x) {
-  .Call(vctrs_type, x)
+vec_ptype <- function(x, ..., x_arg = "") {
+  if (!missing(...)) {
+    ellipsis::check_dots_empty()
+  }
+  .Call(vctrs_ptype, x, x_arg)
 }
 
 #' @export
 #' @rdname vec_ptype
 vec_ptype_common <- function(..., .ptype = NULL) {
   .External2(vctrs_type_common, .ptype)
+}
+vec_ptype_common_params <- function(...,
+                                    .ptype = NULL,
+                                    .df_fallback = DF_FALLBACK_DEFAULT) {
+  .External2(vctrs_ptype_common_params, .ptype, .df_fallback)
 }
 
 #' @export
@@ -136,10 +150,6 @@ vec_ptype_show <- function(...) {
   }
 
   invisible()
-}
-
-has_same_type <- function(x, y) {
-  typeof(x) == typeof(y) && identical(attributes(x), attributes(y))
 }
 
 vec_typeof <- function(x) {

@@ -1,35 +1,51 @@
 #include "vctrs.h"
-#include "utils.h"
 #include "arg-counter.h"
+#include "ptype-common.h"
+#include "ptype2.h"
+#include "type-data-frame.h"
+#include "utils.h"
 
 // Initialised at load time
 static SEXP syms_vec_ptype_finalise_dispatch = NULL;
 static SEXP fns_vec_ptype_finalise_dispatch = NULL;
 
 
-static SEXP vec_type_slice(SEXP x, SEXP empty);
-static SEXP s3_type(SEXP x);
+static inline SEXP vec_ptype_slice(SEXP x, SEXP empty);
+static SEXP s3_type(SEXP x, struct vctrs_arg* x_arg);
+static SEXP df_ptype(SEXP x, bool bare);
 
-// [[ include("vctrs.h"); register() ]]
-SEXP vec_type(SEXP x) {
+// [[ register() ]]
+SEXP vctrs_ptype(SEXP x, SEXP x_arg) {
+  struct vctrs_arg x_arg_ = vec_as_arg(x_arg);
+  return vec_ptype(x, &x_arg_);
+}
+
+static SEXP col_ptype(SEXP x);
+
+// [[ include("vctrs.h") ]]
+SEXP vec_ptype(SEXP x, struct vctrs_arg* x_arg) {
   switch (vec_typeof(x)) {
   case vctrs_type_null:        return R_NilValue;
   case vctrs_type_unspecified: return vctrs_shared_empty_uns;
-  case vctrs_type_logical:     return vec_type_slice(x, vctrs_shared_empty_lgl);
-  case vctrs_type_integer:     return vec_type_slice(x, vctrs_shared_empty_int);
-  case vctrs_type_double:      return vec_type_slice(x, vctrs_shared_empty_dbl);
-  case vctrs_type_complex:     return vec_type_slice(x, vctrs_shared_empty_cpl);
-  case vctrs_type_character:   return vec_type_slice(x, vctrs_shared_empty_chr);
-  case vctrs_type_raw:         return vec_type_slice(x, vctrs_shared_empty_raw);
-  case vctrs_type_list:        return vec_type_slice(x, vctrs_shared_empty_list);
-  case vctrs_type_dataframe:   return bare_df_map(x, &vec_type);
-  case vctrs_type_s3:          return s3_type(x);
-  case vctrs_type_scalar:      stop_scalar_type(x, args_empty);
+  case vctrs_type_logical:     return vec_ptype_slice(x, vctrs_shared_empty_lgl);
+  case vctrs_type_integer:     return vec_ptype_slice(x, vctrs_shared_empty_int);
+  case vctrs_type_double:      return vec_ptype_slice(x, vctrs_shared_empty_dbl);
+  case vctrs_type_complex:     return vec_ptype_slice(x, vctrs_shared_empty_cpl);
+  case vctrs_type_character:   return vec_ptype_slice(x, vctrs_shared_empty_chr);
+  case vctrs_type_raw:         return vec_ptype_slice(x, vctrs_shared_empty_raw);
+  case vctrs_type_list:        return vec_ptype_slice(x, vctrs_shared_empty_list);
+  case vctrs_type_dataframe:   return df_ptype(x, true);
+  case vctrs_type_s3:          return s3_type(x, x_arg);
+  case vctrs_type_scalar:      stop_scalar_type(x, x_arg);
   }
-  never_reached("vec_type_impl");
+  never_reached("vec_ptype");
 }
 
-static SEXP vec_type_slice(SEXP x, SEXP empty) {
+static SEXP col_ptype(SEXP x) {
+  return vec_ptype(x, args_empty);
+}
+
+static inline SEXP vec_ptype_slice(SEXP x, SEXP empty) {
   if (ATTRIB(x) == R_NilValue) {
     return empty;
   } else {
@@ -37,19 +53,19 @@ static SEXP vec_type_slice(SEXP x, SEXP empty) {
     return vec_slice(x, R_NilValue);
   }
 }
-static SEXP s3_type(SEXP x) {
+static SEXP s3_type(SEXP x, struct vctrs_arg* x_arg) {
   switch (class_type(x)) {
   case vctrs_class_bare_tibble:
-    return bare_df_map(x, &vec_type);
+    return df_ptype(x, true);
 
   case vctrs_class_data_frame:
-    return df_map(x, &vec_type);
+    return df_ptype(x, false);
 
   case vctrs_class_bare_data_frame:
-    Rf_errorcall(R_NilValue, "Internal error: Bare data frames should be handled by `vec_type()`");
+    Rf_errorcall(R_NilValue, "Internal error: Bare data frames should be handled by `vec_ptype()`");
 
   case vctrs_class_none:
-    Rf_errorcall(R_NilValue, "Internal error: Non-S3 classes should be handled by `vec_type()`");
+    Rf_errorcall(R_NilValue, "Internal error: Non-S3 classes should be handled by `vec_ptype()`");
 
   default:
     break;
@@ -59,8 +75,26 @@ static SEXP s3_type(SEXP x) {
     return x;
   }
 
-  vec_assert(x, args_empty);
+  vec_assert(x, x_arg);
   return vec_slice(x, R_NilValue);
+}
+
+SEXP df_ptype(SEXP x, bool bare) {
+  SEXP row_nms = PROTECT(df_rownames(x));
+
+  SEXP ptype = R_NilValue;
+  if (bare) {
+    ptype = PROTECT(bare_df_map(x, &col_ptype));
+  } else {
+    ptype = PROTECT(df_map(x, &col_ptype));
+  }
+
+  if (TYPEOF(row_nms) == STRSXP) {
+    Rf_setAttrib(ptype, R_RowNamesSymbol, vctrs_shared_empty_chr);
+  }
+
+  UNPROTECT(2);
+  return ptype;
 }
 
 static SEXP vec_ptype_finalise_unspecified(SEXP x);
@@ -93,7 +127,25 @@ SEXP vec_ptype_finalise(SEXP x) {
     return bare_df_map(x, &vec_ptype_finalise);
 
   case vctrs_class_data_frame:
-    return df_map(x, &vec_ptype_finalise);
+    x = PROTECT(df_map(x, &vec_ptype_finalise));
+
+    if (Rf_inherits(x, "vctrs:::df_fallback")) {
+      SEXP seen_tibble_attr = PROTECT(Rf_getAttrib(x, Rf_install("seen_tibble")));
+      bool seen_tibble = r_is_true(seen_tibble_attr);
+      UNPROTECT(1);
+
+      if (seen_tibble) {
+        r_poke_class(x, classes_tibble);
+      } else {
+        r_poke_class(x, classes_data_frame);
+      }
+
+      Rf_setAttrib(x, Rf_install("known_classes"), R_NilValue);
+      Rf_setAttrib(x, Rf_install("seen_tibble"), R_NilValue);
+    }
+
+    UNPROTECT(1);
+    return x;
 
   case vctrs_class_none:
     Rf_errorcall(R_NilValue, "Internal error: Non-S3 classes should have returned by now");
@@ -124,9 +176,7 @@ static SEXP vec_ptype_finalise_dispatch(SEXP x) {
   );
 }
 
-
-SEXP vctrs_type_common_impl(SEXP dots, SEXP ptype);
-static SEXP vctrs_type2_common(SEXP current, SEXP next, struct counters* counters);
+static SEXP vctrs_type2_common(SEXP current, SEXP next, struct counters* counters, void* data);
 
 // [[ register(external = TRUE) ]]
 SEXP vctrs_type_common(SEXP call, SEXP op, SEXP args, SEXP env) {
@@ -135,15 +185,29 @@ SEXP vctrs_type_common(SEXP call, SEXP op, SEXP args, SEXP env) {
   SEXP types = PROTECT(rlang_env_dots_values(env));
   SEXP ptype = PROTECT(Rf_eval(CAR(args), env));
 
-  SEXP out = vctrs_type_common_impl(types, ptype);
+  SEXP out = vec_ptype_common_params(types, ptype, DF_FALLBACK_DEFAULT);
 
   UNPROTECT(2);
   return out;
 }
 
-SEXP vctrs_type_common_impl(SEXP dots, SEXP ptype) {
+SEXP vctrs_ptype_common_params(SEXP call, SEXP op, SEXP args, SEXP env) {
+  args = CDR(args);
+
+  SEXP types = PROTECT(rlang_env_dots_values(env));
+  SEXP ptype = PROTECT(Rf_eval(CAR(args), env)); args = CDR(args);
+  SEXP df_fallback = PROTECT(Rf_eval(CAR(args), env));
+
+  SEXP out = vec_ptype_common_params(types, ptype, r_int_get(df_fallback, 0));
+
+  UNPROTECT(3);
+  return out;
+}
+
+// [[ include("ptype-common.h") ]]
+SEXP vec_ptype_common_params(SEXP dots, SEXP ptype, enum df_fallback df_fallback) {
   if (!vec_is_partial(ptype)) {
-    return vec_type(ptype);
+    return vec_ptype(ptype, args_dot_ptype);
   }
 
   if (r_is_true(r_peek_option("vctrs.no_guessing"))) {
@@ -151,9 +215,7 @@ SEXP vctrs_type_common_impl(SEXP dots, SEXP ptype) {
   }
 
   // Start reduction with the `.ptype` argument
-  struct vctrs_arg ptype_arg = new_wrapper_arg(NULL, ".ptype");
-
-  SEXP type = PROTECT(reduce(ptype, &ptype_arg, dots, &vctrs_type2_common));
+  SEXP type = PROTECT(reduce(ptype, args_dot_ptype, dots, &vctrs_type2_common, &df_fallback));
   type = vec_ptype_finalise(type);
 
   UNPROTECT(1);
@@ -161,9 +223,22 @@ SEXP vctrs_type_common_impl(SEXP dots, SEXP ptype) {
 }
 
 
-static SEXP vctrs_type2_common(SEXP current, SEXP next, struct counters* counters) {
+static SEXP vctrs_type2_common(SEXP current,
+                               SEXP next,
+                               struct counters* counters,
+                               void* data) {
   int left = -1;
-  current = vec_type2(current, next, counters->curr_arg, counters->next_arg, &left);
+  enum df_fallback df_fallback = *((enum df_fallback*) data);
+
+  const struct ptype2_opts opts = {
+    .x = current,
+    .y = next,
+    .x_arg = counters->curr_arg,
+    .y_arg = counters->next_arg,
+    .df_fallback = df_fallback
+  };
+
+  current = vec_ptype2_opts(&opts, &left);
 
   // Update current if RHS is the common type. Otherwise the previous
   // counter stays in effect.

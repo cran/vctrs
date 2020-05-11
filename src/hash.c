@@ -2,6 +2,7 @@
 #include "equal.h"
 #include "hash.h"
 #include "utils.h"
+#include "dim.h"
 
 // boost::hash_combine from https://stackoverflow.com/questions/35985960
 static inline uint32_t hash_combine(uint32_t x, uint32_t y) {
@@ -49,7 +50,7 @@ static inline uint32_t hash_double(double x) {
 }
 
 static inline uint32_t hash_char(SEXP x) {
-  return hash_int64((intptr_t) x);
+  return hash_int64((uintptr_t) x);
 }
 
 // Hashing scalars -----------------------------------------------------
@@ -156,7 +157,7 @@ static uint32_t sexp_hash(SEXP x) {
   case SPECIALSXP:
   case BUILTINSXP:
   case ENVSXP:
-  case EXTPTRSXP: return hash_int64((intptr_t) x);
+  case EXTPTRSXP: return hash_int64((uintptr_t) x);
   default: Rf_errorcall(R_NilValue, "Unsupported type %s", Rf_type2char(TYPEOF(x)));
   }
 }

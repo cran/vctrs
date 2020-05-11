@@ -9,26 +9,23 @@
 \alias{vec_ptype2.raw}
 \alias{vec_ptype2.list}
 \alias{vec_ptype2}
-\alias{vec_default_ptype2}
-\title{Find the common type for a pair of vector types}
+\title{Find the common type for a pair of vectors}
 \usage{
-\method{vec_ptype2}{logical}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{logical}(x, y, ..., x_arg = "", y_arg = "")
 
-\method{vec_ptype2}{integer}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{integer}(x, y, ..., x_arg = "", y_arg = "")
 
-\method{vec_ptype2}{double}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{double}(x, y, ..., x_arg = "", y_arg = "")
 
-\method{vec_ptype2}{complex}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{complex}(x, y, ..., x_arg = "", y_arg = "")
 
-\method{vec_ptype2}{character}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{character}(x, y, ..., x_arg = "", y_arg = "")
 
-\method{vec_ptype2}{raw}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{raw}(x, y, ..., x_arg = "", y_arg = "")
 
-\method{vec_ptype2}{list}(x, y, ..., x_arg = "x", y_arg = "y")
+\method{vec_ptype2}{list}(x, y, ..., x_arg = "", y_arg = "")
 
-vec_ptype2(x, y, ..., x_arg = "x", y_arg = "y")
-
-vec_default_ptype2(x, y, ..., x_arg = "x", y_arg = "y")
+vec_ptype2(x, y, ..., x_arg = "", y_arg = "")
 }
 \arguments{
 \item{x, y}{Vector types.}
@@ -40,37 +37,31 @@ in error messages to inform the user about the locations of
 incompatible types (see \code{\link[=stop_incompatible_type]{stop_incompatible_type()}}).}
 }
 \description{
-\code{vec_ptype2()} finds the common type for a pair of vectors, or dies trying.
-It forms the foundation of the vctrs type system, along with \code{\link[=vec_cast]{vec_cast()}}.
-This powers type coercion but should not usually be called directly;
-instead call \code{\link[=vec_ptype_common]{vec_ptype_common()}}.
+\code{vec_ptype2()} defines the coercion hierarchy for a set of related
+vector types. Along with \code{\link[=vec_cast]{vec_cast()}}, this generic forms the
+foundation of type coercions in vctrs.
+
+\code{vec_ptype2()} is relevant when you are implementing vctrs methods
+for your class, but it should not usually be called directly. If
+you need to find the common type of a set of inputs, call
+\code{\link[=vec_ptype_common]{vec_ptype_common()}} instead. This function supports multiple
+inputs and \link[=vec_ptype_finalise]{finalises} the common type.
 }
-\section{Coercion rules}{
-
-vctrs thinks of the vector types as forming a partially ordered set, or
-poset. Then finding the common type from a set of types is a matter of
-finding the least-upper-bound; if the least-upper-bound does not exist,
-there is no common type. This is the case for many pairs of 1d vectors.
-
-The poset of the most important base vectors is shown below:
-(where datetime stands for \code{POSIXt}, and date for \code{Date})
-
-\figure{coerce.png}
+\section{Implementing coercion methods}{
+\itemize{
+\item For an overview of how these generics work and their roles in vctrs,
+see \code{\link[=theory-faq-coercion]{?theory-faq-coercion}}.
+\item For an example of implementing coercion methods for simple vectors,
+see \code{\link[=howto-faq-coercion]{?howto-faq-coercion}}.
+\item For an example of implementing coercion methods for data frame
+subclasses, see
+\code{\link[=howto-faq-coercion-data-frame]{?howto-faq-coercion-data-frame}}.
+\item For a tutorial about implementing vctrs classes from scratch, see
+\code{vignette("s3-vector")}.
 }
-
-\section{S3 dispatch}{
-
-\code{vec_ptype2()} dispatches on both arguments. This is implemented by having
-methods of \code{vec_ptype2()}, e.g. \code{vec_ptype2.integer()} also be S3 generics,
-which call e.g. \code{vec_ptype2.integer.double()}. \code{vec_ptype2.x.y()} must
-return the same value as \code{vec_ptype2.y.x()}; this is currently not enforced,
-but should be tested.
-
-Whenever you implement a \code{vec_ptype2.new_class()} generic/method,
-make sure to always provide \code{vec_ptype2.new_class.default()}. It
-should normally call \code{vec_default_ptype2()}.
-
-See \code{vignette("s3-vector")} for full details.
 }
 
-\keyword{internal}
+\seealso{
+\code{\link[=stop_incompatible_type]{stop_incompatible_type()}} when you determine from the
+attributes that an input can't be cast to the target type.
+}

@@ -10,7 +10,7 @@ vec_slice(x, i)
 
 vec_slice(x, i) <- value
 
-vec_assign(x, i, value)
+vec_assign(x, i, value, ..., x_arg = "", value_arg = "")
 }
 \arguments{
 \item{x}{A vector}
@@ -23,6 +23,13 @@ locations or names of the observations to get/set. Specify
 \item{value}{Replacement values. \code{value} is cast to the type of
 \code{x}, but only if they have a common type. See below for examples
 of this rule.}
+
+\item{...}{These dots are for future extensions and must be empty.}
+
+\item{x_arg, value_arg}{Argument names for \code{x} and \code{value}. These are used
+in error messages to inform the user about the locations of
+incompatible types and sizes (see \code{\link[=stop_incompatible_type]{stop_incompatible_type()}} and
+\code{\link[=stop_incompatible_size]{stop_incompatible_size()}}).}
 }
 \value{
 A vector of the same type as \code{x}.
@@ -93,14 +100,16 @@ vec_ptype(x)
 
 
 # Note that the types must be coercible for the cast to happen.
-# For instance, you can cast a character vector to an integer:
-vec_cast("1", integer())
+# For instance, you can cast a double vector of whole numbers to an
+# integer vector:
+vec_cast(1, integer())
 
-# But these types are not coercible:
-try(vec_ptype2("1", integer()))
+# But not fractional doubles:
+try(vec_cast(1.5, integer()))
 
-# Hence you cannot assign character values to an integer or double
+# For this reason you can't assign fractional values in an integer
 # vector:
-try(vec_slice(x, 2) <- "20")
+x <- 1:3
+try(vec_slice(x, 2) <- 1.5)
 }
 \keyword{internal}

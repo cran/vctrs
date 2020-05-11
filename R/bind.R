@@ -40,10 +40,15 @@
 #'
 #'   `NULL` inputs are silently ignored. Empty (e.g. zero row) inputs
 #'   will not appear in the output, but will affect the derived `.ptype`.
-#' @param .names_to Optionally, the name of a column where the names
-#'   of `...` arguments are copied. These names are useful to identify
-#'   which row comes from which input. If supplied and `...` is not named,
-#'   an integer column is used to identify the rows.
+#' @param .names_to
+#'   * By default, input names are [zapped][rlang::zap].
+#'
+#'   * If a string, specifies a column where the input names will be
+#'     copied. These names are often useful to identify rows with
+#'     their original input. If a column name is supplied and `...` is
+#'     not named, an integer column is used instead.
+#'
+#'   * If `NULL`, the input names are used as row names.
 #' @param .name_repair One of `"unique"`, `"universal"`, or
 #'   `"check_unique"`. See [vec_as_names()] for the meaning of these
 #'   options.
@@ -137,12 +142,18 @@
 NULL
 
 #' @export
+#' @param .name_spec A name specification (as documented in [vec_c()])
+#'   for combining the outer inputs names in `...` and the inner row
+#'   names of the inputs. This only has an effect when `.names_to` is
+#'   set to `NULL`, which causes the input names to be assigned as row
+#'   names.
 #' @rdname vec_bind
 vec_rbind <- function(...,
                       .ptype = NULL,
-                      .names_to = NULL,
-                      .name_repair = c("unique", "universal", "check_unique")) {
-  .External2(vctrs_rbind, .ptype, .names_to, .name_repair)
+                      .names_to = rlang::zap(),
+                      .name_repair = c("unique", "universal", "check_unique"),
+                      .name_spec = NULL) {
+  .External2(vctrs_rbind, .ptype, .names_to, .name_repair, .name_spec)
 }
 vec_rbind <- fn_inline_formals(vec_rbind, ".name_repair")
 
@@ -166,4 +177,32 @@ as_df_row <- function(x, quiet = FALSE) {
 }
 as_df_col <- function(x, outer_name) {
   .Call(vctrs_as_df_col, x, outer_name)
+}
+
+#' Frame prototype
+#'
+#' @description
+#'
+#' \Sexpr[results=rd, stage=render]{vctrs:::lifecycle("experimental")}
+#'
+#' This is an experimental generic that returns zero-columns variants
+#' of a data frame. It is needed for [vec_cbind()], to work around the
+#' lack of colwise primitives in vctrs. Expect changes.
+#'
+#' @param x A data frame.
+#' @inheritParams ellipsis::dots_empty
+#'
+#' @keywords internal
+#' @export
+vec_cbind_frame_ptype <- function(x, ...) {
+  UseMethod("vec_cbind_frame_ptype")
+}
+#' @export
+vec_cbind_frame_ptype.default <- function(x, ...) {
+  x[0]
+}
+
+#' @export
+vec_cbind_frame_ptype.sf <- function(x, ...) {
+  data.frame()
 }

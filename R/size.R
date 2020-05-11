@@ -12,6 +12,12 @@
 #' frame (even data frame and matrix columns) have the same size.
 #' `vec_size_common(...)` returns the common size of multiple vectors.
 #'
+#' `list_sizes()` returns an integer vector containing the size of each element
+#' of a list. It is nearly equivalent to, but faster than,
+#' `map_int(x, vec_size)`, with the exception that `list_sizes()` will
+#' error on non-list inputs, as defined by [vec_is_list()]. `list_sizes()` is
+#' to `vec_size()` as [lengths()] is to [length()].
+#'
 #' @seealso [vec_slice()] for a variation of `[` compatible with `vec_size()`,
 #'   and [vec_recycle()] to recycle vectors to common length.
 #' @section Invariants:
@@ -68,6 +74,8 @@
 #' vec_size_common(1:10, 1:10)
 #' vec_size_common(1:10, 1)
 #' vec_size_common(integer(), 1)
+#'
+#' list_sizes(list("a", 1:5, letters))
 vec_size <- function(x) {
   .Call(vctrs_size, x)
 }
@@ -76,6 +84,12 @@ vec_size <- function(x) {
 #' @rdname vec_size
 vec_size_common <- function(..., .size = NULL, .absent = 0L) {
   .External2(vctrs_size_common, .size, .absent)
+}
+
+#' @rdname vec_size
+#' @export
+list_sizes <- function(x) {
+  .Call(vctrs_list_sizes, x)
 }
 
 #' @rdname vec_size
@@ -127,33 +141,4 @@ vec_seq_along <- function(x) {
 #' @rdname vec_seq_along
 vec_init_along <- function(x, y = x) {
   vec_slice(x, rep_len(NA_integer_, vec_size(y)))
-}
-
-#' Expand the length of a vector
-#'
-#' This is a special case of [rep()] for the special case of integer `times`
-#' and `each` values, and works along size, rather than length.
-#'
-#' @param x A vector.
-#' @param each Number of times to repeat each element of `x`.
-#' @param times Number of times to repeat the whole vector of `x`.
-#' @return A vector the same type as `x` with size `vec_size(x) * times * each`.
-#' @export
-#' @examples
-#' # each repeats within
-#' vec_repeat(1:3, each = 2)
-#' # times repeats whole thing
-#' vec_repeat(1:3, times = 2)
-#'
-#' df <- data.frame(x = 1:2, y = 1:2)
-#' # rep() repeats columns of data frame, and returns list:
-#' rep(df, each = 2)
-#' # vec_repeat() repeats rows, and returns same data.frame
-#' vec_repeat(df, 2)
-vec_repeat <- function(x, each = 1L, times = 1L) {
-  vec_assert(each, size = 1L)
-  vec_assert(times, size = 1L)
-
-  idx <- rep(vec_seq_along(x), times = times, each = each)
-  vec_slice(x, idx)
 }

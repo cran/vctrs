@@ -89,11 +89,11 @@ vec_cast.vctrs_rcrd <- function(x, to, ...) UseMethod("vec_cast.vctrs_rcrd")
 
 #' @method vec_cast.vctrs_rcrd vctrs_rcrd
 #' @export
-vec_cast.vctrs_rcrd.vctrs_rcrd <- function(x, to, ...) {
+vec_cast.vctrs_rcrd.vctrs_rcrd <- function(x, to, ..., x_arg = x_arg, to_arg = to_arg) {
   # This assumes that we don't have duplicate field names,
   # which is verified even in the constructor.
   if (!setequal(fields(x), fields(to))) {
-    stop_incompatible_cast(x, to)
+    stop_incompatible_cast(x, to, x_arg = x_arg, to_arg = to_arg)
   }
 
   new_data <- map2(
@@ -103,24 +103,6 @@ vec_cast.vctrs_rcrd.vctrs_rcrd <- function(x, to, ...) {
   )
 
   new_rcrd(new_data)
-}
-
-#' @method vec_cast.vctrs_rcrd default
-#' @export
-vec_cast.vctrs_rcrd.default <- function(x, to, ..., x_arg = "", to_arg = "") {
-  if (is_bare_list(x)) {
-    vec_list_cast(x, to, x_arg = x_arg, to_arg = to_arg)
-  } else {
-    stop_incompatible_cast(x, to)
-  }
-}
-
-#' @export
-#' @method vec_cast.list vctrs_rcrd
-vec_cast.list.vctrs_rcrd <- function(x, to, ...) {
-  # FIXME: Coercion to list should be disallowed. Current
-  # implementation can be achieved with `vec_chop()`.
-  vec_cast_list_default(x, to, ...)
 }
 
 

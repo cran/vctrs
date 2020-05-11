@@ -154,7 +154,7 @@ as.character.vctrs_list_of <- function(x, ...) {
 #' @export
 `[<-.vctrs_list_of` <- function(x, i, value) {
   wrapped_type <- attr(x, "ptype")
-  value <- map(value, vec_coercible_cast, to = wrapped_type, x_arg = "to", to_arg = "value")
+  value <- map(value, vec_cast, to = wrapped_type)
   value <- new_list_of(value, ptype = attr(x, "ptype"))
   NextMethod()
 }
@@ -167,13 +167,13 @@ as.character.vctrs_list_of <- function(x, ...) {
     return(x)
   }
 
-  value <- vec_coercible_cast(value, attr(x, "ptype"), x_arg = "value", to_arg = "x")
+  value <- vec_cast(value, attr(x, "ptype"))
   NextMethod()
 }
 
 #' @export
 `$<-.vctrs_list_of` <- function(x, i, value) {
-  value <- vec_coercible_cast(value, attr(x, "ptype"), x_arg = "value", to_arg = "x")
+  value <- vec_cast(value, attr(x, "ptype"))
   NextMethod()
 }
 
@@ -184,33 +184,14 @@ as.character.vctrs_list_of <- function(x, ...) {
 #' @export vec_ptype2.vctrs_list_of
 #' @method vec_ptype2 vctrs_list_of
 #' @export
-vec_ptype2.vctrs_list_of <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  if (inherits_only(x, c("vctrs_list_of", "vctrs_vctr"))) {
-    UseMethod("vec_ptype2.vctrs_list_of", y)
-  } else {
-    vec_default_ptype2(x, y, x_arg = x_arg, y_arg = y_arg)
-  }
+vec_ptype2.vctrs_list_of <- function(x, y, ..., x_arg = "", y_arg = "") {
+  UseMethod("vec_ptype2.vctrs_list_of")
 }
 #' @method vec_ptype2.vctrs_list_of vctrs_list_of
 #' @export
 vec_ptype2.vctrs_list_of.vctrs_list_of <- function(x, y, ...) {
   type <- vec_ptype2(attr(x, "ptype"), attr(y, "ptype"))
   new_list_of(list(), type)
-}
-#' @method vec_ptype2.vctrs_list_of list
-#' @export
-vec_ptype2.vctrs_list_of.list <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg)
-}
-#' @method vec_ptype2.list vctrs_list_of
-#' @export
-vec_ptype2.list.vctrs_list_of <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg)
-}
-#' @method vec_ptype2.vctrs_list_of default
-#' @export
-vec_ptype2.vctrs_list_of.default <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  vec_default_ptype2(x, y, x_arg = x_arg, y_arg = y_arg)
 }
 
 #' @rdname list_of
@@ -220,34 +201,12 @@ vec_ptype2.vctrs_list_of.default <- function(x, y, ..., x_arg = "x", y_arg = "y"
 vec_cast.vctrs_list_of <- function(x, to, ...) {
   UseMethod("vec_cast.vctrs_list_of")
 }
+
 #' @export
-#' @method vec_cast.vctrs_list_of list
-vec_cast.vctrs_list_of.list <- function(x, to, ...) {
+#' @method vec_cast.vctrs_list_of vctrs_list_of
+vec_cast.vctrs_list_of.vctrs_list_of <-function(x, to, ...) {
   # Casting list to list_of will warn/err if the cast is lossy,
   # but the locations refer to the inner vectors,
   # and the cast fails if all (vector) elements in a single (list) element
   as_list_of(x, .ptype = attr(to, "ptype"))
-}
-
-#' @export
-#' @method vec_cast.list vctrs_list_of
-vec_cast.list.vctrs_list_of <- function(x, to, ...) {
-  # Casting list_of to list is never lossy
-  shape_broadcast(as.list(x), to)
-}
-
-#' @export
-#' @method vec_cast.vctrs_list_of vctrs_list_of
-vec_cast.vctrs_list_of.vctrs_list_of <- vec_cast.vctrs_list_of.list
-
-#' @export
-#' @method vec_cast.vctrs_list_of default
-vec_cast.vctrs_list_of.default <- function(x, to, ...) {
-  x <- vec_cast(x, attr(to, "ptype"))
-  out <- lapply(seq_along(x), function(i) x[[i]])
-
-  miss <- is.na(x)
-  out[miss] <- rep(list(NULL), sum(miss))
-
-  new_list_of(out, ptype = attr(to, "ptype"))
 }

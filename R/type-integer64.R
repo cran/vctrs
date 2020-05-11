@@ -35,17 +35,8 @@ vec_ptype_abbr.integer64 <- function(x, ...) {
 #' @export vec_ptype2.integer64
 #' @method vec_ptype2 integer64
 vec_ptype2.integer64 <- function(x, y, ...) {
-  UseMethod("vec_ptype2.integer64", y)
+  UseMethod("vec_ptype2.integer64")
 }
-#' @method vec_ptype2.integer64 default
-#' @export
-vec_ptype2.integer64.default <- function(x, y, ..., x_arg = "x", y_arg = "y") {
-  vec_default_ptype2(x, y, x_arg = x_arg, y_arg = y_arg)
-}
-
-#' @method vec_ptype2.integer64 vctrs_unspecified
-#' @export
-vec_ptype2.integer64.vctrs_unspecified <- function(x, y, ...) bit64::integer64()
 
 #' @method vec_ptype2.integer64 integer64
 #' @export
@@ -72,23 +63,15 @@ vec_ptype2.logical.integer64 <- function(x, y, ...) bit64::integer64()
 #' @rdname int64
 #' @export vec_cast.integer64
 #' @method vec_cast integer64
-vec_cast.integer64 <- function(x, to, ...) UseMethod("vec_cast.integer64")
-
-#' @export
-#' @method vec_cast.integer64 default
-vec_cast.integer64.default <- function(x, to, ..., x_arg = "x", to_arg = "to") {
-  # Don't use `vec_default_cast()` because integer64 is not compatible
-  # with `vec_init()`
-  if (is_unspecified(x)) {
-    bit64::as.integer64(unclass(x))
-  } else {
-    stop_incompatible_cast(x, to, x_arg = x_arg, to_arg = to_arg)
-  }
+vec_cast.integer64 <- function(x, to, ...) {
+  UseMethod("vec_cast.integer64")
 }
 
 #' @export
 #' @method vec_cast.integer64 integer64
-vec_cast.integer64.integer64 <- function(x, to, ...) x
+vec_cast.integer64.integer64 <- function(x, to, ...) {
+  x
+}
 
 #' @export
 #' @method vec_cast.integer64 integer
@@ -112,18 +95,6 @@ vec_cast.integer64.logical <- function(x, to, ...) {
 #' @method vec_cast.logical integer64
 vec_cast.logical.integer64 <- function(x, to, ...) {
   as.logical(x)
-}
-
-#' @export
-#' @method vec_cast.integer64 character
-vec_cast.integer64.character <- function(x, to, ...) {
-  bit64::as.integer64(x)
-}
-
-#' @export
-#' @method vec_cast.character integer64
-vec_cast.character.integer64 <- function(x, to, ...) {
-  as.character(x)
 }
 
 #' @export
