@@ -156,8 +156,59 @@ ns_methods <- function(name) {
   ns_env(name)$.__S3MethodsTable__.
 }
 
+s3_find_method <- function(x, generic, ns = "base") {
+  stopifnot(
+    is_string(generic),
+    is_string(ns)
+  )
+  table <- ns_methods(ns_env(ns))
+  .Call(vctrs_s3_find_method, generic, x, table)
+}
+
 df_has_base_subset <- function(x) {
-  table <- ns_methods(.BaseNamespaceEnv)
-  method <- .Call(vctrs_s3_find_method, "[", x, table)
+  method <- s3_find_method(x, "[", ns = "base")
   is_null(method) || identical(method, `[.data.frame`)
+}
+
+last <- function(x) {
+  x[[length(x)]]
+}
+
+# Find the longest common suffix of two vectors
+vec_common_suffix <- function(x, y) {
+  common <- vec_cast_common(x = x, y = y)
+  x <- common$x
+  y <- common$y
+
+  x_size <- vec_size(x)
+  y_size <- vec_size(y)
+  n <- min(x_size, y_size)
+
+  if (!n) {
+    return(vec_slice(x, int()))
+  }
+
+  # Truncate the start of the vectors so they have equal size
+  if (x_size < y_size) {
+    y <- vec_slice(y, seq2(y_size - x_size + 1, y_size))
+  } else if (y_size < x_size) {
+    x <- vec_slice(x, seq2(x_size - y_size + 1, x_size))
+  }
+
+  # Find locations of unequal elements. Elements after the last
+  # location are the common suffix.
+  common <- vec_equal(x, y)
+  i <- which(!common)
+
+  # Slice the suffix after the last unequal element
+  if (length(i)) {
+    vec_slice(x, seq2(max(i) + 1, n))
+  } else {
+    x
+  }
+}
+
+import_from <- function(ns, names, env = caller_env()) {
+  objs <- env_get_list(ns_env(ns), names)
+  env_bind(env, !!!objs)
 }

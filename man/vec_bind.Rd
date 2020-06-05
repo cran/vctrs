@@ -43,15 +43,14 @@ Alternatively, you can supply \code{.ptype} to give the output known type.
 If \code{getOption("vctrs.no_guessing")} is \code{TRUE} you must supply this value:
 this is a convenient way to make production code demand fixed types.}
 
-\item{.names_to}{\itemize{
-\item By default, input names are \link[rlang:zap]{zapped}.
+\item{.names_to}{This controls what to do with input names supplied in \code{...}.
 \itemize{
+\item By default, input names are \link[rlang:zap]{zapped}.
 \item If a string, specifies a column where the input names will be
 copied. These names are often useful to identify rows with
 their original input. If a column name is supplied and \code{...} is
 not named, an integer column is used instead.
 \item If \code{NULL}, the input names are used as row names.
-}
 }}
 
 \item{.name_repair}{One of \code{"unique"}, \code{"universal"}, or
@@ -120,6 +119,29 @@ For column-binding, the following invariants apply:
 \itemize{
 \item \code{vec_size(vec_cbind(x, y)) == vec_size_common(x, y)}
 \item \code{vec_ptype(vec_cbind(x, y)) == vec_cbind(vec_ptype(x), vec_ptype(x))}
+}
+}
+
+\section{Dependencies}{
+
+\subsection{vctrs dependencies}{
+\itemize{
+\item \code{\link[=vec_cast_common]{vec_cast_common()}}
+\item \code{\link[=vec_proxy]{vec_proxy()}}
+\item \code{\link[=vec_init]{vec_init()}}
+\item \code{\link[=vec_assign]{vec_assign()}}
+\item \code{\link[=vec_restore]{vec_restore()}}
+}
+}
+
+\subsection{base dependencies of \code{vec_rbind()}}{
+\itemize{
+\item \code{\link[base:c]{base::c()}}
+}
+
+If columns to combine inherit from a common class,
+\code{vec_rbind()} falls back to \code{base::c()} if there exists a \code{c()}
+method implemented for this class hierarchy.
 }
 }
 

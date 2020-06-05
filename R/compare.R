@@ -16,6 +16,10 @@
 #'   future.
 #' @inheritParams ellipsis::dots_empty
 #' @return A 1d atomic vector or a data frame.
+#'
+#' @section Dependencies:
+#' - [vec_proxy()] called by default
+#'
 #' @keywords internal
 #' @export
 vec_proxy_compare <- function(x, ..., relax = FALSE) {
@@ -61,6 +65,12 @@ vec_proxy_compare_default <- function(x, relax = FALSE) {
 #' @return An integer vector with values -1 for `x < y`, 0 if `x == y`,
 #'    and 1 if `x > y`. If `na_equal` is `FALSE`, the result will be `NA`
 #'    if either `x` or `y` is `NA`.
+#'
+#' @section Dependencies:
+#' - [vec_cast_common()] with fallback
+#' - [vec_recycle_common()]
+#' - [vec_proxy_compare()]
+#'
 #' @export
 #' @examples
 #' vec_compare(c(TRUE, FALSE, NA), FALSE)
@@ -81,7 +91,7 @@ vec_compare <- function(x, y, na_equal = FALSE, .ptype = NULL) {
   args <- vec_cast_common_params(
     !!!args,
     .to = .ptype,
-    .df_fallback = DF_FALLBACK_QUIET
+    .df_fallback = DF_FALLBACK_quiet
   )
 
   .Call(vctrs_compare, vec_proxy_compare(args[[1]]), vec_proxy_compare(args[[2]]), na_equal)
@@ -98,6 +108,14 @@ vec_compare <- function(x, y, na_equal = FALSE, .ptype = NULL) {
 #' @return
 #' * `vec_order()` an integer vector the same size as `x`.
 #' * `vec_sort()` a vector with the same size and type as `x`.
+#'
+#' @section Dependencies of `vec_order()`:
+#' * [vec_proxy_compare()]
+#'
+#' @section Dependencies of `vec_sort()`:
+#' * [vec_proxy_compare()]
+#' * [vec_order()]
+#' * [vec_slice()]
 #' @export
 #' @examples
 #' x <- round(c(runif(9), NA), 3)

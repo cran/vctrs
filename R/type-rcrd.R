@@ -73,9 +73,12 @@ names.vctrs_rcrd <- function(x) {
 
 #' @export
 format.vctrs_rcrd <- function(x, ...) {
-  # nocov start
-  stop_unimplemented(x, "format")
-  # nocov end
+  if (inherits(x, "vctrs_foobar")) {
+    # For unit tests
+    exec("paste", !!!vec_data(x), sep = ":")
+  } else {
+    stop_unimplemented(x, "format")
+  }
 }
 
 #' @export
@@ -134,11 +137,6 @@ rep.vctrs_rcrd <- function(x, ...) {
 `length<-.vctrs_rcrd` <- function(x, value) {
   out <- lapply(vec_data(x), `length<-`, value)
   vec_restore(out, x)
-}
-
-#' @export
-as.list.vctrs_rcrd <- function(x, ...) {
-  vec_cast(x, list())
 }
 
 # Replacement -------------------------------------------------------------

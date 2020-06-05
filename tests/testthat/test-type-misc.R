@@ -32,7 +32,7 @@ test_that("`numeric_version` falls back to base methods", {
 test_that("common type of data.table and data.frame is data.table", {
   # As data.table is not in Suggests, these checks are only run on the
   # devs' machines
-  import_from("data.table", "data.table")
+  testthat_import_from("data.table", "data.table")
 
   expect_identical(
     vec_ptype2(data.table(x = TRUE), data.table(y = 2)),
@@ -62,7 +62,7 @@ test_that("common type of data.table and data.frame is data.table", {
 })
 
 test_that("data.table and tibble do not have a common type", {
-  import_from("data.table", "data.table")
+  testthat_import_from("data.table", "data.table")
 
   expect_incompatible_df(
     vec_ptype_common(data.table(x = TRUE), tibble(y = 2)),
@@ -81,4 +81,18 @@ test_that("data.table and tibble do not have a common type", {
     vec_cast(data.table(y = 2), tibble(x = TRUE, y = 1L)),
     tibble(x = NA, y = 2L)
   )
+})
+
+test_that("can slice `ts` vectors", {
+  x <- ts(1:3)
+  expect_identical(vec_ptype(x), x[0])
+  expect_identical(vec_slice(x, 2), x[2])
+})
+
+test_that("can concatenate `ts` vectors", {
+  x <- ts(1:3)
+  expect_identical(vec_c(x, x), c(x, x))
+
+  df <- data_frame(x = x)
+  expect_identical(vec_rbind(df, df), data_frame(x = c(x, x)))
 })

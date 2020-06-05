@@ -68,6 +68,24 @@ subclasses, see
 }
 }
 
+\section{Dependencies of \code{vec_cast_common()}}{
+
+\subsection{vctrs dependencies}{
+\itemize{
+\item \code{\link[=vec_ptype2]{vec_ptype2()}}
+\item \code{\link[=vec_cast]{vec_cast()}}
+}
+}
+
+\subsection{base dependencies}{
+
+Some functions enable a base-class fallback for
+\code{vec_cast_common()}. In that case the inputs are deemed compatible
+when they have the same \link[base:typeof]{base type} and inherit from
+the same base class.
+}
+}
+
 \examples{
 # x is a double, but no information is lost
 vec_cast(1, integer())

@@ -1,13 +1,14 @@
 #include "vctrs.h"
 #include "cast.h"
 #include "type-factor.h"
+#include "type-tibble.h"
 #include "utils.h"
 
 // [[ include("cast.h") ]]
-SEXP vec_cast_dispatch(const struct cast_opts* opts,
-                       enum vctrs_type x_type,
-                       enum vctrs_type to_type,
-                       bool* lossy) {
+SEXP vec_cast_dispatch_native(const struct cast_opts* opts,
+                              enum vctrs_type x_type,
+                              enum vctrs_type to_type,
+                              bool* lossy) {
   SEXP x = opts->x;
   SEXP to = opts->to;
   struct vctrs_arg* x_arg = opts->x_arg;
@@ -70,15 +71,36 @@ SEXP vec_cast_dispatch(const struct cast_opts* opts,
 
   case vctrs_type2_s3_dataframe_bare_tibble:
     if (dir == 0) {
-      return tib_cast(x, to, x_arg, to_arg);
+      return tib_cast(opts);
     } else {
       return df_cast_opts(opts);
     }
 
   case vctrs_type2_s3_bare_tibble_bare_tibble:
-    return tib_cast(x, to, x_arg, to_arg);
+    return tib_cast(opts);
 
   default:
     return R_NilValue;
+  }
+}
+
+// [[ register() ]]
+SEXP vctrs_cast_dispatch_native(SEXP x,
+                                SEXP to,
+                                SEXP fallback_opts,
+                                SEXP x_arg,
+                                SEXP to_arg) {
+  struct vctrs_arg c_x_arg = vec_as_arg(x_arg);
+  struct vctrs_arg c_to_arg = vec_as_arg(to_arg);
+
+  const struct cast_opts c_opts = new_cast_opts(x, to, &c_x_arg, &c_to_arg, fallback_opts);
+
+  bool lossy = false;
+  SEXP out = vec_cast_dispatch_native(&c_opts, vec_typeof(x), vec_typeof(to), &lossy);
+
+  if (lossy || out == R_NilValue) {
+    return vec_cast_default(x, to, x_arg, to_arg, &c_opts.fallback);
+  } else {
+    return out;
   }
 }

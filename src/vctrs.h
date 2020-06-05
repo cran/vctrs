@@ -10,9 +10,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef R_xlen_t r_ssize_t;
+
+extern bool vctrs_debug_verbose;
 
 #define VCTRS_ASSERT(condition) ((void)sizeof(char[1 - 2*!(condition)]))
+
+
+typedef R_xlen_t r_ssize_t;
 
 // An ERR indicates either a C NULL in case of no error, or a
 // condition object otherwise
@@ -399,9 +403,6 @@ SEXP vec_c(SEXP xs,
            SEXP name_spec,
            const struct name_repair_opts* name_repair);
 
-SEXP vec_c_fallback(SEXP xs, SEXP name_spec);
-bool needs_vec_c_fallback(SEXP xs, SEXP ptype);
-
 bool is_data_frame(SEXP x);
 
 R_len_t df_size(SEXP x);
@@ -555,10 +556,6 @@ SEXP vec_posixlt_restore(SEXP x, SEXP to);
 SEXP date_datetime_ptype2(SEXP x, SEXP y);
 SEXP datetime_datetime_ptype2(SEXP x, SEXP y);
 
-// Tibble methods ----------------------------------------------------
-
-SEXP tib_cast(SEXP x, SEXP y, struct vctrs_arg* x_arg, struct vctrs_arg* y_arg);
-
 // Character translation ---------------------------------------------
 
 SEXP obj_maybe_translate_encoding(SEXP x, R_len_t size);
@@ -600,7 +597,6 @@ static inline void growable_push_int(struct growable* g, int i) {
 
 // Conditions ---------------------------------------------------
 
-void vctrs_stop_unsupported_type(enum vctrs_type, const char* fn) __attribute__((noreturn));
 void stop_scalar_type(SEXP x, struct vctrs_arg* arg) __attribute__((noreturn));
 void vec_assert(SEXP x, struct vctrs_arg* arg);
 __attribute__((noreturn))

@@ -267,6 +267,73 @@ test_that("can assign row names in vec_rbind()", {
   expect_identical(out, exp)
 })
 
+test_that("vec_rbind() takes the proxy and restores", {
+  df <- foobar(data.frame(x = 1))
+
+  # This data frame subclass has an identity proxy and the restore
+  # method falls back to a bare data frame if `$x` has any missing values.
+  # In `vec_rbind()`, the `vec_init()` call will create a bare data frame,
+  # but at the end it is `vec_restore()`d to the right class.
+  local_methods(
+    vec_ptype2.vctrs_foobar.vctrs_foobar = function(x, y, ...) {
+      x
+    },
+    vec_proxy.vctrs_foobar = function(x, ...) {
+      x
+    },
+    vec_restore.vctrs_foobar = function(x, to, ...) {
+      if (any(is.na(x$x))) {
+        new_data_frame(x)
+      } else {
+        vec_restore_default(x, to)
+      }
+    }
+  )
+
+  expect_identical(
+    vec_rbind(df, df),
+    foobar(data.frame(x = c(1, 1)))
+  )
+})
+
+test_that("vec_rbind() proxies before initializing", {
+  df <- foobar(data.frame(x = 1))
+
+  # This data frame subclass doesn't allow `NA`s in columns.
+  # If initialization happened before proxying, it would try to
+  # create `NA` rows with `vec_init()`.
+  local_methods(
+    vec_ptype2.vctrs_foobar.vctrs_foobar = function(x, y, ...) {
+      x
+    },
+    vec_proxy.vctrs_foobar = function(x, ...) {
+      new_data_frame(x)
+    },
+    vec_restore.vctrs_foobar = function(x, to, ...) {
+      if (any(is.na(x$x))) {
+        abort("`x` can't have NA values.")
+      }
+      vec_restore_default(x, to)
+    }
+  )
+
+  expect_identical(
+    vec_rbind(df, df),
+    foobar(data.frame(x = c(1, 1)))
+  )
+})
+
+test_that("vec_rbind() requires a data frame proxy for data frame ptypes", {
+  df <- foobar(data.frame(x = 1))
+
+  local_methods(
+    vec_ptype2.vctrs_foobar.vctrs_foobar = function(x, y, ...) x,
+    vec_proxy.vctrs_foobar = function(x, ...) 1
+  )
+
+  expect_error(vec_rbind(df, df), "Attempt to restore data frame from a double")
+})
+
 test_that("monitoring: name repair while rbinding doesn't modify in place", {
   df <- new_data_frame(list(x = 1, x = 1))
   expect <- new_data_frame(list(x = 1, x = 1))
@@ -645,11 +712,115 @@ test_that("vec_rbind() fails with complex foreign S4 classes", {
 })
 
 test_that("vec_rbind() falls back to c() if S3 method is available", {
-  skip("TODO")
+  x <- foobar(1, foo = 1)
+  y <- foobar(2, bar = 2)
+
+  x_df <- data_frame(x = x)
+  y_df <- data_frame(x = y)
+
+  expect_error(vec_rbind(x_df, y_df), class = "vctrs_error_incompatible_type")
+
+  out <- with_methods(
+    c.vctrs_foobar = function(...) quux(NextMethod()),
+    vec_rbind(x_df, y_df)
+  )
+  expect_identical(out, data_frame(x = quux(c(1, 2))))
+
+  # Fallback is used with data frame subclasses, with or without
+  # ptype2 method
+  foo_df <- foobaz(x_df)
+  bar_df <- foobaz(y_df)
+
+  out <- with_methods(
+    c.vctrs_foobar = function(...) quux(NextMethod()),
+    vec_rbind(foo_df, bar_df)
+  )
+  expect_identical(out, foobaz(data_frame(x = quux(c(1, 2)))))
+
+  out <- with_methods(
+    c.vctrs_foobar = function(...) quux(NextMethod()),
+    vec_ptype2.vctrs_foobaz.vctrs_foobaz = function(...) foobaz(df_ptype2(...)),
+    vec_rbind(foo_df, bar_df)
+  )
+  expect_identical(out, foobaz(data_frame(x = quux(c(1, 2)))))
+
+  skip("FIXME: c() fallback with recursion through df-col")
+
+  wrapper_x_df <- data_frame(x = x_df)
+  wrapper_y_df <- data_frame(x = y_df)
+
+  out <- with_methods(
+    c.vctrs_foobar = function(...) quux(NextMethod()),
+    vec_rbind(wrapper_x_df, wrapper_y_df)
+  )
+  expect_identical(out, data_frame(data_frame(x = quux(c(1, 2)))))
 })
 
-test_that("vec_rbind() falls back to c() if S4 method is available", {
-  skip("TODO")
+test_that("c() fallback works with unspecified columns", {
+  local_methods(
+    c.vctrs_foobar = function(...) foobar(NextMethod()),
+    `[.vctrs_foobar` = function(x, i, ...) foobar(NextMethod(), dispatched = TRUE)
+  )
+
+  out <- vec_rbind(
+    data_frame(x = foobar(1)),
+    data_frame(y = foobar(2))
+  )
+  expect_identical(out, data_frame(
+    x = foobar(c(1, NA), dispatched = TRUE),
+    y = foobar(c(NA, 2), dispatched = TRUE)
+  ))
+})
+
+test_that("c() fallback works with vctrs-powered data frame subclass", {
+  local_methods(
+    c.vctrs_quux = function(...) quux(NextMethod(), c_dispatched = TRUE),
+    `[.vctrs_quux` = function(x, i, ...) quux(NextMethod(), bracket_dispatched = TRUE)
+  )
+  local_foobar_df_methods()
+
+  ### Joint case
+  df1 <- foobar(data_frame(x = quux(1:3)))
+  df2 <- data_frame(x = quux(4:5))
+
+  out <- vctrs::vec_rbind(df1, df2)
+  exp <- foobar(data_frame(x = quux(1:5, c_dispatched = TRUE)))
+  expect_identical(out, exp)
+
+  out <- vctrs::vec_rbind(df2, df1)
+  exp <- foobar(data_frame(x = quux(c(4:5, 1:3), c_dispatched = TRUE)))
+  expect_identical(out, exp)
+
+  ### Disjoint case
+  df1 <- foobar(data_frame(x = quux(1:3)))
+  df2 <- data.frame(y = 4:5)
+
+  out <- vctrs::vec_rbind(df1, df2)
+  exp <- foobar(data_frame(
+    x = quux(c(1:3, NA, NA), bracket_dispatched = TRUE),
+    y = c(rep(NA, 3), 4:5)
+  ))
+  expect_identical(out, exp)
+
+  out <- vctrs::vec_rbind(df2, df1)
+  exp <- foobar(data_frame(
+    y = c(4:5, rep(NA, 3)),
+    x = quux(c(NA, NA, 1:3), bracket_dispatched = TRUE)
+  ))
+  expect_identical(out, exp)
+})
+
+test_that("vec_rbind() falls back to c() if S3 method is available for S4 class", {
+  joe <- data_frame(x = .Counts(c(1L, 2L), name = "Joe"))
+  jane <- data_frame(x = .Counts(3L, name = "Jane"))
+
+  expect_error(vec_rbind(joe, jane), class = "vctrs_error_incompatible_type")
+
+  out <- with_methods(
+    c.vctrs_Counts = function(...) .Counts(NextMethod(), name = "dispatched"),
+    vec_rbind(joe, jane)
+  )
+  expect_identical(out$x, .Counts(1:3, name = "dispatched"))
 })
 
 test_that("vec_cbind() and vec_rbind() have informative error messages", {
@@ -699,4 +870,38 @@ test_that("rbind supports names and inner names (#689)", {
   expect_identical(row.names(nested_out$mat), c("a", "b", "c", "d"))
   expect_identical(names(nested_out$vec), c("a", "b", "c", "FOO"))
   expect_identical(names(nested_out$oo), c("a", "b", "c", "FOO"))
+})
+
+test_that("vec_rbind() doesn't fall back to c() with proxied classes (#1119)", {
+  foobar_rcrd <- function(x, y) new_rcrd(list(x = x, y = y), class = "vctrs_foobar")
+
+  x <- foobar_rcrd(x = 1:2, y = 3:4)
+  y <- foobar_rcrd(x = 5L, y = 6L)
+
+  out <- vec_rbind(x, x)
+  exp <- data_frame(
+    ...1 = foobar_rcrd(x = c(1L, 1L), y = c(3L, 3L)),
+    ...2 = foobar_rcrd(x = c(2L, 2L), y = c(4L, 4L))
+  )
+  expect_identical(out, exp)
+
+  out <- vec_rbind(data_frame(x = x), data_frame(x = x))
+  exp <- data_frame(
+    x = foobar_rcrd(x = c(1L, 2L, 1L, 2L), y = c(3L, 4L, 3L, 4L))
+  )
+  expect_identical(out, exp)
+})
+
+test_that("vec_rbind() fallback works with tibbles", {
+  x <- foobar("foo")
+  df <- data_frame(x = x)
+  tib <- tibble(x = x)
+
+  local_methods(c.vctrs_foobar = function(...) quux(NextMethod()))
+
+  exp <- tibble(x = quux(c("foo", "foo")))
+
+  expect_identical(vec_rbind(tib, tib), exp)
+  expect_identical(vec_rbind(df, tib), exp)
+  expect_identical(vec_rbind(tib, df), exp)
 })

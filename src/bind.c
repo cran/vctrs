@@ -1,4 +1,5 @@
 #include "vctrs.h"
+#include "c.h"
 #include "dim.h"
 #include "ptype-common.h"
 #include "slice-assign.h"
@@ -43,38 +44,39 @@ SEXP vctrs_rbind(SEXP call, SEXP op, SEXP args, SEXP env) {
   return out;
 }
 
-
 static SEXP vec_rbind(SEXP xs,
                       SEXP ptype,
                       SEXP names_to,
                       struct name_repair_opts* name_repair,
                       SEXP name_spec) {
-  int nprot = 0;
-  R_len_t n = Rf_length(xs);
+  int n_prot = 0;
+  R_len_t n_inputs = Rf_length(xs);
 
-  for (R_len_t i = 0; i < n; ++i) {
+  for (R_len_t i = 0; i < n_inputs; ++i) {
     SET_VECTOR_ELT(xs, i, as_df_row(VECTOR_ELT(xs, i), name_repair));
   }
 
   // The common type holds information about common column names,
   // types, etc. Each element of `xs` needs to be cast to that type
   // before assignment.
-  ptype = vec_ptype_common_params(xs, ptype, DF_FALLBACK_DEFAULT);
-  PROTECT_N(ptype, &nprot);
+  ptype = vec_ptype_common_params(xs, ptype, DF_FALLBACK_DEFAULT, S3_FALLBACK_true);
+  PROTECT_N(ptype, &n_prot);
+
+  R_len_t n_cols = Rf_length(ptype);
 
   if (ptype == R_NilValue) {
-    UNPROTECT(nprot);
+    UNPROTECT(n_prot);
     return new_data_frame(vctrs_shared_empty_list, 0);
   }
-  if (TYPEOF(ptype) == LGLSXP && !Rf_length(ptype)) {
+  if (TYPEOF(ptype) == LGLSXP && !n_cols) {
     ptype = as_df_row_impl(vctrs_shared_na_lgl, name_repair);
-    PROTECT_N(ptype, &nprot);
+    PROTECT_N(ptype, &n_prot);
   }
   if (!is_data_frame(ptype)) {
     Rf_errorcall(R_NilValue, "Can't bind objects that are not coercible to a data frame.");
   }
 
-  SEXP nms = PROTECT_N(r_names(xs), &nprot);
+  SEXP nms = PROTECT_N(r_names(xs), &n_prot);
   bool has_names = nms != R_NilValue;
   bool has_names_to = names_to != R_NilValue;
   R_len_t names_to_loc = 0;
@@ -85,13 +87,17 @@ static SEXP vec_rbind(SEXP xs,
     UNPROTECT(1);
 
     if (names_to_loc < 0) {
-      ptype = PROTECT_N(cbind_names_to(has_names, names_to, ptype), &nprot);
+      ptype = PROTECT_N(cbind_names_to(has_names, names_to, ptype), &n_prot);
       names_to_loc = 0;
     }
   }
 
+  // Must happen after the `names_to` column has been added to `ptype`
+  xs = vec_cast_common_params(xs, ptype, DF_FALLBACK_DEFAULT, S3_FALLBACK_true);
+  PROTECT_N(xs, &n_prot);
+
   // Find individual input sizes and total size of output
-  R_len_t nrow = 0;
+  R_len_t n_rows = 0;
 
   bool has_rownames = false;
   if (!has_names_to && r_names(xs) != R_NilValue) {
@@ -99,13 +105,13 @@ static SEXP vec_rbind(SEXP xs,
     has_rownames = true;
   }
 
-  SEXP ns_placeholder = PROTECT_N(Rf_allocVector(INTSXP, n), &nprot);
+  SEXP ns_placeholder = PROTECT_N(Rf_allocVector(INTSXP, n_inputs), &n_prot);
   int* ns = INTEGER(ns_placeholder);
 
-  for (R_len_t i = 0; i < n; ++i) {
+  for (R_len_t i = 0; i < n_inputs; ++i) {
     SEXP elt = VECTOR_ELT(xs, i);
     R_len_t size = (elt == R_NilValue) ? 0 : vec_size(elt);
-    nrow += size;
+    n_rows += size;
     ns[i] = size;
 
     if (!has_rownames && is_data_frame(elt)) {
@@ -113,17 +119,22 @@ static SEXP vec_rbind(SEXP xs,
     }
   }
 
+  SEXP proxy = PROTECT(vec_proxy(ptype));
+  if (!is_data_frame(proxy)) {
+    Rf_errorcall(R_NilValue, "Can't fill a data frame that doesn't have a data frame proxy.");
+  }
+
   PROTECT_INDEX out_pi;
-  SEXP out = vec_init(ptype, nrow);
+  SEXP out = vec_init(proxy, n_rows);
   PROTECT_WITH_INDEX(out, &out_pi);
 
-  SEXP idx = PROTECT_N(compact_seq(0, 0, true), &nprot);
+  SEXP idx = PROTECT_N(compact_seq(0, 0, true), &n_prot);
   int* idx_ptr = INTEGER(idx);
 
   PROTECT_INDEX rownames_pi;
   SEXP rownames = R_NilValue;
   if (has_rownames) {
-    rownames = Rf_allocVector(STRSXP, nrow);
+    rownames = Rf_allocVector(STRSXP, n_rows);
   }
   PROTECT_WITH_INDEX(rownames, &rownames_pi);
 
@@ -142,13 +153,13 @@ static SEXP vec_rbind(SEXP xs,
     if (has_names) {
       index = nms;
     } else {
-      index = PROTECT_N(Rf_allocVector(INTSXP, n), &nprot);
-      r_int_fill_seq(index, 1, n);
+      index = PROTECT_N(Rf_allocVector(INTSXP, n_inputs), &n_prot);
+      r_int_fill_seq(index, 1, n_inputs);
     }
     index_p = r_vec_const_deref(index);
 
     names_to_type = TYPEOF(index);
-    names_to_col = PROTECT_N(Rf_allocVector(names_to_type, nrow), &nprot);
+    names_to_col = PROTECT_N(Rf_allocVector(names_to_type, n_rows), &n_prot);
     names_to_p = r_vec_deref(names_to_col);
   }
 
@@ -159,21 +170,17 @@ static SEXP vec_rbind(SEXP xs,
     .assign_names = true
   };
 
-  for (R_len_t i = 0; i < n; ++i) {
+  for (R_len_t i = 0; i < n_inputs; ++i) {
     R_len_t size = ns[i];
     if (!size) {
       continue;
     }
     SEXP x = VECTOR_ELT(xs, i);
 
-    SEXP tbl = vec_cast_params(x, ptype,
-                               args_empty, args_empty,
-                               DF_FALLBACK_DEFAULT);
-    PROTECT(tbl);
     init_compact_seq(idx_ptr, counter, size, true);
 
     // Total ownership of `out` because it was freshly created with `vec_init()`
-    out = df_assign(out, idx, tbl, vctrs_ownership_total, &bind_assign_opts);
+    out = df_assign(out, idx, x, vctrs_ownership_total, &bind_assign_opts);
     REPROTECT(out, out_pi);
 
     if (has_rownames) {
@@ -206,7 +213,7 @@ static SEXP vec_rbind(SEXP xs,
     }
 
     counter += size;
-    UNPROTECT(2);
+    UNPROTECT(1);
   }
 
   if (has_rownames) {
@@ -222,10 +229,28 @@ static SEXP vec_rbind(SEXP xs,
 
   if (has_names_to) {
     out = df_poke(out, names_to_loc, names_to_col);
+    REPROTECT(out, out_pi);
   }
 
-  UNPROTECT(nprot);
-  UNPROTECT(2);
+  // Not optimal. Happens after the fallback columns have been
+  // assigned already, ideally they should be ignored. Also this is
+  // currently not recursive. Should we deal with this during
+  // restoration?
+  for (R_len_t i = 0; i < n_cols; ++i) {
+    SEXP col = r_list_get(ptype, i);
+
+    if (vec_is_common_class_fallback(col)) {
+      SEXP col_xs = PROTECT(list_pluck(xs, i));
+      SEXP col_out = vec_c_fallback(col, col_xs, name_spec, name_repair);
+      r_list_poke(out, i, col_out);
+      UNPROTECT(1);
+    }
+  }
+
+  out = vec_restore(out, ptype, PROTECT(r_int(n_rows)));
+
+  UNPROTECT(n_prot);
+  UNPROTECT(4);
   return out;
 }
 
@@ -342,7 +367,10 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, struct name_repair_opts* n
   SEXP containers = PROTECT(map_with_data(xs, &cbind_container_type, &rownames));
   ptype = PROTECT(cbind_container_type(ptype, &rownames));
 
-  SEXP type = PROTECT(vec_ptype_common_params(containers, ptype, DF_FALLBACK_DEFAULT));
+  SEXP type = PROTECT(vec_ptype_common_params(containers,
+                                              ptype,
+                                              DF_FALLBACK_DEFAULT,
+                                              S3_FALLBACK_false));
   if (type == R_NilValue) {
     type = new_data_frame(vctrs_shared_empty_list, 0);
   } else if (!is_data_frame(type)) {
@@ -369,7 +397,7 @@ static SEXP vec_cbind(SEXP xs, SEXP ptype, SEXP size, struct name_repair_opts* n
   // Convert inputs to data frames, validate, and collect total number of columns
   SEXP xs_names = PROTECT(r_names(xs));
   bool has_names = xs_names != R_NilValue;
-  SEXP* xs_names_p = has_names ? STRING_PTR(xs_names) : NULL;
+  SEXP const* xs_names_p = has_names ? STRING_PTR_RO(xs_names) : NULL;
 
   R_len_t ncol = 0;
   for (R_len_t i = 0; i < n; ++i) {

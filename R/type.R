@@ -49,6 +49,13 @@
 #' successively calls [vec_ptype2()] to find a common type. It returns
 #' a [finalised][vec_ptype_finalise] prototype.
 #'
+#' @section Dependencies of `vec_ptype()`:
+#' - [vec_slice()] for returning an empty slice
+#'
+#' @section Dependencies of `vec_ptype_common()`:
+#' - [vec_ptype2()]
+#' - [vec_ptype_finalise()]
+#'
 #' @export
 #' @examples
 #' # Unknown types ------------------------------------------
@@ -95,10 +102,23 @@ vec_ptype <- function(x, ..., x_arg = "") {
 vec_ptype_common <- function(..., .ptype = NULL) {
   .External2(vctrs_type_common, .ptype)
 }
+vec_ptype_common_opts <- function(...,
+                                  .ptype = NULL,
+                                  .opts = fallback_opts()) {
+  .External2(vctrs_ptype_common_opts, .ptype, .opts)
+}
 vec_ptype_common_params <- function(...,
                                     .ptype = NULL,
-                                    .df_fallback = DF_FALLBACK_DEFAULT) {
-  .External2(vctrs_ptype_common_params, .ptype, .df_fallback)
+                                    .df_fallback = NULL,
+                                    .s3_fallback = NULL) {
+  opts <- fallback_opts(
+    df_fallback = .df_fallback,
+    s3_fallback = .s3_fallback
+  )
+  vec_ptype_common_opts(..., .ptype = .ptype, .opts = opts)
+}
+vec_ptype_common_fallback <- function(..., .ptype = NULL) {
+  vec_ptype_common_opts(..., .ptype = .ptype, .opts = full_fallback_opts())
 }
 
 #' @export

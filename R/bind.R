@@ -41,6 +41,7 @@
 #'   `NULL` inputs are silently ignored. Empty (e.g. zero row) inputs
 #'   will not appear in the output, but will affect the derived `.ptype`.
 #' @param .names_to
+#' This controls what to do with input names supplied in `...`.
 #'   * By default, input names are [zapped][rlang::zap].
 #'
 #'   * If a string, specifies a column where the input names will be
@@ -68,6 +69,26 @@
 #'   will determine the type of the container and the type of each column;
 #'   for `vec_cbind()` it only determines the type of the output container.
 #'   If there are no non-`NULL` inputs, the result will be `data.frame()`.
+#'
+#' @section Dependencies:
+#'
+#' ## vctrs dependencies
+#'
+#' - [vec_cast_common()]
+#' - [vec_proxy()]
+#' - [vec_init()]
+#' - [vec_assign()]
+#' - [vec_restore()]
+#'
+#'
+#' ## base dependencies of `vec_rbind()`
+#'
+#' - [base::c()]
+#'
+#' If columns to combine inherit from a common class,
+#' `vec_rbind()` falls back to `base::c()` if there exists a `c()`
+#' method implemented for this class hierarchy.
+#'
 #' @seealso [vec_c()] for combining 1d vectors.
 #' @examples
 #' # row binding -----------------------------------------

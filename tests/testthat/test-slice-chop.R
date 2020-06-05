@@ -81,14 +81,14 @@ test_that("vec_chop() doesn't restore when attributes have already been restored
   expect_equal(result, structure("dispatched", foo = "bar"))
 })
 
-test_that("vec_chop() restores when attributes have not been restored by `[`", {
+test_that("vec_chop() does not restore when attributes have not been restored by `[`", {
   local_methods(
     `[.vctrs_foobar` = function(x, i, ...) "dispatched",
     vec_restore.vctrs_foobar = function(...) "dispatched-and-restored"
   )
 
   result <- vec_chop(foobar(NA))[[1]]
-  expect_equal(result, "dispatched-and-restored")
+  expect_equal(result, "dispatched")
 })
 
 test_that("vec_chop() falls back to `[` for shaped objects with no proxy", {
@@ -716,6 +716,62 @@ test_that("can ignore names in `vec_unchop()` by providing a `zap()` name-spec (
       class = "vctrs_error_incompatible_type"
     )
   })
+})
+
+test_that("vec_unchop() falls back to c() methods (#1120)", {
+  expect_error(
+    vec_unchop(list(foobar(1), foobar(2, class = "foo"))),
+    class = "vctrs_error_incompatible_type"
+  )
+
+  local_methods(
+    c.vctrs_foobar = function(...) {
+      out <- NextMethod()
+      paste0(rep_along(out, "dispatched"), seq_along(out))
+    }
+  )
+
+  # Homogeneous subclasses
+  xs <- list(foobar(1), foobar(2, class = "foo"))
+
+  expect_identical(
+    vec_unchop(xs),
+    c("dispatched1", "dispatched2")
+  )
+  expect_identical(
+    vec_unchop(xs, indices = list(2, 1)),
+    c("dispatched2", "dispatched1")
+  )
+
+  # Different subclasses
+  xs <- list(
+    foobar(c(x = 1, y = 2), class = "foo"),
+    foobar(c(x = 1), foo = 1)
+  )
+
+  expect_identical(
+    vec_unchop(xs),
+    c("dispatched1", "dispatched2", "dispatched3")
+  )
+  expect_identical(
+    vec_unchop(xs, list(c(2, 1), 3)),
+    c("dispatched2", "dispatched1", "dispatched3")
+  )
+})
+
+test_that("vec_unchop() fails if foreign classes are not homogeneous and there is no c() method", {
+  xs <- list(
+    foobar(c(x = 1, y = 2), class = "foo"),
+    foobar(c(x = 1), foo = 1)
+  )
+  expect_error(
+    vec_unchop(xs),
+    class = "vctrs_error_incompatible_type"
+  )
+  expect_error(
+    vec_unchop(xs, list(c(2, 1), 3)),
+    class = "vctrs_error_incompatible_type"
+  )
 })
 
 test_that("vec_unchop() has informative error messages", {

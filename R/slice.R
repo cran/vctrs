@@ -42,6 +42,20 @@
 #' * `vec_slice<-()` is type-stable and always returns the same type
 #'   as the LHS.
 #'
+#' @section Dependencies:
+#'
+#' ## vctrs dependencies
+#'
+#' - [vec_proxy()]
+#' - [vec_restore()]
+#'
+#' ## base dependencies
+#'
+#' - \code{base::`[`}
+#'
+#' If a non-data-frame vector class doesn't have a [vec_proxy()]
+#' method, the vector is sliced with `[` instead.
+#'
 #' @export
 #' @keywords internal
 #' @examples
@@ -213,6 +227,8 @@ vec_index <- function(x, i, ...) {
 #' @param x Template of vector to initialize.
 #' @param n Desired size of result.
 #' @export
+#' @section Dependencies:
+#' * vec_slice()
 #' @examples
 #' vec_init(1:10, 3)
 #' vec_init(Sys.Date(), 5)

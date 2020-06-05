@@ -207,11 +207,11 @@ test_that("vec_c() falls back to c() if S3 method is available", {
     c.vctrs_foobar = method
   )
   expect_identical(
-    vec_c(foobar(1), foobar(2)),
+    vec_c(foobar(1), foobar(2, class = "foo")),
     c("dispatched", "dispatched")
   )
   expect_identical(
-    vec_c(NULL, foobar(1), NULL, foobar(2)),
+    vec_c(NULL, foobar(1), NULL, foobar(2, class = "foo")),
     c("dispatched", "dispatched")
   )
 
@@ -333,6 +333,36 @@ test_that("can ignore names in `vec_c()` by providing a `zap()` name-spec (#232)
       class = "vctrs_error_incompatible_type"
     )
   })
+})
+
+test_that("can concatenate subclasses of `vctrs_vctr` which don't have ptype2 methods", {
+  x <- new_vctr(1, class = "vctrs_foo")
+  expect_identical(vec_c(x, x), new_vctr(c(1, 1), class = "vctrs_foo"))
+})
+
+test_that("base c() fallback handles unspecified chunks", {
+  local_methods(
+    c.vctrs_foobar = function(...) {
+      x <- NextMethod()
+
+      # Should not be passed any unspecified chunks
+      if (anyNA(x)) {
+        abort("tilt")
+      }
+
+      foobar(x)
+    },
+    `[.vctrs_foobar` = function(x, i, ...) {
+      # Return a quux to detect dispatch
+      quux(NextMethod())
+    }
+  )
+
+  out <- vec_c(foobar(1:2), rep(NA, 2))
+  expect_identical(out, quux(c(1:2, NA, NA)))
+
+  out <- vec_c(rep(NA, 2), foobar(1:2), NA)
+  expect_identical(out, quux(c(NA, NA, 1:2, NA)))
 })
 
 test_that("vec_c() has informative error messages", {

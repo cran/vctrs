@@ -217,15 +217,27 @@ test_that("vec_slice() is proxied", {
 })
 
 test_that("dimensions are preserved by vec_slice()", {
-  attrib <- NULL
-
-  local_methods(
-    vec_restore.vctrs_foobar = function(x, ...) attrib <<- attributes(x)
-  )
-
+  # Fallback case
   x <- foobar(1:4)
   dim(x) <- c(2, 2)
   dimnames(x) <- list(a = c("foo", "bar"), b = c("quux", "hunoz"))
+
+  out <- vec_slice(x, 1)
+  exp <- foobar(
+    c(1L, 3L),
+    dim = c(1, 2),
+    dimnames = list(a = "foo", b = c("quux", "hunoz")
+  ))
+  expect_identical(out, exp)
+
+
+  # Native case
+  attrib <- NULL
+
+  local_methods(
+    vec_proxy.vctrs_foobar = identity,
+    vec_restore.vctrs_foobar = function(x, to, ...) attrib <<- attributes(x)
+  )
 
   vec_slice(x, 1)
 
@@ -285,7 +297,7 @@ test_that("vec_slice() falls back to `[` with S3 objects", {
   local_methods(
     `[.vctrs_foobar` = function(x, i, ...) "dispatched"
   )
-  expect_identical(vec_slice(foobar(NA), 1), foobar("dispatched"))
+  expect_identical(vec_slice(foobar(NA), 1), "dispatched")
 
   expect_error(vec_slice(foobar(list(NA)), 1), class = "vctrs_error_scalar_type")
   local_methods(
@@ -300,6 +312,14 @@ test_that("vec_slice() doesn't restore when attributes have already been restore
     vec_restore.vctrs_foobar = function(...) stop("not called")
   )
   expect_error(vec_slice(foobar(NA), 1), NA)
+})
+
+test_that("vec_slice() doesn't restore when `[` method intentionally dropped attributes", {
+  local_methods(
+    `[.vctrs_foobar` = function(x, i, ...) unstructure(NextMethod()),
+    vec_restore.vctrs_foobar = function(...) stop("not called")
+  )
+  expect_identical(vec_slice(foobar(NA), 1), NA)
 })
 
 test_that("can vec_slice() without inflooping when restore calls math generics", {
@@ -660,4 +680,19 @@ test_that("vec_init() handles names in columns", {
     vec_init(data_frame(x = c(1, 2)))$x,
     na_dbl
   )
+})
+
+test_that("vec_slice() restores unrestored but named foreign classes", {
+  x <- foobar(c(x = 1))
+
+  expect_identical(vec_slice(x, 1), x)
+  expect_identical(vec_chop(x), list(x))
+  expect_identical(vec_chop(x, list(1)), list(x))
+  expect_identical(vec_ptype(x), foobar(named(dbl())))
+  expect_identical(vec_ptype(x), foobar(named(dbl())))
+  expect_identical(vec_ptype_common(x, x), foobar(named(dbl())))
+
+  out <- vec_ptype_common_fallback(x, x)
+  expect_true(is_common_class_fallback(out))
+  expect_identical(fallback_class(out), "vctrs_foobar")
 })

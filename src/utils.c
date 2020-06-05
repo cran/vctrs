@@ -120,6 +120,19 @@ SEXP vctrs_eval_mask6(SEXP fn,
   SEXP args[7] = { x1, x2, x3, x4, x5, x6, NULL };
   return vctrs_eval_mask_n(fn, syms, args, env);
 }
+SEXP vctrs_eval_mask7(SEXP fn,
+                      SEXP x1_sym, SEXP x1,
+                      SEXP x2_sym, SEXP x2,
+                      SEXP x3_sym, SEXP x3,
+                      SEXP x4_sym, SEXP x4,
+                      SEXP x5_sym, SEXP x5,
+                      SEXP x6_sym, SEXP x6,
+                      SEXP x7_sym, SEXP x7,
+                      SEXP env) {
+  SEXP syms[8] = { x1_sym, x2_sym, x3_sym, x4_sym, x5_sym, x6_sym, x7_sym, NULL };
+  SEXP args[8] = { x1, x2, x3, x4, x5, x6, x7, NULL };
+  return vctrs_eval_mask_n(fn, syms, args, env);
+}
 
 /**
  * Dispatch in the global environment
@@ -170,6 +183,17 @@ SEXP vctrs_dispatch4(SEXP fn_sym, SEXP fn,
                      SEXP z_sym, SEXP z) {
   SEXP syms[5] = { w_sym, x_sym, y_sym, z_sym, NULL };
   SEXP args[5] = { w, x, y, z, NULL };
+  return vctrs_dispatch_n(fn_sym, fn, syms, args);
+}
+SEXP vctrs_dispatch6(SEXP fn_sym, SEXP fn,
+                     SEXP x1_sym, SEXP x1,
+                     SEXP x2_sym, SEXP x2,
+                     SEXP x3_sym, SEXP x3,
+                     SEXP x4_sym, SEXP x4,
+                     SEXP x5_sym, SEXP x5,
+                     SEXP x6_sym, SEXP x6) {
+  SEXP syms[7] = { x1_sym, x2_sym, x3_sym, x4_sym, x5_sym, x6_sym, NULL };
+  SEXP args[7] = { x1, x2, x3, x4, x5, x6, NULL };
   return vctrs_dispatch_n(fn_sym, fn, syms, args);
 }
 
@@ -383,25 +407,29 @@ SEXP s3_find_method(const char* generic, SEXP x, SEXP table) {
   }
 
   SEXP class = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
+  SEXP method = s3_class_find_method(generic, class, table);
 
+  UNPROTECT(1);
+  return method;
+}
+
+// [[ include("utils.h") ]]
+SEXP s3_class_find_method(const char* generic, SEXP class, SEXP table) {
   // Avoid corrupt objects where `x` is an OBJECT(), but the class is NULL
   if (class == R_NilValue) {
-    UNPROTECT(1);
     return R_NilValue;
   }
 
-  SEXP* class_ptr = STRING_PTR(class);
+  SEXP const* p_class = STRING_PTR_RO(class);
   int n_class = Rf_length(class);
 
-  for (int i = 0; i < n_class; ++i, ++class_ptr) {
-    SEXP method = s3_get_method(generic, CHAR(*class_ptr), table);
+  for (int i = 0; i < n_class; ++i) {
+    SEXP method = s3_get_method(generic, CHAR(p_class[i]), table);
     if (method != R_NilValue) {
-      UNPROTECT(1);
       return method;
     }
   }
 
-  UNPROTECT(1);
   return R_NilValue;
 }
 
@@ -507,25 +535,27 @@ SEXP s4_find_method(SEXP x, SEXP table) {
   }
 
   SEXP class = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
+  SEXP out = s4_class_find_method(class, table);
 
+  UNPROTECT(1);
+  return out;
+}
+SEXP s4_class_find_method(SEXP class, SEXP table) {
   // Avoid corrupt objects where `x` is an OBJECT(), but the class is NULL
   if (class == R_NilValue) {
-    UNPROTECT(1);
     return R_NilValue;
   }
 
-  SEXP* p_class = STRING_PTR(class);
+  SEXP const* p_class = STRING_PTR_RO(class);
   int n_class = Rf_length(class);
 
   for (int i = 0; i < n_class; ++i) {
     SEXP method = s4_get_method(CHAR(p_class[i]), table);
     if (method != R_NilValue) {
-      UNPROTECT(1);
       return method;
     }
   }
 
-  UNPROTECT(1);
   return R_NilValue;
 }
 
@@ -660,6 +690,25 @@ bool list_has_inner_vec_names(SEXP x, R_len_t size) {
 
   return false;
 }
+
+/**
+ * Pluck elements `i` from a list of lists.
+ * @return A list of the same length as `xs`.
+ */
+// [[ include("utils.h") ]]
+SEXP list_pluck(SEXP xs, R_len_t i) {
+  R_len_t n = Rf_length(xs);
+  SEXP out = PROTECT(r_new_list(n));
+
+  for (R_len_t j = 0; j < n; ++j) {
+    SEXP x = r_list_get(xs, j);
+    r_list_poke(out, j, r_list_get(x, i));
+  }
+
+  UNPROTECT(1);
+  return out;
+}
+
 
 // [[ include("vctrs.h") ]]
 enum vctrs_dbl_class dbl_classify(double x) {
@@ -998,7 +1047,7 @@ bool r_int_any_na(SEXP x) {
 
 int r_chr_max_len(SEXP x) {
   R_len_t n = Rf_length(x);
-  SEXP* p = STRING_PTR(x);
+  SEXP const* p = STRING_PTR_RO(x);
 
   int max = 0;
   for (R_len_t i = 0; i < n; ++i, ++p) {
@@ -1426,6 +1475,8 @@ ERR r_try_catch(void (*fn)(void*),
 SEXP (*rlang_sym_as_character)(SEXP x);
 
 
+bool vctrs_debug_verbose = false;
+
 SEXP vctrs_ns_env = NULL;
 SEXP vctrs_shared_empty_str = NULL;
 
@@ -1459,6 +1510,7 @@ SEXP strings_loc = NULL;
 SEXP strings_val = NULL;
 SEXP strings_group = NULL;
 SEXP strings_length = NULL;
+SEXP strings_vctrs_vctr = NULL;
 
 SEXP chrs_subset = NULL;
 SEXP chrs_extract = NULL;
@@ -1523,9 +1575,12 @@ SEXP syms_parent = NULL;
 SEXP syms_s3_methods_table = NULL;
 SEXP syms_from_dispatch = NULL;
 SEXP syms_df_fallback = NULL;
+SEXP syms_s3_fallback = NULL;
 SEXP syms_stop_incompatible_type = NULL;
 SEXP syms_stop_incompatible_size = NULL;
 SEXP syms_action = NULL;
+SEXP syms_vctrs_common_class_fallback = NULL;
+SEXP syms_fallback_class = NULL;
 
 SEXP fns_bracket = NULL;
 SEXP fns_quote = NULL;
@@ -1567,10 +1622,25 @@ void c_print_backtrace() {
 #endif
 }
 
+void r_browse(SEXP x) {
+  r_env_poke(R_GlobalEnv, Rf_install(".debug"), x);
+
+  Rprintf("Object saved in `.debug`:\n");
+  Rf_PrintValue(x);
+
+  // `browser()` can't be trailing due to ESS limitations
+  SEXP call = PROTECT(r_parse("{ base::browser(); NULL }"));
+  Rf_eval(call, R_GlobalEnv);
+
+  UNPROTECT(1);
+}
+
 void vctrs_init_utils(SEXP ns) {
   vctrs_ns_env = ns;
-  vctrs_method_table = r_env_get(ns, Rf_install(".__S3MethodsTable__."));
 
+  vctrs_debug_verbose = r_is_true(Rf_GetOption1(Rf_install("vctrs:::debug")));
+
+  vctrs_method_table = r_env_get(ns, Rf_install(".__S3MethodsTable__."));
   base_method_table = r_env_get(R_BaseNamespace, Rf_install(".__S3MethodsTable__."));
 
   s4_c_method_table = r_parse_eval("environment(methods::getGeneric('c'))$.MTable", R_GlobalEnv);
@@ -1582,7 +1652,7 @@ void vctrs_init_utils(SEXP ns) {
 
   // Holds the CHARSXP objects because unlike symbols they can be
   // garbage collected
-  strings = r_new_shared_vector(STRSXP, 19);
+  strings = r_new_shared_vector(STRSXP, 20);
 
   strings_dots = Rf_mkChar("...");
   SET_STRING_ELT(strings, 0, strings_dots);
@@ -1640,6 +1710,9 @@ void vctrs_init_utils(SEXP ns) {
 
   strings_list = Rf_mkChar("list");
   SET_STRING_ELT(strings, 18, strings_list);
+
+  strings_vctrs_vctr = Rf_mkChar("vctrs_vctr");
+  SET_STRING_ELT(strings, 19, strings_list);
 
 
   classes_data_frame = r_new_shared_vector(STRSXP, 1);
@@ -1769,9 +1842,12 @@ void vctrs_init_utils(SEXP ns) {
   syms_s3_methods_table = Rf_install(".__S3MethodsTable__.");
   syms_from_dispatch = Rf_install("vctrs:::from_dispatch");
   syms_df_fallback = Rf_install("vctrs:::df_fallback");
+  syms_s3_fallback = Rf_install("vctrs:::s3_fallback");
   syms_stop_incompatible_type = Rf_install("stop_incompatible_type");
   syms_stop_incompatible_size = Rf_install("stop_incompatible_size");
   syms_action = Rf_install("action");
+  syms_vctrs_common_class_fallback = Rf_install(c_strs_vctrs_common_class_fallback);
+  syms_fallback_class = Rf_install("fallback_class");
 
   fns_bracket = Rf_findVar(syms_bracket, R_BaseEnv);
   fns_quote = Rf_findVar(Rf_install("quote"), R_BaseEnv);

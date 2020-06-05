@@ -1,12 +1,12 @@
 
-new_ctor <- function(class) {
-  function(x = list(), ...) {
+new_ctor <- function(base_class) {
+  function(x = list(), ..., class = NULL) {
     if (inherits(x, "tbl_df")) {
-      tibble::new_tibble(x, class = class, nrow = nrow(x))
+      tibble::new_tibble(x, class = c(class, base_class), nrow = nrow(x))
     } else if (is.data.frame(x)) {
-      structure(x, class = c(class, "data.frame"), ...)
+      structure(x, class = c(class, base_class, "data.frame"), ...)
     } else {
-      structure(x, class = class, ...)
+      structure(x, class = c(class, base_class), ...)
     }
   }
 }
@@ -130,5 +130,27 @@ local_lgl_supertype <- function(frame = caller_env()) {
 }
 with_lgl_supertype <- function(expr) {
   local_lgl_supertype()
+  expr
+}
+
+foobar_df_ptype2 <- function(x, y, ...) {
+  foobar(df_ptype2(x, y, ...))
+}
+foobar_df_cast <- function(x, y, ...) {
+  foobar(df_cast(x, y, ...))
+}
+local_foobar_df_methods <- function(expr, frame = caller_env()) {
+  local_methods(
+    .frame = frame,
+    vec_ptype2.vctrs_foobar.vctrs_foobar = foobar_df_ptype2,
+    vec_ptype2.data.frame.vctrs_foobar = foobar_df_ptype2,
+    vec_ptype2.vctrs_foobar.data.frame = foobar_df_ptype2,
+    vec_cast.vctrs_foobar.vctrs_foobar = foobar_df_cast,
+    vec_cast.data.frame.vctrs_foobar = foobar_df_cast,
+    vec_cast.vctrs_foobar.data.frame = foobar_df_cast
+  )
+}
+with_foobar_df_methods <- function(expr) {
+  local_foobar_df_methods()
   expr
 }

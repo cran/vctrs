@@ -33,14 +33,14 @@ string to the first argument, and the inner names or positions
 are passed as second argument.
 \item An anonymous function as a purrr-style formula.
 \item A glue specification of the form \code{"{outer}_{inner}"}.
+\item An \code{\link[rlang:zap]{rlang::zap()}} object, in which case both outer and inner
+names are ignored and the result is unnamed.
 }
 
 See the \link[=name_spec]{name specification topic}.}
 
 \item{.name_repair}{How to repair names, see \code{repair} options in
-\code{\link[=vec_as_names]{vec_as_names()}}.  Can also be \code{\link[rlang:zap]{rlang::zap()}} to ignore names
-during concatenation. The names are still used to give
-informative error messages, e.g. with coercion errors.}
+\code{\link[=vec_as_names]{vec_as_names()}}.}
 }
 \value{
 A vector with class given by \code{.ptype}, and length equal to the
@@ -59,6 +59,27 @@ Combine all arguments into a new vector of common type.
 \itemize{
 \item \code{vec_size(vec_c(x, y)) == vec_size(x) + vec_size(y)}
 \item \code{vec_ptype(vec_c(x, y)) == vec_ptype_common(x, y)}.
+}
+}
+
+\section{Dependencies}{
+
+\subsection{vctrs dependencies}{
+\itemize{
+\item \code{\link[=vec_cast_common]{vec_cast_common()}} with fallback
+\item \code{\link[=vec_proxy]{vec_proxy()}}
+\item \code{\link[=vec_restore]{vec_restore()}}
+}
+}
+
+\subsection{base dependencies}{
+\itemize{
+\item \code{\link[base:c]{base::c()}}
+}
+
+If inputs inherit from a common class hierarchy, \code{vec_c()} falls
+back to \code{base::c()} if there exists a \code{c()} method implemented for
+this class hierarchy.
 }
 }
 

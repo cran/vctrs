@@ -173,13 +173,13 @@ test_that("Subclasses of `tbl_df` do not have `tbl_df` common type (#481)", {
 
   expect_df_fallback_warning(
     expect_identical(
-      vec_ptype_common_fallback(quux, tibble()),
+      vec_ptype_common_df_fallback(quux, tibble()),
       tibble()
     )
   )
   expect_df_fallback_warning(
     expect_identical(
-      vec_ptype_common_fallback(tibble(), quux),
+      vec_ptype_common_df_fallback(tibble(), quux),
       tibble()
     )
   )
@@ -309,6 +309,14 @@ test_that("vec_ptype2() methods get prototypes", {
   vec_ptype2(foobar(mtcars), foobar(iris))
   expect_identical(x, foobar(mtcars[0, , drop = FALSE]))
   expect_identical(y, foobar(iris[0, , drop = FALSE]))
+})
+
+test_that("vec_ptype2() allows vec_ptype() to return another type", {
+  out <- with_methods(
+    vec_restore.vctrs_foobar = function(x, to, ...) unstructure(x),
+    vec_ptype2(foobar(1), foobar(2))
+  )
+  expect_identical(out, dbl())
 })
 
 test_that("vec_ptype2() errors have informative output", {
