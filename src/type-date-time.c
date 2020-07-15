@@ -1,4 +1,5 @@
 #include "vctrs.h"
+#include "owned.h"
 #include "utils.h"
 
 
@@ -238,24 +239,24 @@ SEXP posixlt_as_posixlt(SEXP x, SEXP to) {
 // restore
 
 // [[ include("vctrs.h") ]]
-SEXP vec_date_restore(SEXP x, SEXP to) {
-  SEXP out = PROTECT(vec_restore_default(x, to));
+SEXP vec_date_restore(SEXP x, SEXP to, const enum vctrs_owned owned) {
+  SEXP out = PROTECT(vec_restore_default(x, to, owned));
   out = date_validate(out);
   UNPROTECT(1);
   return out;
 }
 
 // [[ include("vctrs.h") ]]
-SEXP vec_posixct_restore(SEXP x, SEXP to) {
-  SEXP out = PROTECT(vec_restore_default(x, to));
+SEXP vec_posixct_restore(SEXP x, SEXP to, const enum vctrs_owned owned) {
+  SEXP out = PROTECT(vec_restore_default(x, to, owned));
   out = datetime_validate(out);
   UNPROTECT(1);
   return out;
 }
 
 // [[ include("vctrs.h") ]]
-SEXP vec_posixlt_restore(SEXP x, SEXP to) {
-  SEXP out = PROTECT(vec_restore_default(x, to));
+SEXP vec_posixlt_restore(SEXP x, SEXP to, const enum vctrs_owned owned) {
+  SEXP out = PROTECT(vec_restore_default(x, to, owned));
   out = datetime_validate_tzone(out);
   UNPROTECT(1);
   return out;
@@ -342,10 +343,9 @@ static SEXP date_validate(SEXP x) {
     // Keeps attributes
     return Rf_coerceVector(x, REALSXP);
   default:
-    Rf_errorcall(
-      R_NilValue,
-      "Internal error: Corrupt `Date` with unknown type %s.", Rf_type2char(TYPEOF(x))
-    );
+    stop_internal("date_validate",
+                  "Corrupt `Date` with unknown type %s.",
+                  Rf_type2char(TYPEOF(x)));
   }
 }
 
@@ -387,10 +387,9 @@ static SEXP datetime_validate_type(SEXP x) {
     // Keeps attributes
     return Rf_coerceVector(x, REALSXP);
   default:
-    Rf_errorcall(
-      R_NilValue,
-      "Internal error: Corrupt `POSIXct` with unknown type %s.", Rf_type2char(TYPEOF(x))
-    );
+    stop_internal("datetime_validate_type",
+                  "Corrupt `POSIXct` with unknown type %s.",
+                  Rf_type2char(TYPEOF(x)));
   }
 
   never_reached("datetime_validate_type");

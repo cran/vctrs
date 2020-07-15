@@ -98,19 +98,12 @@ SEXP vec_proxy_recursive(SEXP x, enum vctrs_proxy_kind kind) {
 }
 
 // [[ register() ]]
-SEXP vctrs_proxy_recursive(SEXP x, SEXP kind_) {
-  enum vctrs_proxy_kind kind;
-  if (kind_ == Rf_install("default")) {
-    kind = vctrs_proxy_default;
-  } else if (kind_ == Rf_install("equal")) {
-    kind = vctrs_proxy_equal;
-  } else if (kind_ == Rf_install("compare")) {
-    kind = vctrs_proxy_compare;
-  } else {
-    Rf_error("Internal error: Unexpected proxy kind `%s`.", CHAR(PRINTNAME(kind_)));
+SEXP vctrs_df_proxy(SEXP x, SEXP kind) {
+  if (!r_is_number(kind)) {
+    stop_internal("vctrs_df_proxy", "`kind` must be a single integer.");
   }
 
-  return vec_proxy_recursive(x, kind);
+  return vec_proxy_recursive(x, r_int_get(kind, 0));
 }
 
 SEXP vec_proxy_method(SEXP x) {

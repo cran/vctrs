@@ -3,6 +3,7 @@
 #include "slice.h"
 #include "subscript-loc.h"
 #include "type-data-frame.h"
+#include "owned.h"
 #include "utils.h"
 
 /*
@@ -172,10 +173,7 @@ static SEXP vec_chop_base(SEXP x, SEXP indices, struct vctrs_chop_info info) {
   }
   default:
     vec_assert(x, args_empty);
-    Rf_error(
-      "Internal error: Unexpected type `%s` for vector proxy in `vec_chop()`",
-      vec_type_as_str(proxy_info.type)
-    );
+    stop_unimplemented_vctrs_type("vec_chop_base", proxy_info.type);
   }
 }
 
@@ -199,7 +197,7 @@ static SEXP chop(SEXP x, SEXP indices, struct vctrs_chop_info info) {
       UNPROTECT(1);
     }
 
-    elt = vec_restore(elt, x, info.restore_size);
+    elt = vec_restore(elt, x, info.restore_size, vec_owned(elt));
 
     SET_VECTOR_ELT(info.out, i, elt);
     UNPROTECT(1);
@@ -260,7 +258,7 @@ static SEXP chop_df(SEXP x, SEXP indices, struct vctrs_chop_info info) {
     }
 
     SEXP elt = VECTOR_ELT(info.out, i);
-    elt = vec_restore(elt, x, info.restore_size);
+    elt = vec_restore(elt, x, info.restore_size, vec_owned(elt));
     SET_VECTOR_ELT(info.out, i, elt);
   }
 
@@ -300,7 +298,7 @@ static SEXP chop_shaped(SEXP x, SEXP indices, struct vctrs_chop_info info) {
       }
     }
 
-    elt = vec_restore(elt, x, info.restore_size);
+    elt = vec_restore(elt, x, info.restore_size, vec_owned(elt));
 
     SET_VECTOR_ELT(info.out, i, elt);
     UNPROTECT(1);
@@ -346,7 +344,7 @@ static SEXP chop_fallback(SEXP x, SEXP indices, struct vctrs_chop_info info) {
     SEXP elt = PROTECT(Rf_eval(call, env));
 
     if (!vec_is_restored(elt, x)) {
-      elt = vec_restore(elt, x, info.restore_size);
+      elt = vec_restore(elt, x, info.restore_size, vec_owned(elt));
     }
 
     SET_VECTOR_ELT(info.out, i, elt);

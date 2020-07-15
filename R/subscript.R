@@ -75,9 +75,9 @@ vec_as_subscript2_result <- function(i,
                                      logical = "cast",
                                      numeric = "cast",
                                      character = "cast") {
-  logical <- arg_match(logical, c("cast", "error"))
-  numeric <- arg_match(numeric, c("cast", "error"))
-  character <- arg_match(character, c("cast", "error"))
+  logical <- arg_match0(logical, c("cast", "error"))
+  numeric <- arg_match0(numeric, c("cast", "error"))
+  character <- arg_match0(character, c("cast", "error"))
 
   result <- vec_as_subscript_result(
     i,
@@ -271,10 +271,10 @@ cnd_body_subscript_dim <- function(cnd, ...) {
 cnd_subscript_element <- function(cnd, capital = FALSE) {
   elt <- cnd$subscript_elt %||% "element"
 
-  if (!is_string(elt, c("element", "row", "column"))) {
+  if (!is_string(elt, c("element", "row", "column", "table"))) {
     abort(paste0(
       "Internal error: `cnd$subscript_elt` must be one of ",
-      "`element`, `row`, or `column`."
+      "`element`, `row`, `column` or `table`."
     ))
   }
 
@@ -282,13 +282,15 @@ cnd_subscript_element <- function(cnd, capital = FALSE) {
     switch(elt,
       element = c("Element", "Elements"),
       row = c("Row", "Rows"),
-      column = c("Column", "Columns")
+      column = c("Column", "Columns"),
+      table = c("Table", "Tables")
     )
   } else {
     switch(elt,
       element = c("element", "elements"),
       row = c("row", "rows"),
-      column = c("column", "columns")
+      column = c("column", "columns"),
+      table = c("table", "tables")
     )
   }
 }

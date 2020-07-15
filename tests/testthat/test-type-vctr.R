@@ -579,3 +579,11 @@ test_that("generic predicates return logical vectors (#251)", {
   expect_identical(any(x), TRUE)
   expect_identical(all(x), TRUE)
 })
+
+test_that("xtfrm() returns a bare vector", {
+  expect_identical(xtfrm(new_vctr(1:3, foo = "bar")), 1:3)
+})
+
+test_that("xtfrm() works with character subclass", {
+  expect_identical(xtfrm(new_vctr(chr())), int())
+})

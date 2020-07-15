@@ -140,14 +140,18 @@ data.frame <- function(..., stringsAsFactors = NULL) {
   base::data.frame(..., stringsAsFactors = stringsAsFactors)
 }
 
+try_catch_callback <- function(data, cnd) {
+  .Call(vctrs_try_catch_callback, data, cnd)
+}
+
 try_catch_hnd <- function(data) {
   function(cnd) {
-    .Call(vctrs_try_catch_callback, data, cnd)
+    try_catch_callback(data, cnd)
   }
 }
 try_catch_impl <- function(data, ...) {
   tryCatch(
-    .Call(vctrs_try_catch_callback, data, NULL),
+    try_catch_callback(data, NULL),
     ...
   )
 }
@@ -211,4 +215,8 @@ vec_common_suffix <- function(x, y) {
 import_from <- function(ns, names, env = caller_env()) {
   objs <- env_get_list(ns_env(ns), names)
   env_bind(env, !!!objs)
+}
+
+fast_c <- function(x, y) {
+  .Call(vctrs_fast_c, x, y)
 }

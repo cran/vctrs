@@ -22,7 +22,7 @@
 #' @examples
 #' new_date(0)
 #' new_datetime(0, tzone = "UTC")
-#' new_duration(1, "hour")
+#' new_duration(1, "hours")
 new_date <- function(x = double()) {
   .Call(vctrs_new_date, x)
 }
@@ -37,7 +37,7 @@ new_datetime <- function(x = double(), tzone = "") {
 #' @rdname new_date
 new_duration <- function(x = double(), units = c("secs", "mins", "hours", "days", "weeks")) {
   stopifnot(is.double(x))
-  units <- match.arg(units)
+  units <- arg_match0(units, c("secs", "mins", "hours", "days", "weeks"))
 
   structure(
     x,

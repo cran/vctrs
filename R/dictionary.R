@@ -44,14 +44,15 @@
 #' # or not at all
 #' vec_count(x, sort = "none")
 vec_count <- function(x, sort = c("count", "key", "location", "none")) {
-  sort <- match.arg(sort)
+  sort <- arg_match0(sort, c("count", "key", "location", "none"))
 
   # Returns key-value pair giving index of first occurrence value and count
-  kv <- .Call(vctrs_count, x)
+  kv <- vec_count_impl(x)
 
-  # rep_along() to support zero-length vectors!
-  df <- data_frame(key = rep_along(kv$val, NA), count = kv$val)
-  df$key <- vec_slice(x, kv$key) # might be a dataframe
+  df <- data_frame(
+    key = vec_slice(x, kv$key),
+    count = kv$val
+  )
 
   if (sort == "none") {
     return(df)
@@ -65,6 +66,10 @@ vec_count <- function(x, sort = c("count", "key", "location", "none")) {
 
   df <- vec_slice(df, idx)
   reset_rownames(df)
+}
+
+vec_count_impl <- function(x) {
+  .Call(vctrs_count, x)
 }
 
 reset_rownames <- function(x) {

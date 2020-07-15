@@ -3,6 +3,7 @@
 #include "slice.h"
 #include "subscript-loc.h"
 #include "type-data-frame.h"
+#include "owned.h"
 #include "utils.h"
 #include "dim.h"
 
@@ -177,6 +178,8 @@ static SEXP list_slice(SEXP x, SEXP subscript) {
 
 static SEXP df_slice(SEXP x, SEXP subscript) {
   R_len_t n = Rf_length(x);
+  R_len_t size = df_size(x);
+
   SEXP out = PROTECT(Rf_allocVector(VECSXP, n));
 
   // FIXME: Should that be restored?
@@ -186,6 +189,11 @@ static SEXP df_slice(SEXP x, SEXP subscript) {
 
   for (R_len_t i = 0; i < n; ++i) {
     SEXP elt = VECTOR_ELT(x, i);
+
+    if (vec_size(elt) != size) {
+      stop_internal("df_slice", "Columns must match the data frame size.");
+    }
+
     SEXP sliced = vec_slice_impl(elt, subscript);
     SET_VECTOR_ELT(out, i, sliced);
   }
@@ -246,8 +254,7 @@ SEXP vec_slice_base(enum vctrs_type type, SEXP x, SEXP subscript) {
   case vctrs_type_character: return chr_slice(x, subscript);
   case vctrs_type_raw:       return raw_slice(x, subscript);
   case vctrs_type_list:      return list_slice(x, subscript);
-  default: Rf_error("Internal error: Non-vector base type `%s` in `vec_slice_base()`",
-                    vec_type_as_str(type));
+  default: stop_unimplemented_vctrs_type("vec_slice_base", type);
   }
 }
 
@@ -257,7 +264,7 @@ SEXP vec_slice_base(enum vctrs_type type, SEXP x, SEXP subscript) {
 // (and the empty string is persistently protected anyway).
 static void repair_na_names(SEXP names, SEXP subscript) {
   if (!NO_REFERENCES(names)) {
-    Rf_errorcall(R_NilValue, "Internal error: `names` must not be referenced.");
+    stop_internal("repair_na_names", "`names` can't be referenced.");
   }
 
   // No possible way to have `NA_integer_` in a compact seq
@@ -334,7 +341,7 @@ SEXP vec_slice_impl(SEXP x, SEXP subscript) {
   // to be maximally compatible with existing classes.
   if (vec_requires_fallback(x, info)) {
     if (info.type == vctrs_type_scalar) {
-      Rf_errorcall(R_NilValue, "Can't slice a scalar");
+      vec_assert(x, NULL);
     }
 
     if (is_compact(subscript)) {
@@ -351,7 +358,7 @@ SEXP vec_slice_impl(SEXP x, SEXP subscript) {
 
     // Take over attribute restoration only if there is no `[` method
     if (!vec_is_restored(out, x)) {
-      out = vec_restore(out, x, restore_size);
+      out = vec_restore(out, x, restore_size, vec_owned(out));
     }
 
     UNPROTECT(nprot);
@@ -360,7 +367,7 @@ SEXP vec_slice_impl(SEXP x, SEXP subscript) {
 
   switch (info.type) {
   case vctrs_type_null:
-    Rf_error("Internal error: Unexpected `NULL` in `vec_slice_impl()`.");
+    stop_internal("vec_slice_impl", "Unexpected `NULL`.");
 
   case vctrs_type_logical:
   case vctrs_type_integer:
@@ -390,7 +397,7 @@ SEXP vec_slice_impl(SEXP x, SEXP subscript) {
       Rf_setAttrib(out, R_NamesSymbol, names);
     }
 
-    out = vec_restore(out, x, restore_size);
+    out = vec_restore(out, x, restore_size, vec_owned(out));
 
     UNPROTECT(nprot);
     return out;
@@ -398,14 +405,13 @@ SEXP vec_slice_impl(SEXP x, SEXP subscript) {
 
   case vctrs_type_dataframe: {
     SEXP out = PROTECT_N(df_slice(data, subscript), &nprot);
-    out = vec_restore(out, x, restore_size);
+    out = vec_restore(out, x, restore_size, vec_owned(out));
     UNPROTECT(nprot);
     return out;
   }
 
   default:
-    Rf_error("Internal error: Unexpected type `%s` for vector proxy in `vec_slice()`",
-             vec_type_as_str(info.type));
+    stop_unimplemented_vctrs_type("vec_slice_impl", info.type);
   }
 }
 
@@ -438,8 +444,8 @@ bool vec_is_restored(SEXP x, SEXP to) {
 }
 
 
-// [[export]]
-SEXP vctrs_slice(SEXP x, SEXP subscript) {
+// [[ include("vctrs.h"); register() ]]
+SEXP vec_slice(SEXP x, SEXP subscript) {
   vec_assert(x, args_empty);
 
   subscript = PROTECT(vec_as_location(subscript, vec_size(x), PROTECT(vec_names(x))));
@@ -447,10 +453,6 @@ SEXP vctrs_slice(SEXP x, SEXP subscript) {
 
   UNPROTECT(2);
   return out;
-}
-
-SEXP vec_slice(SEXP x, SEXP subscript) {
-  return vctrs_slice(x, subscript);
 }
 
 // [[ include("vctrs.h") ]]

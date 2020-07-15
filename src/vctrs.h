@@ -16,7 +16,11 @@ extern bool vctrs_debug_verbose;
 #define VCTRS_ASSERT(condition) ((void)sizeof(char[1 - 2*!(condition)]))
 
 
-typedef R_xlen_t r_ssize_t;
+typedef R_xlen_t r_ssize;
+#define R_SSIZE_MAX R_XLEN_T_MAX
+
+#define r_length Rf_xlength
+#define r_new_vector Rf_allocVector
 
 // An ERR indicates either a C NULL in case of no error, or a
 // condition object otherwise
@@ -349,6 +353,7 @@ bool vec_is_unspecified(SEXP x);
 
 #include "arg.h"
 #include "names.h"
+#include "owned.h"
 
 enum vctrs_proxy_kind {
   vctrs_proxy_default,
@@ -359,8 +364,8 @@ enum vctrs_proxy_kind {
 SEXP vec_proxy(SEXP x);
 SEXP vec_proxy_equal(SEXP x);
 SEXP vec_proxy_recursive(SEXP x, enum vctrs_proxy_kind kind);
-SEXP vec_restore(SEXP x, SEXP to, SEXP i);
-SEXP vec_restore_default(SEXP x, SEXP to);
+SEXP vec_restore(SEXP x, SEXP to, SEXP n, const enum vctrs_owned owned);
+SEXP vec_restore_default(SEXP x, SEXP to, const enum vctrs_owned owned);
 R_len_t vec_size(SEXP x);
 R_len_t vec_size_common(SEXP xs, R_len_t absent);
 SEXP vec_cast_common(SEXP xs, SEXP to);
@@ -409,8 +414,8 @@ R_len_t df_size(SEXP x);
 R_len_t df_rownames_size(SEXP x);
 R_len_t df_raw_size(SEXP x);
 R_len_t df_raw_size_from_list(SEXP x);
-SEXP vec_bare_df_restore(SEXP x, SEXP to, SEXP n);
-SEXP vec_df_restore(SEXP x, SEXP to, SEXP n);
+SEXP vec_bare_df_restore(SEXP x, SEXP to, SEXP n, const enum vctrs_owned owned);
+SEXP vec_df_restore(SEXP x, SEXP to, SEXP n, const enum vctrs_owned owned);
 
 // equal_object() never propagates missingness, so
 // it can return a `bool`
@@ -549,9 +554,9 @@ SEXP posixlt_as_posixct(SEXP x, SEXP to);
 SEXP posixct_as_posixlt(SEXP x, SEXP to);
 SEXP posixlt_as_posixlt(SEXP x, SEXP to);
 
-SEXP vec_date_restore(SEXP x, SEXP to);
-SEXP vec_posixct_restore(SEXP x, SEXP to);
-SEXP vec_posixlt_restore(SEXP x, SEXP to);
+SEXP vec_date_restore(SEXP x, SEXP to, const enum vctrs_owned owned);
+SEXP vec_posixct_restore(SEXP x, SEXP to, const enum vctrs_owned owned);
+SEXP vec_posixlt_restore(SEXP x, SEXP to, const enum vctrs_owned owned);
 
 SEXP date_datetime_ptype2(SEXP x, SEXP y);
 SEXP datetime_datetime_ptype2(SEXP x, SEXP y);
