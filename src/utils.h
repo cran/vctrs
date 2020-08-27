@@ -2,6 +2,7 @@
 #define VCTRS_UTILS_H
 
 #include "arg-counter.h"
+#include "utils-rlang.h"
 
 
 #define SWAP(T, x, y) do {                      \
@@ -122,6 +123,7 @@ SEXP s3_get_method(const char* generic, const char* cls, SEXP table);
 SEXP s3_sym_get_method(SEXP sym, SEXP table);
 SEXP s3_find_method(const char* generic, SEXP x, SEXP table);
 SEXP s3_class_find_method(const char* generic, SEXP class, SEXP table);
+SEXP s3_get_class(SEXP x);
 SEXP s3_find_method_xy(const char* generic,
                        SEXP x,
                        SEXP y,
@@ -202,10 +204,16 @@ extern SEXP (*rlang_env_dots_values)(SEXP);
 extern SEXP (*rlang_env_dots_list)(SEXP);
 
 void* r_vec_deref(SEXP x);
-const void* r_vec_const_deref(SEXP x);
+const void* r_vec_deref_const(SEXP x);
+void* r_vec_deref_barrier(SEXP x);
+const void* r_vec_deref_barrier_const(SEXP x);
 
-void r_vec_ptr_inc(SEXPTYPE type, void** p, R_len_t i);
-void r_vec_fill(SEXPTYPE type, void* p, const void* value_p, R_len_t value_i, R_len_t n);
+void r_vec_fill(SEXPTYPE type,
+                void* p_dest,
+                r_ssize dest_i,
+                const void* p_src,
+                r_ssize src_i,
+                r_ssize n);
 
 R_len_t r_lgl_sum(SEXP lgl, bool na_true);
 SEXP r_lgl_which(SEXP x, bool na_true);
@@ -225,6 +233,13 @@ R_len_t r_chr_find(SEXP x, SEXP value);
 int r_chr_max_len(SEXP x);
 SEXP r_chr_iota(R_len_t n, char* buf, int len, const char* prefix);
 
+#define R_LAZY_ALLOC(SYM, PI, R_TYPE, SIZE) do {        \
+    if (SYM == R_NilValue) {                            \
+      SYM = Rf_allocVector(R_TYPE, SIZE);               \
+      REPROTECT(SYM, PI);                               \
+    }                                                   \
+  } while (0);
+
 static inline
 SEXP r_new_logical(R_len_t n) {
   return Rf_allocVector(LGLSXP, n);
@@ -234,12 +249,30 @@ SEXP r_new_integer(R_len_t n) {
   return Rf_allocVector(INTSXP, n);
 }
 static inline
+SEXP r_new_character(R_len_t n) {
+  return Rf_allocVector(STRSXP, n);
+}
+static inline
 SEXP r_new_list(R_len_t n) {
   return Rf_allocVector(VECSXP, n);
 }
 
-SEXP r_new_environment(SEXP parent, R_len_t size);
-SEXP r_new_function(SEXP formals, SEXP body, SEXP env);
+static inline
+SEXP r_new_environment(SEXP parent) {
+  SEXP env = Rf_allocSExp(ENVSXP);
+  SET_ENCLOS(env, parent);
+  return env;
+}
+
+static inline
+SEXP r_new_function(SEXP formals, SEXP body, SEXP env) {
+  SEXP fn = Rf_allocSExp(CLOSXP);
+  SET_FORMALS(fn, formals);
+  SET_BODY(fn, body);
+  SET_CLOENV(fn, env);
+  return fn;
+}
+
 SEXP r_as_function(SEXP x, const char* arg);
 
 SEXP r_protect(SEXP x);
@@ -266,14 +299,8 @@ SEXP r_clone(SEXP x) {
 SEXP r_pairlist(SEXP* tags, SEXP* cars);
 SEXP r_call(SEXP fn, SEXP* tags, SEXP* cars);
 
-static inline SEXP r_names(SEXP x) {
-  return Rf_getAttrib(x, R_NamesSymbol);
-}
 static inline SEXP r_poke_names(SEXP x, SEXP names) {
   return Rf_setAttrib(x, R_NamesSymbol, names);
-}
-static inline SEXP r_class(SEXP x) {
-  return Rf_getAttrib(x, R_ClassSymbol);
 }
 static inline SEXP r_poke_class(SEXP x, SEXP names) {
   return Rf_setAttrib(x, R_ClassSymbol, names);
@@ -510,6 +537,7 @@ extern SEXP chrs_assign;
 extern SEXP chrs_rename;
 extern SEXP chrs_remove;
 extern SEXP chrs_negate;
+extern SEXP chrs_null;
 extern SEXP chrs_logical;
 extern SEXP chrs_integer;
 extern SEXP chrs_double;
@@ -517,6 +545,7 @@ extern SEXP chrs_complex;
 extern SEXP chrs_character;
 extern SEXP chrs_raw;
 extern SEXP chrs_list;
+extern SEXP chrs_expression;
 extern SEXP chrs_numeric;
 extern SEXP chrs_function;
 extern SEXP chrs_empty;
@@ -587,6 +616,12 @@ extern SEXP fns_names;
 extern SEXP vctrs_method_table;
 extern SEXP base_method_table;
 extern SEXP s4_c_method_table;
+
+
+#if defined(RLIB_DEBUG)
+SEXP R_inspect(SEXP x);
+SEXP R_inspect3(SEXP x, int deep, int pvec);
+#endif
 
 
 #endif

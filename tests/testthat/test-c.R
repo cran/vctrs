@@ -1,4 +1,3 @@
-context("test-c")
 
 test_that("zero length input returns NULL", {
   expect_equal(vec_c(), NULL)
@@ -232,6 +231,26 @@ test_that("vec_c() falls back to c() if S3 method is available", {
   )
 })
 
+test_that("c() fallback is consistent (FIXME)", {
+  out <- with_methods(
+    c.vctrs_foobar = function(...) structure(NextMethod(), class = "dispatched"),
+    list(
+      direct = vec_c(foobar(1L), foobar(2L)),
+      df = vec_c(data_frame(x = foobar(1L)), data_frame(x = foobar(2L))),
+      tib = vec_c(tibble(x = foobar(1L)), tibble(x = foobar(2L))),
+      foreign_df = vec_c(foobaz(data_frame(x = foobar(1L))), foobaz(data_frame(x = foobar(2L))))
+    )
+  )
+
+  # Proper `c()` dispatch:
+  expect_identical(out$direct, structure(1:2, class = "dispatched"))
+
+  # Inconsistent:
+  expect_identical(out$df$x, foobar(1:2))
+  expect_identical(out$tib$x, foobar(1:2))
+  expect_identical(out$foreign_df$x, foobar(1:2))
+})
+
 test_that("vec_c() falls back to c() if S4 method is available", {
   joe1 <- .Counts(c(1L, 2L), name = "Joe")
   joe2 <- .Counts(3L, name = "Joe")
@@ -281,8 +300,8 @@ test_that("vec_c() doesn't fall back when ptype2 is implemented", {
     vec_restore.vctrs_quux = function(x, ...) new_quux(x),
     c.vctrs_foobar = function(...) foobar(NextMethod()),
     {
-      expect_is(c(foobar(1:3), foobar(4L)), "vctrs_foobar")
-      expect_is(vec_c(foobar(1:3), foobar(4L)), "vctrs_quux")
+      expect_s3_class(c(foobar(1:3), foobar(4L)), "vctrs_foobar")
+      expect_s3_class(vec_c(foobar(1:3), foobar(4L)), "vctrs_quux")
     }
   )
 })
@@ -365,6 +384,29 @@ test_that("base c() fallback handles unspecified chunks", {
   expect_identical(out, quux(c(NA, NA, 1:2, NA)))
 })
 
+test_that("can zap outer names from a name-spec (#1215)", {
+  zap_outer_spec <- function(outer, inner) if (is_character(inner)) inner
+
+  expect_null(
+    names(vec_c(a = 1:2, .name_spec = zap_outer_spec))
+  )
+  expect_identical(
+    names(vec_c(a = 1:2, c(foo = 3L), .name_spec = zap_outer_spec)),
+    c("", "", "foo")
+  )
+
+  expect_null(
+    names(vec_unchop(list(a = 1:2), indices = list(1:2), name_spec = zap_outer_spec))
+  )
+  expect_identical(
+    names(vec_unchop(list(a = 1:2, c(foo = 3L)), indices = list(1:2, 3), name_spec = zap_outer_spec)),
+    c("", "", "foo")
+  )
+})
+
+
+# Golden tests -------------------------------------------------------
+
 test_that("vec_c() has informative error messages", {
   verify_output(test_path("error", "test-c.txt"), {
     "# vec_c() fails with complex foreign S3 classes"
@@ -383,5 +425,87 @@ test_that("vec_c() has informative error messages", {
 
     "# can ignore names by providing a `zap()` name-spec (#232)"
     vec_c(a = c(b = letters), b = 1, .name_spec = zap())
+  })
+})
+
+test_that("concatenation performs expected allocations", {
+  verify_output(test_path("performance", "test-c.txt"), {
+    ints <- rep(list(1L), 1e2)
+    dbls <- rep(list(1), 1e2)
+
+    # Extra allocations from `list2()`, see r-lib/rlang#937
+    "# `vec_c()` "
+    "Integers"
+    with_memory_prof(vec_c(!!!ints))
+
+    "Doubles"
+    with_memory_prof(vec_c(!!!dbls))
+
+    "Integers to integer"
+    with_memory_prof(vec_c(!!!ints, ptype = int()))
+
+    "Doubles to integer"
+    with_memory_prof(vec_c(!!!dbls, ptype = int()))
+
+
+    "# `vec_unchop()` "
+    "Integers"
+    with_memory_prof(vec_unchop(ints))
+
+    "Doubles"
+    with_memory_prof(vec_unchop(dbls))
+
+    "Integers to integer"
+    with_memory_prof(vec_unchop(ints, ptype = int()))
+
+    "Doubles to integer"
+    with_memory_prof(vec_unchop(dbls, ptype = int()))
+
+
+    "# Concatenation with names"
+
+    "Named integers"
+    ints <- rep(list(set_names(1:3, letters[1:3])), 1e2)
+    with_memory_prof(vec_unchop(ints))
+
+    "Named matrices"
+    mat <- matrix(1:4, 2, dimnames = list(c("foo", "bar")))
+    mats <- rep(list(mat), 1e2)
+    with_memory_prof(vec_unchop(mats))
+
+    "Data frame with named columns"
+    df <- data_frame(
+      x = set_names(as.list(1:2), c("a", "b")),
+      y = set_names(1:2, c("A", "B")),
+      z = data_frame(Z = set_names(1:2, c("Za", "Zb")))
+    )
+    dfs <- rep(list(df), 1e2)
+    with_memory_prof(vec_unchop(dfs))
+
+    "Data frame with rownames (non-repaired, non-recursive case)"
+    df <- data_frame(x = 1:2)
+    dfs <- rep(list(df), 1e2)
+    dfs <- map2(dfs, seq_along(dfs), set_rownames_recursively)
+    with_memory_prof(vec_unchop(dfs))
+
+    "Data frame with rownames (repaired, non-recursive case)"
+    dfs <- map(dfs, set_rownames_recursively)
+    with_memory_prof(vec_unchop(dfs))
+
+    # FIXME: The following recursive cases duplicate rownames
+    # excessively because df-cols are restored at each chunk
+    # assignment, causing a premature name-repair
+    "FIXME (#1217): Data frame with rownames (non-repaired, recursive case)"
+    df <- data_frame(
+      x = 1:2,
+      y = data_frame(x = 1:2)
+    )
+    dfs <- rep(list(df), 1e2)
+    dfs <- map2(dfs, seq_along(dfs), set_rownames_recursively)
+    with_memory_prof(vec_unchop(dfs))
+
+    "FIXME (#1217): Data frame with rownames (repaired, recursive case)"
+    dfs <- map(dfs, set_rownames_recursively)
+    with_memory_prof(vec_unchop(dfs))
   })
 })

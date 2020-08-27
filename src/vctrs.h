@@ -356,14 +356,16 @@ bool vec_is_unspecified(SEXP x);
 #include "owned.h"
 
 enum vctrs_proxy_kind {
-  vctrs_proxy_default,
-  vctrs_proxy_equal,
-  vctrs_proxy_compare
+  VCTRS_PROXY_KIND_default,
+  VCTRS_PROXY_KIND_equal,
+  VCTRS_PROXY_KIND_compare,
+  VCTRS_PROXY_KIND_order
 };
 
 SEXP vec_proxy(SEXP x);
 SEXP vec_proxy_equal(SEXP x);
-SEXP vec_proxy_recursive(SEXP x, enum vctrs_proxy_kind kind);
+SEXP vec_proxy_compare(SEXP x);
+SEXP vec_proxy_order(SEXP x);
 SEXP vec_restore(SEXP x, SEXP to, SEXP n, const enum vctrs_owned owned);
 SEXP vec_restore_default(SEXP x, SEXP to, const enum vctrs_owned owned);
 R_len_t vec_size(SEXP x);
@@ -383,6 +385,7 @@ SEXP vec_recycle(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
 SEXP vec_recycle_fallback(SEXP x, R_len_t size, struct vctrs_arg* x_arg);
 SEXP vec_recycle_common(SEXP xs, R_len_t size);
 SEXP vec_names(SEXP x);
+SEXP vec_proxy_names(SEXP x);
 SEXP vec_group_loc(SEXP x);
 SEXP vec_match_params(SEXP needles, SEXP haystack, bool na_equal,
                       struct vctrs_arg* needles_arg, struct vctrs_arg* haystack_arg);

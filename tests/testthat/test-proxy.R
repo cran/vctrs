@@ -83,7 +83,7 @@ test_that("vec_data() is proxied", {
 test_that("vec_proxy_equal() is recursive over data frames (#641)", {
   x <- new_data_frame(list(x = foobar(1:3), y = 41:43))
   default <- vec_proxy_equal(x)
-  expect_is(default$x, "vctrs_foobar")
+  expect_s3_class(default$x, "vctrs_foobar")
 
   local_methods(vec_proxy_equal.vctrs_foobar = function(...) c(0, 0, 0))
   overridden <- vec_proxy_equal(x)
@@ -109,4 +109,17 @@ test_that("vec_proxy_equal() defaults to vec_proxy() and vec_proxy_compare() def
 
   expect_identical(vec_proxy_equal(x), data_frame(x = letters[3:1], y = 1:3))
   expect_identical(vec_proxy_compare(x), data_frame(x = letters[3:1], y = 1:3))
+})
+
+test_that("vec_data() preserves data frames", {
+  expect_identical(
+    vec_data(tibble(x = 1)),
+    data_frame(x = 1)
+  )
+
+  # Rownames are preserved
+  expect_identical(
+    vec_data(mtcars),
+    mtcars
+  )
 })

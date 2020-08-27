@@ -182,7 +182,7 @@ test_that("0 is ignored in positive indices", {
 test_that("can slice with double indices", {
   expect_identical(vec_slice(1:3, dbl(2, 3)), 2:3)
   err <- expect_error(vec_as_location(2^31, 3L), class = "vctrs_error_subscript_type")
-  expect_is(err$parent, "vctrs_error_cast_lossy")
+  expect_s3_class(err$parent, "vctrs_error_cast_lossy")
 })
 
 test_that("can slice with symbols", {
@@ -705,4 +705,26 @@ test_that("scalar type error is thrown when `vec_slice_impl()` is called directl
 test_that("column sizes are checked before slicing (#552)", {
   x <- structure(list(a = 1, b = 2:3), row.names = 1:2, class = "data.frame")
   expect_error(vctrs::vec_slice(x, 2), "must match the data frame size")
+})
+
+test_that("base_vec_rep() slices data frames with the base::rep() UI", {
+  df <- data_frame(x = data_frame(y = 1:2))
+  expect_identical(
+    base_vec_rep(df, length.out = 4),
+    vec_slice(df, c(1:2, 1:2))
+  )
+})
+
+test_that("vec_size_assign() slices data frames with the base::rep() UI", {
+  df <- data_frame(x = data_frame(y = 1:3))
+
+  expect_identical(
+    vec_size_assign(df, 2),
+    vec_slice(df, 1:2)
+  )
+
+  expect_identical(
+    vec_size_assign(df, 4),
+    vec_slice(df, c(1:3, NA))
+  )
 })

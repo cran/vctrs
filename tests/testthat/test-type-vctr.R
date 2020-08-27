@@ -1,4 +1,3 @@
-context("test-type-vctr")
 
 test_that("constructor sets attributes", {
   x <- new_vctr(1:4, class = "x", x = 1)
@@ -185,7 +184,7 @@ test_that("is.na<-() supported", {
 
 test_that("comparison functions remapped", {
   local_methods(
-    vec_proxy_compare.bizzaro = function(x) -vec_data(x)
+    vec_proxy_compare.bizzaro = function(x, ...) -vec_data(x)
   )
 
   x1 <- new_vctr(c(1, 2), class = "bizzaro")
@@ -526,11 +525,9 @@ test_that("Summary generics behave identically to base for empty vctrs (#88)", {
     )
   )
 
-  expect_warning(
-    expect_identical(
-      new_vctr(range(numeric())),
-      range(new_vctr(numeric()))
-    )
+  expect_identical(
+    new_vctr(range(1)),
+    range(new_vctr(1))
   )
 
   expect_identical(

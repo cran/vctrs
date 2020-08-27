@@ -58,6 +58,9 @@ extern SEXP vctrs_restore(SEXP, SEXP, SEXP);
 extern SEXP vctrs_restore_default(SEXP, SEXP);
 extern SEXP vec_proxy(SEXP);
 extern SEXP vec_proxy_equal(SEXP);
+extern SEXP vec_proxy_compare(SEXP);
+extern SEXP vec_proxy_order(SEXP);
+extern SEXP vctrs_df_proxy(SEXP, SEXP);
 extern SEXP vctrs_unspecified(SEXP);
 extern SEXP vctrs_ptype(SEXP, SEXP);
 extern SEXP vec_ptype_finalise(SEXP);
@@ -119,6 +122,8 @@ extern SEXP vctrs_implements_ptype2(SEXP);
 extern SEXP vctrs_ptype2_dispatch_native(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_cast_dispatch_native(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_fast_c(SEXP, SEXP);
+extern SEXP vctrs_data_frame(SEXP, SEXP, SEXP);
+extern SEXP vctrs_df_list(SEXP, SEXP, SEXP);
 
 
 // Maturing
@@ -193,6 +198,9 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_restore_default",            (DL_FUNC) &vctrs_restore_default, 2},
   {"vctrs_proxy",                      (DL_FUNC) &vec_proxy, 1},
   {"vctrs_proxy_equal",                (DL_FUNC) &vec_proxy_equal, 1},
+  {"vctrs_proxy_compare",              (DL_FUNC) &vec_proxy_compare, 1},
+  {"vctrs_proxy_order",                (DL_FUNC) &vec_proxy_order, 1},
+  {"vctrs_df_proxy",                   (DL_FUNC) &vctrs_df_proxy, 2},
   {"vctrs_unspecified",                (DL_FUNC) &vctrs_unspecified, 1},
   {"vctrs_ptype",                      (DL_FUNC) &vctrs_ptype, 2},
   {"vctrs_ptype_finalise",             (DL_FUNC) &vec_ptype_finalise, 1},
@@ -255,6 +263,8 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_ptype2_dispatch_native",     (DL_FUNC) &vctrs_ptype2_dispatch_native, 5},
   {"vctrs_cast_dispatch_native",       (DL_FUNC) &vctrs_cast_dispatch_native, 5},
   {"vctrs_fast_c",                     (DL_FUNC) &vctrs_fast_c, 2},
+  {"vctrs_data_frame",                 (DL_FUNC) &vctrs_data_frame, 3},
+  {"vctrs_df_list",                    (DL_FUNC) &vctrs_df_list, 3},
   {NULL, NULL, 0}
 };
 

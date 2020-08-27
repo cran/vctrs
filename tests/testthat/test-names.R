@@ -1,4 +1,3 @@
-context("test-names")
 
 # vec_names() ---------------------------------------------------------
 
@@ -56,6 +55,11 @@ test_that("vec_names2() repairs names before invoking repair function", {
 
 test_that("vec_as_names() requires character vector", {
   expect_error(vec_as_names(NULL), "`names` must be a character vector")
+})
+
+test_that("vec_as_names() validates `repair`", {
+  expect_error(vec_as_names("x", repair = "foo"), "can't be \"foo\"")
+  expect_error(vec_as_names(1, repair = 1), "string or a function")
 })
 
 test_that("vec_as_names() repairs names", {
@@ -191,6 +195,22 @@ test_that("vec_set_names() sets matrix/array names", {
   expect_equal(vec_set_names(y, names), exp)
 })
 
+test_that("vec_set_names() doesn't alter names", {
+  x <- matrix(1, dimnames = list(rows = "a", cols = "x"))
+  vec_set_names(x, "y")
+  expect_equal(vec_names2(x), "a")
+  expect_equal(colnames(x), "x")
+  vec_set_names(x, NULL)
+  expect_equal(vec_names2(x), "a")
+  expect_equal(colnames(x), "x")
+
+  y <- array(1:4, dim = c(1, 2, 2), dimnames = list(rows = "a", one = 1:2, two = 1:2))
+  vec_set_names(y, "y")
+  expect_equal(vec_names2(y), "a")
+  vec_set_names(y, NULL)
+  expect_equal(vec_names2(y), "a")
+})
+
 test_that("vec_set_names() sets row names on data frames", {
   expect_identical(
     vec_set_names(data_frame(x = 1), "foo"),
@@ -251,6 +271,12 @@ test_that("vec_set_names() can set NULL names", {
 test_that("vec_set_names() errors with bad `names`", {
   expect_error(vec_set_names(1, 1), "character vector, not a double")
   expect_error(vec_set_names(1, c("x", "y")), "The size of `names`, 2")
+})
+
+test_that("vec_names() and vec_set_names() work with 1-dimensional arrays", {
+  x <- array(1:2, dimnames = list(c("a", "b")))
+  expect_identical(vec_names(x), c("a", "b"))
+  expect_identical(vec_names(vec_set_names(x, c("A", "B"))), c("A", "B"))
 })
 
 # minimal names -------------------------------------------------------------
@@ -788,4 +814,20 @@ test_that("can pass glue string as name spec", {
 
 test_that("`outer` is recycled before name spec is invoked", {
   expect_identical(vec_c(outer = 1:2, .name_spec = "{outer}"), c(outer = 1L, outer = 2L))
+})
+
+test_that("apply_name_spec() recycles return value not arguments (#1099)", {
+  out <- unstructure(apply_name_spec("foo", "outer", c("a", "b", "c")))
+  expect_identical(out, c("foo", "foo", "foo"))
+
+  inner <- NULL
+  outer <- NULL
+  spec <- function(outer, inner) {
+    inner <<- inner
+    outer <<- outer
+  }
+
+  apply_name_spec(spec, "outer", c("a", "b", "c"))
+  expect_identical(inner, c("a", "b", "c"))
+  expect_identical(outer, "outer")
 })

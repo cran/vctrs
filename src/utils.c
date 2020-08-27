@@ -198,7 +198,7 @@ SEXP vctrs_dispatch6(SEXP fn_sym, SEXP fn,
 }
 
 static SEXP vctrs_eval_mask_n_impl(SEXP fn_sym, SEXP fn, SEXP* syms, SEXP* args, SEXP env) {
-  SEXP mask = PROTECT(r_new_environment(env, 8));
+  SEXP mask = PROTECT(r_new_environment(env));
 
   if (fn_sym != R_NilValue) {
     Rf_defineVar(fn_sym, fn, mask);
@@ -446,7 +446,7 @@ SEXP s3_class_find_method(const char* generic, SEXP class, SEXP table) {
   return R_NilValue;
 }
 
-static
+// [[ include("utils.h") ]]
 SEXP s3_get_class(SEXP x) {
   SEXP class = R_NilValue;
 
@@ -464,7 +464,14 @@ SEXP s3_get_class(SEXP x) {
     stop_internal("s3_get_class", "Class must have length.");
   }
 
-  return STRING_ELT(class, 0);
+  return class;
+}
+
+SEXP s3_get_class0(SEXP x) {
+  SEXP class = PROTECT(s3_get_class(x));
+  SEXP out = STRING_ELT(class, 0);
+  UNPROTECT(1);
+  return out;
 }
 
 // [[ include("utils.h") ]]
@@ -473,8 +480,8 @@ SEXP s3_find_method_xy(const char* generic,
                        SEXP y,
                        SEXP table,
                        SEXP* method_sym_out) {
-  SEXP x_class = PROTECT(s3_get_class(x));
-  SEXP y_class = PROTECT(s3_get_class(y));
+  SEXP x_class = PROTECT(s3_get_class0(x));
+  SEXP y_class = PROTECT(s3_get_class0(y));
 
   SEXP method_sym = R_NilValue;
   method_sym = s3_paste_method_sym(generic, CHAR(x_class));
@@ -497,7 +504,7 @@ SEXP s3_find_method2(const char* generic,
                      SEXP x,
                      SEXP table,
                      SEXP* method_sym_out) {
-  SEXP class = PROTECT(s3_get_class(x));
+  SEXP class = PROTECT(s3_get_class0(x));
 
   SEXP method_sym = s3_paste_method_sym(generic, CHAR(class));
   SEXP method = s3_sym_get_method(method_sym, table);
@@ -516,6 +523,7 @@ SEXP s3_find_method2(const char* generic,
 // [[ include("utils.h") ]]
 SEXP s3_bare_class(SEXP x) {
   switch (TYPEOF(x)) {
+  case NILSXP: return chrs_null;
   case LGLSXP: return chrs_logical;
   case INTSXP: return chrs_integer;
   case REALSXP: return chrs_double;
@@ -523,6 +531,7 @@ SEXP s3_bare_class(SEXP x) {
   case STRSXP: return chrs_character;
   case RAWSXP: return chrs_raw;
   case VECSXP: return chrs_list;
+  case EXPRSXP: return chrs_expression;
   case CLOSXP:
   case SPECIALSXP:
   case BUILTINSXP: return chrs_function;
@@ -889,47 +898,79 @@ void* r_vec_deref(SEXP x) {
   case INTSXP: return INTEGER(x);
   case REALSXP: return REAL(x);
   case CPLXSXP: return COMPLEX(x);
-  case STRSXP: return STRING_PTR(x);
   case RAWSXP: return RAW(x);
   default: stop_unimplemented_type("r_vec_deref", TYPEOF(x));
   }
 }
 
-const void* r_vec_const_deref(SEXP x) {
+const void* r_vec_deref_const(SEXP x) {
   switch (TYPEOF(x)) {
+  case LGLSXP: return LOGICAL_RO(x);
   case INTSXP: return INTEGER_RO(x);
+  case REALSXP: return REAL_RO(x);
+  case CPLXSXP: return COMPLEX_RO(x);
   case STRSXP: return STRING_PTR_RO(x);
-  default: stop_unimplemented_type("r_vec_const_deref", TYPEOF(x));
+  case RAWSXP: return RAW_RO(x);
+  default: stop_unimplemented_type("r_vec_deref_const", TYPEOF(x));
   }
 }
 
-void r_vec_ptr_inc(SEXPTYPE type, void** p, R_len_t i) {
-  switch (type) {
-  case STRSXP: *((SEXP**) p) += i; return;
-  case INTSXP: *((int**) p) += i; return;
-  default: stop_unimplemented_type("r_vec_ptr_inc", type);
+void* r_vec_deref_barrier(SEXP x) {
+  switch (TYPEOF(x)) {
+  case STRSXP:
+  case VECSXP:
+    return (void*) x;
+  default:
+    return r_vec_deref(x);
   }
 }
 
-#define FILL(CTYPE, PTR, VAL_PTR, VAL_I, N)             \
+const void* r_vec_deref_barrier_const(SEXP x) {
+  switch (TYPEOF(x)) {
+  case STRSXP:
+  case VECSXP:
+    return (const void*) x;
+  default:
+    return r_vec_deref_const(x);
+  }
+}
+
+#define FILL(CTYPE, DEST, DEST_I, SRC, SRC_I, N)        \
   do {                                                  \
-    CTYPE* data = (CTYPE*) PTR;                         \
-    CTYPE* end = data + N;                              \
-    CTYPE value = ((const CTYPE*) VAL_PTR)[VAL_I];      \
+    CTYPE* p_dest = (CTYPE*) DEST;                      \
+    p_dest += DEST_I;                                   \
+    CTYPE* end = p_dest + N;                            \
+    CTYPE value = ((const CTYPE*) SRC)[SRC_I];          \
                                                         \
-    while (data != end) {                               \
-      *data++ = value;                                  \
+    while (p_dest != end) {                             \
+      *p_dest++ = value;                                \
     }                                                   \
   } while (false)
 
-void r_vec_fill(SEXPTYPE type, void* p, const void* value_p, R_len_t value_i, R_len_t n) {
+#define FILL_BARRIER(GET, SET, DEST, DEST_I, SRC, SRC_I, N)     \
+  do {                                                          \
+    SEXP out = (SEXP) DEST;                                     \
+    SEXP value = GET((SEXP) SRC, SRC_I);                        \
+                                                                \
+    for (r_ssize i = 0; i < N; ++i) {                           \
+      SET(out, DEST_I + i, value);                              \
+    }                                                           \
+  } while (false)
+
+void r_vec_fill(SEXPTYPE type,
+                void* dest,
+                r_ssize dest_i,
+                const void* src,
+                r_ssize src_i,
+                r_ssize n) {
   switch (type) {
-  case STRSXP: FILL(SEXP, p, value_p, value_i, n); return;
-  case INTSXP: FILL(int, p, value_p, value_i, n); return;
+  case INTSXP: FILL(int, dest, dest_i, src, src_i, n); return;
+  case STRSXP: FILL_BARRIER(STRING_ELT, SET_STRING_ELT, dest, dest_i, src, src_i, n); return;
   default: stop_unimplemented_type("r_vec_fill", type);
   }
 }
 
+#undef FILL_BARRIER
 #undef FILL
 
 
@@ -1143,6 +1184,7 @@ static SEXP new_env_call = NULL;
 static SEXP new_env__parent_node = NULL;
 static SEXP new_env__size_node = NULL;
 
+#if 0
 SEXP r_new_environment(SEXP parent, R_len_t size) {
   parent = parent ? parent : R_EmptyEnv;
   SETCAR(new_env__parent_node, parent);
@@ -1157,11 +1199,13 @@ SEXP r_new_environment(SEXP parent, R_len_t size) {
 
   return env;
 }
+#endif
 
 static SEXP new_function_call = NULL;
 static SEXP new_function__formals_node = NULL;
 static SEXP new_function__body_node = NULL;
 
+#if 0
 SEXP r_new_function(SEXP formals, SEXP body, SEXP env) {
   SETCAR(new_function__formals_node, formals);
   SETCAR(new_function__body_node, body);
@@ -1174,6 +1218,7 @@ SEXP r_new_function(SEXP formals, SEXP body, SEXP env) {
 
   return fn;
 }
+#endif
 
 // [[ include("utils.h") ]]
 SEXP r_protect(SEXP x) {
@@ -1513,15 +1558,14 @@ SEXP chr_c(SEXP x, SEXP y) {
   r_ssize out_n = r_ssize_add(x_n, y_n);
   SEXP out = PROTECT(r_new_vector(STRSXP, out_n));
 
-  SEXP* p_out = STRING_PTR(out);
   const SEXP* p_x = STRING_PTR_RO(x);
   const SEXP* p_y = STRING_PTR_RO(y);
 
   for (r_ssize i = 0; i < x_n; ++i) {
-    p_out[i] = p_x[i];
+    SET_STRING_ELT(out, i, p_x[i]);
   }
   for (r_ssize i = 0, j = x_n; i < y_n; ++i, ++j) {
-    p_out[j] = p_y[i];
+    SET_STRING_ELT(out, j, p_y[i]);
   }
 
   UNPROTECT(1);
@@ -1622,6 +1666,7 @@ SEXP chrs_assign = NULL;
 SEXP chrs_rename = NULL;
 SEXP chrs_remove = NULL;
 SEXP chrs_negate = NULL;
+SEXP chrs_null = NULL;
 SEXP chrs_logical = NULL;
 SEXP chrs_integer = NULL;
 SEXP chrs_double = NULL;
@@ -1629,6 +1674,7 @@ SEXP chrs_complex = NULL;
 SEXP chrs_character = NULL;
 SEXP chrs_raw = NULL;
 SEXP chrs_list = NULL;
+SEXP chrs_expression = NULL;
 SEXP chrs_numeric = NULL;
 SEXP chrs_function = NULL;
 SEXP chrs_empty = NULL;
@@ -1712,7 +1758,7 @@ SEXP r_new_shared_character(const char* name) {
 }
 
 void c_print_backtrace() {
-#if defined(VCTRS_DEBUG)
+#if defined(RLIB_DEBUG)
 #include <execinfo.h>
   void *buffer[500];
   int nptrs = backtrace(buffer, 100);
@@ -1724,7 +1770,7 @@ void c_print_backtrace() {
 
   free(strings);
 #else
-  Rprintf("Can't print C backtrace.\n");
+  Rprintf("vctrs must be compliled with -DRLIB_DEBUG.");
 #endif
 }
 
@@ -1845,6 +1891,7 @@ void vctrs_init_utils(SEXP ns) {
   chrs_rename = r_new_shared_character("rename");
   chrs_remove = r_new_shared_character("remove");
   chrs_negate = r_new_shared_character("negate");
+  chrs_null = r_new_shared_character("NULL");
   chrs_logical = r_new_shared_character("logical");
   chrs_integer = r_new_shared_character("integer");
   chrs_double = r_new_shared_character("double");
@@ -1852,6 +1899,7 @@ void vctrs_init_utils(SEXP ns) {
   chrs_character = r_new_shared_character("character");
   chrs_raw = r_new_shared_character("raw");
   chrs_list = r_new_shared_character("list");
+  chrs_expression = r_new_shared_character("expression");
   chrs_numeric = r_new_shared_character("numeric");
   chrs_function = r_new_shared_character("function");
   chrs_empty = r_new_shared_character("");

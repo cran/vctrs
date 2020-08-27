@@ -41,7 +41,7 @@ SEXP vec_c_opts(SEXP xs,
                 SEXP ptype,
                 SEXP name_spec,
                 const struct name_repair_opts* name_repair,
-                struct fallback_opts* fallback_opts) {
+                const struct fallback_opts* fallback_opts) {
   SEXP orig_ptype = ptype;
   ptype = PROTECT(vec_ptype_common_opts(xs, orig_ptype, fallback_opts));
 
@@ -75,87 +75,97 @@ SEXP vec_c_opts(SEXP xs,
       vec_is_common_class_fallback(ptype)) {
     struct fallback_opts d_fallback_opts = *fallback_opts;
     d_fallback_opts.s3 = S3_FALLBACK_false;
-
-    UNPROTECT(1);
     ptype = PROTECT(vec_ptype_common_opts(xs, orig_ptype, &d_fallback_opts));
-    xs = vec_cast_common_opts(xs, ptype, &d_fallback_opts);
   } else {
-    xs = vec_cast_common_opts(xs, ptype, fallback_opts);
+    ptype = PROTECT(vec_ptype_common_opts(xs, ptype, fallback_opts));
   }
-  PROTECT(xs);
 
   // Find individual input sizes and total size of output
   R_len_t n = Rf_length(xs);
   R_len_t out_size = 0;
 
-  SEXP ns_placeholder = PROTECT(Rf_allocVector(INTSXP, n));
-  int* ns = INTEGER(ns_placeholder);
+  // Caching the sizes causes an extra allocation but it improves performance
+  SEXP sizes = PROTECT(Rf_allocVector(INTSXP, n));
+  int* p_sizes = INTEGER(sizes);
 
   for (R_len_t i = 0; i < n; ++i) {
     SEXP x = VECTOR_ELT(xs, i);
     R_len_t size = (x == R_NilValue) ? 0 : vec_size(x);
     out_size += size;
-    ns[i] = size;
+    p_sizes[i] = size;
   }
 
-  PROTECT_INDEX out_pi;
   SEXP out = vec_init(ptype, out_size);
+  PROTECT_INDEX out_pi;
   PROTECT_WITH_INDEX(out, &out_pi);
+
   out = vec_proxy(out);
   REPROTECT(out, out_pi);
 
-  SEXP idx = PROTECT(compact_seq(0, 0, true));
-  int* idx_ptr = INTEGER(idx);
+  SEXP loc = PROTECT(compact_seq(0, 0, true));
+  int* p_loc = INTEGER(loc);
 
-  SEXP xs_names = PROTECT(r_names(xs));
   bool assign_names = !Rf_inherits(name_spec, "rlang_zap");
-  bool has_names = assign_names && (xs_names != R_NilValue || list_has_inner_vec_names(xs, n));
-  has_names = has_names && !is_data_frame(ptype);
+  SEXP xs_names = PROTECT(r_names(xs));
+  bool xs_is_named = xs_names != R_NilValue && !is_data_frame(ptype);
 
+  SEXP out_names = R_NilValue;
   PROTECT_INDEX out_names_pi;
-  SEXP out_names = has_names ? Rf_allocVector(STRSXP, out_size) : R_NilValue;
-  PROTECT_WITH_INDEX(out_names, &out_names_pi);
+  PROTECT_WITH_INDEX(R_NilValue, &out_names_pi);
 
   // Compact sequences use 0-based counters
   R_len_t counter = 0;
 
   const struct vec_assign_opts c_assign_opts = {
-    .assign_names = assign_names
+    .assign_names = assign_names,
+    .ignore_outer_names = true
   };
 
   for (R_len_t i = 0; i < n; ++i) {
-    R_len_t size = ns[i];
+    R_len_t size = p_sizes[i];
     if (!size) {
       continue;
     }
 
-    SEXP x = VECTOR_ELT(xs, i);
+    struct cast_opts opts = (struct cast_opts) {
+      .x = VECTOR_ELT(xs, i),
+      .to = ptype,
+      .fallback = *fallback_opts
+    };
+    SEXP x = PROTECT(vec_cast_opts(&opts));
 
-    init_compact_seq(idx_ptr, counter, size, true);
+    init_compact_seq(p_loc, counter, size, true);
 
     // Total ownership of `out` because it was freshly created with `vec_init()`
-    out = vec_proxy_assign_opts(out, idx, x, VCTRS_OWNED_true, &c_assign_opts);
+    out = vec_proxy_assign_opts(out, loc, x, VCTRS_OWNED_true, &c_assign_opts);
     REPROTECT(out, out_pi);
 
-    if (has_names) {
-      SEXP outer = xs_names == R_NilValue ? R_NilValue : STRING_ELT(xs_names, i);
+    if (assign_names) {
+      SEXP outer = xs_is_named ? STRING_ELT(xs_names, i) : R_NilValue;
       SEXP inner = PROTECT(vec_names(x));
       SEXP x_nms = PROTECT(apply_name_spec(name_spec, outer, inner, size));
 
       if (x_nms != R_NilValue) {
-        out_names = chr_assign(out_names, idx, x_nms, VCTRS_OWNED_true);
-        REPROTECT(out_names, out_names_pi);
+        R_LAZY_ALLOC(out_names, out_names_pi, STRSXP, out_size);
+
+        // If there is no name to assign, skip the assignment since
+        // `out_names` already contains empty strings
+        if (x_nms != chrs_empty) {
+          out_names = chr_assign(out_names, loc, x_nms, VCTRS_OWNED_true);
+          REPROTECT(out_names, out_names_pi);
+        }
       }
 
       UNPROTECT(2);
     }
 
     counter += size;
+    UNPROTECT(1);
   }
 
   out = PROTECT(vec_restore(out, ptype, R_NilValue, VCTRS_OWNED_true));
 
-  if (has_names) {
+  if (out_names != R_NilValue) {
     out_names = PROTECT(vec_as_names(out_names, name_repair));
     out = vec_set_names(out, out_names);
     UNPROTECT(1);

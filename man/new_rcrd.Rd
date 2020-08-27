@@ -9,14 +9,10 @@
 new_rcrd(fields, ..., class = character())
 }
 \arguments{
-\item{fields}{A list. It must possess the following properties:
-\itemize{
-\item no attributes (apart from names)
-\item syntactic names
-\item length 1 or greater
-\item elements are vectors
-\item elements have equal length
-}}
+\item{fields}{A list or a data frame. Lists must be rectangular
+(same sizes), and contain uniquely named vectors (at least
+one). \code{fields} is validated with \code{\link[=df_list]{df_list()}} to ensure uniquely
+named vectors.}
 
 \item{...}{Additional attributes}
 

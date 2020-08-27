@@ -1,4 +1,3 @@
-context("test-bind")
 
 # rows --------------------------------------------------------------------
 
@@ -136,7 +135,7 @@ test_that("can rbind dates", {
 
 test_that("can rbind POSIXlt objects into POSIXct objects", {
   datetime <- as.POSIXlt(new_datetime(0))
-  expect_is(vec_rbind(datetime, datetime)[[1]], "POSIXct")
+  expect_s3_class(vec_rbind(datetime, datetime)[[1]], "POSIXct")
 
   datetime_named <- set_names(datetime, "col")
   expect_named(vec_rbind(datetime_named, datetime_named), "col")
@@ -249,10 +248,11 @@ test_that("can assign row names in vec_rbind()", {
     foo = unrownames(df1),
     df2,
     bar = unrownames(mtcars[6, ]),
-    .names_to = NULL
+    .names_to = NULL,
+    .name_spec = "{outer}_{inner}"
   )
   exp <- mtcars[1:6, ]
-  row.names(exp) <- c(paste0("foo", 1:3), row.names(df2), "bar")
+  row.names(exp) <- c(paste0("foo_", 1:3), row.names(df2), "bar")
   expect_identical(out, exp)
 
   out <- vec_rbind(
@@ -524,8 +524,9 @@ test_that("vec_cbind() never packs named vectors", {
 })
 
 test_that("names are repaired late if unpacked", {
-  out1 <- vec_cbind(a = 1, data_frame(b = 2, b = 3))
-  out2 <- vec_cbind(a = 1, as.matrix(data_frame(b = 2, b = 3)))
+  df <- data_frame(b = 2, b = 3, .name_repair = "minimal")
+  out1 <- vec_cbind(a = 1, df)
+  out2 <- vec_cbind(a = 1, as.matrix(df))
   out3 <- vec_cbind(a = 1, matrix(1:2, nrow = 1))
   expect_named(out1, c("a", "b...2", "b...3"))
   expect_named(out2, c("a", "b...2", "b...3"))
@@ -533,8 +534,9 @@ test_that("names are repaired late if unpacked", {
 })
 
 test_that("names are not repaired if packed", {
-  out1 <- vec_cbind(a = 1, packed = data_frame(b = 2, b = 3))
-  out2 <- vec_cbind(a = 1, packed = as.matrix(data_frame(b = 2, b = 3)))
+  df <- data_frame(b = 2, b = 3, .name_repair = "minimal")
+  out1 <- vec_cbind(a = 1, packed = df)
+  out2 <- vec_cbind(a = 1, packed = as.matrix(df))
   out3 <- vec_cbind(a = 1, packed = matrix(1:2, nrow = 1))
 
   expect_named(out1, c("a", "packed"))
@@ -684,7 +686,7 @@ test_that("can rbind data frames with matrix columns (#625)", {
 })
 
 test_that("rbind repairs names of data frames (#704)", {
-  df <- data_frame(x = 1, x = 2)
+  df <- data_frame(x = 1, x = 2, .name_repair = "minimal")
   df_repaired <- data_frame(x...1 = 1, x...2 = 2)
   expect_identical(vec_rbind(df), df_repaired)
   expect_identical(vec_rbind(df, df), vec_rbind(df_repaired, df_repaired))
@@ -862,6 +864,10 @@ test_that("vec_cbind() and vec_rbind() have informative error messages", {
 })
 
 test_that("rbind supports names and inner names (#689)", {
+  skip_if(getRversion() >= "4.1.0", "work around r-devel bug")
+  # Introduced in
+  # https://github.com/wch/r-source/commit/275bb3db02491899bbadc28fea69dcdd6fedf41e
+
   out <- vec_rbind(
     data_frame(x = list(a = 1, b = 2)),
     data_frame(x = list(3)),
@@ -926,4 +932,103 @@ test_that("vec_rbind() fallback works with tibbles", {
   expect_identical(vec_rbind(tib, tib), exp)
   expect_identical(vec_rbind(df, tib), exp)
   expect_identical(vec_rbind(tib, df), exp)
+})
+
+test_that("vec_rbind() zaps names when name-spec is zap() and names-to is NULL", {
+  expect_identical(
+    vec_rbind(foo = c(x = 1), .names_to = NULL, .name_spec = zap()),
+    data.frame(x = 1)
+  )
+})
+
+test_that("can't zap names when `.names_to` is supplied", {
+  expect_identical(
+    vec_rbind(foo = c(x = 1), .names_to = zap(), .name_spec = zap()),
+    data.frame(x = 1)
+  )
+  expect_error(
+    vec_rbind(foo = c(x = 1), .names_to = "id", .name_spec = zap()),
+    "Can't zap outer names when `.names_to` is supplied.",
+    fixed = TRUE
+  )
+})
+
+test_that("can zap outer names from a name-spec (#1215)", {
+  zap_outer_spec <- function(outer, inner) if (is_character(inner)) inner
+
+  df <- data.frame(x = 1:2)
+  df_named <- data.frame(x = 3L, row.names = "foo")
+
+  expect_null(
+    vec_names(vec_rbind(a = df, .names_to = NULL, .name_spec = zap_outer_spec))
+  )
+  expect_identical(
+    vec_names(vec_rbind(a = df, df_named, .name_spec = zap_outer_spec)),
+    c("...1", "...2", "foo")
+  )
+})
+
+test_that("column names are treated consistently in vec_rbind()", {
+  exp <- data.frame(a = c(1L, 1L), b = c(2L, 2L))
+
+  x <- c(a = 1L, b = 2L)
+  expect_identical(vec_rbind(x, x), exp)
+
+  x <- array(1:2, dimnames = list(c("a", "b")))
+  expect_identical(vec_rbind(x, x), exp)
+
+  x <- matrix(1:2, nrow = 1, dimnames = list(NULL, c("a", "b")))
+  expect_identical(vec_rbind(x, x), exp)
+
+  x <- array(1:6, c(1, 2, 1), dimnames = list(NULL, c("a", "b"), NULL))
+  expect_error(vec_rbind(x, x), "Can't bind arrays")
+})
+
+
+# Golden tests -------------------------------------------------------
+
+test_that("rows-binding performs expected allocations", {
+  verify_output(test_path("performance", "test-bind.txt"), {
+    ints <- rep(list(1L), 1e2)
+    named_ints <- rep(list(set_names(1:3, letters[1:3])), 1e2)
+
+    "Integers as rows"
+    suppressMessages(with_memory_prof(vec_rbind(!!!ints)))
+    suppressMessages(with_memory_prof(vec_rbind(!!!named_ints)))
+
+    "Data frame with named columns"
+    df <- data_frame(
+      x = set_names(as.list(1:2), c("a", "b")),
+      y = set_names(1:2, c("A", "B")),
+      z = data_frame(Z = set_names(1:2, c("Za", "Zb")))
+    )
+    dfs <- rep(list(df), 1e2)
+    with_memory_prof(vec_rbind(!!!dfs))
+
+    "Data frame with rownames (non-repaired, non-recursive case)"
+    df <- data_frame(x = 1:2)
+    dfs <- rep(list(df), 1e2)
+    dfs <- map2(dfs, seq_along(dfs), set_rownames_recursively)
+    with_memory_prof(vec_rbind(!!!dfs))
+
+    "Data frame with rownames (repaired, non-recursive case)"
+    dfs <- map(dfs, set_rownames_recursively)
+    with_memory_prof(vec_rbind(!!!dfs))
+
+    # FIXME: The following recursive cases duplicate rownames
+    # excessively because df-cols are restored at each chunk
+    # assignment, causing a premature name-repair
+    "FIXME (#1217): Data frame with rownames (non-repaired, recursive case)"
+    df <- data_frame(
+      x = 1:2,
+      y = data_frame(x = 1:2)
+    )
+    dfs <- rep(list(df), 1e2)
+    dfs <- map2(dfs, seq_along(dfs), set_rownames_recursively)
+    with_memory_prof(vec_rbind(!!!dfs))
+
+    "FIXME (#1217): Data frame with rownames (repaired, recursive case)"
+    dfs <- map(dfs, set_rownames_recursively)
+    with_memory_prof(vec_rbind(!!!dfs))
+  })
 })
