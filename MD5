@@ -1,6 +1,6 @@
-ec7a43f629418ca5d120f09853c7fe75 *DESCRIPTION
+f417f36314acc2db11ba31ec6bf28b1f *DESCRIPTION
 2432e3c3ec98bb824d9855d14cacc1a0 *NAMESPACE
-619ba30943dd052c1773fa399d082e60 *NEWS.md
+c0d26cba6de3d193299237d084dbdefd *NEWS.md
 073d0fec29db69ce086f977d3f2deab0 *R/aaa.R
 f24fdf599a553075c2161da61e7b21f9 *R/arith.R
 0bb34f009c0bdbc5777b6721690225cd *R/assert.R
@@ -67,7 +67,7 @@ b19af3b1e1f5ca45efa105c97beac461 *R/utils.R
 81acb57324952b030368d6b415c5293a *R/vctrs-package.R
 9f4f2fd4d3f8e2186c825ebf434e0522 *R/zzz.R
 00d764e7e1eee49fd5f824549d84453d *README.md
-7997b1beadf6b8bfea6988131aa82a20 *build/vctrs.pdf
+2037d7c866532e94cbc4f3ba135962d7 *build/vctrs.pdf
 eb3cacc9fb7a27f8e8ebb04b2a6a79d1 *build/vignette.rds
 43cc81e569685f0ede8af83150d4f016 *inst/WORDLIST
 a97aea2834dd2597f492f64c6c9fc38c *inst/doc/pillar.R
@@ -78,7 +78,7 @@ cf565169effe7c01256452310a46def1 *inst/doc/s3-vector.R
 dae03e9e49a27f7a90d96e2ad698d05c *inst/doc/s3-vector.html
 eb2ce80049219a0c9e12195fb15ee16e *inst/doc/stability.R
 a16ae23dfc9ed0d60015bcfa8e899618 *inst/doc/stability.Rmd
-0a01232791705ddf382ceaa26d46dacd *inst/doc/stability.html
+c5d33517d45d250ef9eb16b0ebe7a0d0 *inst/doc/stability.html
 0352c1b2b6bfe4ec421cc38492b8ec6b *inst/doc/type-size.R
 72c63cb0dd9c179724530995e4cdf7f1 *inst/doc/type-size.Rmd
 62d63c57c7a8dfea45b0772514488e21 *inst/doc/type-size.html
@@ -248,7 +248,7 @@ fa806b85231030ef6427980de1b2b349 *src/subscript-loc.h
 0c14b30a477c050bdc3ad63698e25046 *src/subscript.c
 f3e76863b19103b4d2a0ef1bbf4fef48 *src/subscript.h
 4888af0bdf6b98956c809bc8d4d3c112 *src/translate.c
-0eec06d3233b71fc88a851611dd71181 *src/type-data-frame.c
+23e208915fdf48f20d9e1982b92831ef *src/type-data-frame.c
 32f20339c0f9231e3597d5a549e4c198 *src/type-data-frame.h
 2db540495921452b07c3db8d9f9592ba *src/type-date-time.c
 ebcac966fca56d915742fd0522541081 *src/type-factor.c
@@ -267,7 +267,7 @@ f0ea654c49238baca6f6e5cec0481d8c *src/utils-rlang.h
 4cbebd5234acaed47565a7282ad1b7c4 *src/utils.c
 d4d3f34ffffba32001c8acb66fc11b3a *src/utils.h
 1b0c5f30d562d14e20c152a511e0632d *src/vctrs.h
-361e130637a15a6b043e848bb21669c5 *src/version.c
+3216d0dac311847078fdd85beb67c26a *src/version.c
 36298abc8bb1476f930ae3c5cfe46ffe *tests/testthat.R
 f392d42aabf155f2e7f0f0f39e590494 *tests/testthat/error/test-bind.txt
 6db85a51557210ffc0b33361a6dceba3 *tests/testthat/error/test-c.txt

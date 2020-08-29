@@ -1,6 +1,6 @@
 Package: vctrs
 Title: Vector Helpers
-Version: 0.3.3
+Version: 0.3.4
 Authors@R: 
     c(person(given = "Hadley",
              family = "Wickham",
@@ -34,11 +34,11 @@ Language: en-GB
 LazyData: true
 RoxygenNote: 7.1.1
 NeedsCompilation: yes
-Packaged: 2020-08-27 15:48:03 UTC; lionel
+Packaged: 2020-08-28 15:24:30 UTC; lionel
 Author: Hadley Wickham [aut],
   Lionel Henry [aut, cre],
   Davis Vaughan [aut],
   RStudio [cph]
 Maintainer: Lionel Henry <lionel@rstudio.com>
 Repository: CRAN
-Date/Publication: 2020-08-27 22:50:02 UTC
+Date/Publication: 2020-08-29 07:40:02 UTC
