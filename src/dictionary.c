@@ -1,5 +1,6 @@
 #include "vctrs.h"
 #include "dictionary.h"
+#include "translate.h"
 #include "equal.h"
 #include "hash.h"
 #include "ptype2.h"
@@ -26,207 +27,6 @@ int32_t ceil2(int32_t x) {
 
 static struct dictionary* new_dictionary_opts(SEXP x, struct dictionary_opts* opts);
 
-
-static int nil_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  stop_internal("nil_p_equal", "Can't compare NULL in dictionary.");
-}
-static int nil_p_equal_missing(const void* x, R_len_t i) {
-  stop_internal("nil_p_equal_missing", "Can't compare NULL in dictionary.");
-}
-
-static int lgl_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return lgl_equal_scalar_na_equal(((const int*) x) + i, ((const int*) y) + j);
-}
-static int lgl_p_equal_missing(const void* x, R_len_t i) {
-  return lgl_equal_scalar_na_equal(((const int*) x) + i, &NA_LOGICAL);
-}
-
-static int int_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return int_equal_scalar_na_equal(((const int*) x) + i, ((const int*) y) + j);
-}
-static int int_p_equal_missing(const void* x, R_len_t i) {
-  return int_equal_scalar_na_equal(((const int*) x) + i, &NA_INTEGER);
-}
-
-static int dbl_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return dbl_equal_scalar_na_equal(((const double*) x) + i, ((const double*) y) + j);
-}
-static int dbl_p_equal_missing(const void* x, R_len_t i) {
-  return dbl_equal_scalar_na_equal(((const double*) x) + i, &NA_REAL);
-}
-
-static int cpl_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return cpl_equal_scalar_na_equal(((const Rcomplex*) x) + i, ((const Rcomplex*) y) + j);
-}
-static int cpl_p_equal_missing(const void* x, R_len_t i) {
-  return cpl_equal_scalar_na_equal(((const Rcomplex*) x) + i, &vctrs_shared_na_cpl);
-}
-
-static int chr_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return chr_equal_scalar_na_equal(((const SEXP*) x) + i, ((const SEXP*) y) + j);
-}
-static int chr_p_equal_missing(const void* x, R_len_t i) {
-  return chr_equal_scalar_na_equal(((const SEXP*) x) + i, &NA_STRING);
-}
-
-static int raw_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return raw_equal_scalar_na_equal(((const Rbyte*) x) + i, ((const Rbyte*) y) + j);
-}
-static int raw_p_equal_missing(const void* x, R_len_t i) {
-  return false;
-}
-
-static int list_p_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  return list_equal_scalar_na_equal(((const SEXP) x), i, ((const SEXP) y), j);
-}
-static int list_p_equal_missing(const void* x, R_len_t i) {
-  return list_equal_scalar_na_equal(((const SEXP) x), i, vctrs_shared_na_list, 0);
-}
-
-
-static void init_dictionary_nil(struct dictionary* d) {
-  d->vec_p = NULL;
-  d->equal = &nil_p_equal;
-  d->equal_missing = &nil_p_equal_missing;
-}
-static void init_dictionary_lgl(struct dictionary* d) {
-  d->vec_p = (const void*) LOGICAL_RO(d->vec);
-  d->equal = &lgl_p_equal;
-  d->equal_missing = &lgl_p_equal_missing;
-}
-static void init_dictionary_int(struct dictionary* d) {
-  d->vec_p = (const void*) INTEGER_RO(d->vec);
-  d->equal = &int_p_equal;
-  d->equal_missing = &int_p_equal_missing;
-}
-static void init_dictionary_dbl(struct dictionary* d) {
-  d->vec_p = (const void*) REAL_RO(d->vec);
-  d->equal = dbl_p_equal;
-  d->equal_missing = &dbl_p_equal_missing;
-}
-static void init_dictionary_cpl(struct dictionary* d) {
-  d->vec_p = (const void*) COMPLEX_RO(d->vec);
-  d->equal = &cpl_p_equal;
-  d->equal_missing = &cpl_p_equal_missing;
-}
-static void init_dictionary_chr(struct dictionary* d) {
-  d->vec_p = (const void*) STRING_PTR_RO(d->vec);
-  d->equal = &chr_p_equal;
-  d->equal_missing = &chr_p_equal_missing;
-}
-static void init_dictionary_raw(struct dictionary* d) {
-  d->vec_p = (const void*) RAW_RO(d->vec);
-  d->equal = &raw_p_equal;
-  d->equal_missing = &raw_p_equal_missing;
-}
-static void init_dictionary_list(struct dictionary* d) {
-  d->vec_p = (const void*) d->vec;
-  d->equal = &list_p_equal;
-  d->equal_missing = &list_p_equal_missing;
-}
-
-struct dictionary_df_data {
-  enum vctrs_type* col_types;
-  const void** col_ptrs;
-  R_len_t n_col;
-};
-
-static int df_equal(const void* x, R_len_t i, const void* y, R_len_t j) {
-  struct dictionary_df_data* x_data = (struct dictionary_df_data*) x;
-  struct dictionary_df_data* y_data = (struct dictionary_df_data*) y;
-
-  R_len_t n_col = x_data->n_col;
-  if (n_col != y_data->n_col) {
-    stop_internal("df_equal", "`x` and `y` must have the same number of columns.");
-  }
-
-  enum vctrs_type* types = x_data->col_types;
-  const void** x_ptrs = x_data->col_ptrs;
-  const void** y_ptrs = y_data->col_ptrs;
-
-  // `vec_proxy_equal()` flattens data frames so we don't need to
-  // worry about df-cols
-  for (R_len_t col = 0; col < n_col; ++col) {
-    if (!equal_scalar_na_equal_p(types[col],
-                                 R_NilValue, x_ptrs[col], i,
-                                 R_NilValue, y_ptrs[col], j)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-static int df_equal_missing(const void* x, R_len_t i) {
-  struct dictionary_df_data* x_data = (struct dictionary_df_data*) x;
-
-  enum vctrs_type* types = x_data->col_types;
-  const void** x_ptrs = x_data->col_ptrs;
-  R_len_t n_col = x_data->n_col;
-
-  for (R_len_t col = 0; col < n_col; ++col) {
-    enum vctrs_type type = types[col];
-
-    // Raw doesn't have missing values
-    if (type == vctrs_type_raw) {
-      continue;
-    }
-
-    if (equal_scalar_na_equal_p(type,
-                                R_NilValue, x_ptrs[col], i,
-                                R_NilValue, vec_type_missing_value(type), 0)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-static void init_dictionary_df(struct dictionary* d) {
-  SEXP df = d->vec;
-  R_len_t n_col = Rf_length(df);
-
-  SEXP data_handle = PROTECT(Rf_allocVector(RAWSXP, sizeof(struct dictionary_df_data)));
-  SEXP col_types_handle = PROTECT(Rf_allocVector(RAWSXP, n_col * sizeof(enum vctrs_type)));
-  SEXP col_ptrs_handle = PROTECT(Rf_allocVector(RAWSXP, n_col * sizeof(void*)));
-
-  SEXP handle = PROTECT(Rf_allocVector(VECSXP, 4));
-  SET_VECTOR_ELT(handle, 0, d->protect);
-  SET_VECTOR_ELT(handle, 1, data_handle);
-  SET_VECTOR_ELT(handle, 2, col_types_handle);
-  SET_VECTOR_ELT(handle, 3, col_ptrs_handle);
-
-
-  struct dictionary_df_data* data = (struct dictionary_df_data*) RAW(data_handle);
-  enum vctrs_type* col_types = (enum vctrs_type*) RAW(col_types_handle);
-  const void** col_ptrs = (const void**) RAW(col_ptrs_handle);
-
-  data->col_types = col_types;
-  data->col_ptrs = col_ptrs;
-  data->n_col = n_col;
-
-  for (R_len_t i = 0; i < n_col; ++i) {
-    SEXP col = VECTOR_ELT(df, i);
-    enum vctrs_type col_type = vec_proxy_typeof(col);
-
-    col_types[i] = col_type;
-
-    if (col_type == vctrs_type_list) {
-      col_ptrs[i] = col;
-    } else {
-      col_ptrs[i] = r_vec_deref_const(col);
-    }
-  }
-
-  d->protect = handle;
-  d->vec_p = data;
-  d->equal = df_equal;
-  d->equal_missing = &df_equal_missing;
-
-  UNPROTECT(4);
-}
-
-
 // Dictionaries must be protected in consistent stack order with
 // `PROTECT_DICT()`
 struct dictionary* new_dictionary(SEXP x) {
@@ -252,28 +52,21 @@ static struct dictionary* new_dictionary_params(SEXP x, bool partial, bool na_eq
 }
 
 static struct dictionary* new_dictionary_opts(SEXP x, struct dictionary_opts* opts) {
-  SEXP out = PROTECT(Rf_allocVector(RAWSXP, sizeof(struct dictionary)));
+  int nprot = 0;
+
+  SEXP out = PROTECT_N(Rf_allocVector(RAWSXP, sizeof(struct dictionary)), &nprot);
   struct dictionary* d = (struct dictionary*) RAW(out);
 
-  d->vec = x;
-  d->type = vec_proxy_typeof(x);
   d->protect = out;
 
-  switch (d->type) {
-  case vctrs_type_null: init_dictionary_nil(d); break;
-  case vctrs_type_logical: init_dictionary_lgl(d); break;
-  case vctrs_type_integer: init_dictionary_int(d); break;
-  case vctrs_type_double: init_dictionary_dbl(d); break;
-  case vctrs_type_complex: init_dictionary_cpl(d); break;
-  case vctrs_type_character: init_dictionary_chr(d); break;
-  case vctrs_type_raw: init_dictionary_raw(d); break;
-  case vctrs_type_list: init_dictionary_list(d); break;
-  case vctrs_type_dataframe: init_dictionary_df(d); break;
-  default: stop_unimplemented_vctrs_type("new_dictionary_opts", d->type);
-  }
+  enum vctrs_type type = vec_proxy_typeof(x);
 
-  // `init_dictionary_*()` functions may allocate
-  PROTECT(d->protect);
+  struct poly_vec* p_poly_vec = new_poly_vec(x, type);
+  PROTECT_POLY_VEC(p_poly_vec, &nprot);
+  d->p_poly_vec = p_poly_vec;
+
+  d->p_equal_na_equal = new_poly_p_equal_na_equal(type);
+  d->p_is_missing = new_poly_p_is_missing(type);
 
   d->used = 0;
 
@@ -308,7 +101,7 @@ static struct dictionary* new_dictionary_opts(SEXP x, struct dictionary_opts* op
     d->hash = NULL;
   }
 
-  UNPROTECT(2);
+  UNPROTECT(nprot);
   return d;
 }
 
@@ -318,6 +111,9 @@ static struct dictionary* new_dictionary_opts(SEXP x, struct dictionary_opts* op
 // `new_dictionary_partial()`.
 uint32_t dict_hash_with(struct dictionary* d, struct dictionary* x, R_len_t i) {
   uint32_t hash = x->hash[i];
+
+  const void* p_d_vec = d->p_poly_vec->p_vec;
+  const void* p_x_vec = x->p_poly_vec->p_vec;
 
   // Quadratic probing: will try every slot if d->size is power of 2
   // http://research.cs.vt.edu/AVresearch/hashing/quadratic.php
@@ -337,7 +133,7 @@ uint32_t dict_hash_with(struct dictionary* d, struct dictionary* x, R_len_t i) {
     }
 
     // Check for same value as there might be a collision
-    if (d->equal(d->vec_p, idx, x->vec_p, i)) {
+    if (d->p_equal_na_equal(p_d_vec, idx, p_x_vec, i)) {
       return probe;
     }
 
@@ -353,7 +149,8 @@ uint32_t dict_hash_scalar(struct dictionary* d, R_len_t i) {
 }
 
 bool dict_is_missing(struct dictionary* d, R_len_t i) {
-  return d->hash[i] == HASH_MISSING && d->equal_missing(d->vec_p, i);
+  return d->hash[i] == HASH_MISSING &&
+    d->p_is_missing(d->p_poly_vec->p_vec, i);
 }
 
 
@@ -372,7 +169,7 @@ SEXP vctrs_unique_loc(SEXP x) {
   R_len_t n = vec_size(x);
 
   x = PROTECT_N(vec_proxy_equal(x), &nprot);
-  x = PROTECT_N(obj_maybe_translate_encoding(x, n), &nprot);
+  x = PROTECT_N(vec_normalize_encoding(x), &nprot);
 
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);
@@ -415,7 +212,7 @@ bool duplicated_any(SEXP x) {
   R_len_t n = vec_size(x);
 
   x = PROTECT_N(vec_proxy_equal(x), &nprot);
-  x = PROTECT_N(obj_maybe_translate_encoding(x, n), &nprot);
+  x = PROTECT_N(vec_normalize_encoding(x), &nprot);
 
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);
@@ -443,7 +240,7 @@ SEXP vctrs_n_distinct(SEXP x) {
   R_len_t n = vec_size(x);
 
   x = PROTECT_N(vec_proxy_equal(x), &nprot);
-  x = PROTECT_N(obj_maybe_translate_encoding(x, n), &nprot);
+  x = PROTECT_N(vec_normalize_encoding(x), &nprot);
 
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);
@@ -466,7 +263,7 @@ SEXP vctrs_id(SEXP x) {
   R_len_t n = vec_size(x);
 
   x = PROTECT_N(vec_proxy_equal(x), &nprot);
-  x = PROTECT_N(obj_maybe_translate_encoding(x, n), &nprot);
+  x = PROTECT_N(vec_normalize_encoding(x), &nprot);
 
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);
@@ -535,14 +332,13 @@ SEXP vec_match_params(SEXP needles,
   PROTECT_N(haystack, &nprot);
 
   needles = PROTECT_N(vec_proxy_equal(needles), &nprot);
+  needles = PROTECT_N(vec_normalize_encoding(needles), &nprot);
+
   haystack = PROTECT_N(vec_proxy_equal(haystack), &nprot);
+  haystack = PROTECT_N(vec_normalize_encoding(haystack), &nprot);
 
   R_len_t n_haystack = vec_size(haystack);
   R_len_t n_needle = vec_size(needles);
-
-  SEXP translated = PROTECT_N(obj_maybe_translate_encoding2(needles, n_needle, haystack, n_haystack), &nprot);
-  needles = VECTOR_ELT(translated, 0);
-  haystack = VECTOR_ELT(translated, 1);
 
   struct dictionary* d = new_dictionary_params(haystack, false, na_equal);
   PROTECT_DICT(d, &nprot);
@@ -638,14 +434,13 @@ SEXP vctrs_in(SEXP needles, SEXP haystack, SEXP na_equal_,
   PROTECT_N(haystack, &nprot);
 
   needles = PROTECT_N(vec_proxy_equal(needles), &nprot);
+  needles = PROTECT_N(vec_normalize_encoding(needles), &nprot);
+
   haystack = PROTECT_N(vec_proxy_equal(haystack), &nprot);
+  haystack = PROTECT_N(vec_normalize_encoding(haystack), &nprot);
 
   R_len_t n_haystack = vec_size(haystack);
   R_len_t n_needle = vec_size(needles);
-
-  SEXP translated = PROTECT_N(obj_maybe_translate_encoding2(needles, n_needle, haystack, n_haystack), &nprot);
-  needles = VECTOR_ELT(translated, 0);
-  haystack = VECTOR_ELT(translated, 1);
 
   struct dictionary* d = new_dictionary_params(haystack, false, na_equal);
   PROTECT_DICT(d, &nprot);
@@ -687,7 +482,7 @@ SEXP vctrs_count(SEXP x) {
   R_len_t n = vec_size(x);
 
   x = PROTECT_N(vec_proxy_equal(x), &nprot);
-  x = PROTECT_N(obj_maybe_translate_encoding(x, n), &nprot);
+  x = PROTECT_N(vec_normalize_encoding(x), &nprot);
 
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);
@@ -739,7 +534,7 @@ SEXP vctrs_duplicated(SEXP x) {
   R_len_t n = vec_size(x);
 
   x = PROTECT_N(vec_proxy_equal(x), &nprot);
-  x = PROTECT_N(obj_maybe_translate_encoding(x, n), &nprot);
+  x = PROTECT_N(vec_normalize_encoding(x), &nprot);
 
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);

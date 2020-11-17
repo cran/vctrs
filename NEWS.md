@@ -1,4 +1,35 @@
 
+# vctrs 0.3.5
+
+* New experimental `vec_fill_missing()` for filling in missing values with
+  the previous or following value. It is similar to `tidyr::fill()`, but
+  also works with data frames and has an additional `max_fill` argument to
+  limit the number of sequential missing values to fill.
+
+* New `vec_unrep()` to compress a vector with repeated values. It is very
+  similar to run length encoding, and works nicely alongside `vec_rep_each()`
+  as a way to invert the compression.
+
+* `vec_cbind()` with only empty data frames now preserves the common size of
+  the inputs in the result (#1281).
+
+* `vec_c()` now correctly returns a named result with named empty inputs
+  (#1263).
+
+* vctrs has been relicensed as MIT (#1259).
+
+* Functions that make comparisons within a single vector, such as
+  `vec_unique()`, or between two vectors, such as `vec_match()`, now
+  convert all character input to UTF-8 before making comparisons (#1246).
+
+* New `vec_identify_runs()` which returns a vector of identifiers for the
+  elements of `x` that indicate which run of repeated values they fall in
+  (#1081).
+  
+* Fixed an encoding translation bug with lists containing data frames which
+  have columns where `vec_size()` is different from the low level
+  `Rf_length()` (#1233).
+
 # vctrs 0.3.4
 
 * Fixed a GCC sanitiser error revealed by CRAN checks.

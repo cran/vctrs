@@ -26,6 +26,11 @@ typedef R_xlen_t r_ssize;
 // condition object otherwise
 #define ERR SEXP
 
+// Utilities for deciding whether or not to re-encode as UTF-8
+#define CHAR_IS_UTF8(x)  (LEVELS(x) & 8)
+#define CHAR_IS_ASCII(x) (LEVELS(x) & 64)
+#define CHAR_NEEDS_REENCODE(x) (!(CHAR_IS_ASCII(x) || (x) == NA_STRING || CHAR_IS_UTF8(x)))
+#define CHAR_REENCODE(x) Rf_mkCharCE(Rf_translateCharUTF8(x), CE_UTF8)
 
 // Vector types -------------------------------------------------
 
@@ -359,13 +364,15 @@ enum vctrs_proxy_kind {
   VCTRS_PROXY_KIND_default,
   VCTRS_PROXY_KIND_equal,
   VCTRS_PROXY_KIND_compare,
-  VCTRS_PROXY_KIND_order
+  VCTRS_PROXY_KIND_order,
+  VCTRS_PROXY_KIND_complete
 };
 
 SEXP vec_proxy(SEXP x);
 SEXP vec_proxy_equal(SEXP x);
 SEXP vec_proxy_compare(SEXP x);
 SEXP vec_proxy_order(SEXP x);
+SEXP vec_proxy_complete(SEXP x);
 SEXP vec_restore(SEXP x, SEXP to, SEXP n, const enum vctrs_owned owned);
 SEXP vec_restore_default(SEXP x, SEXP to, const enum vctrs_owned owned);
 R_len_t vec_size(SEXP x);
@@ -387,6 +394,7 @@ SEXP vec_recycle_common(SEXP xs, R_len_t size);
 SEXP vec_names(SEXP x);
 SEXP vec_proxy_names(SEXP x);
 SEXP vec_group_loc(SEXP x);
+SEXP vec_identify_runs(SEXP x);
 SEXP vec_match_params(SEXP needles, SEXP haystack, bool na_equal,
                       struct vctrs_arg* needles_arg, struct vctrs_arg* haystack_arg);
 
@@ -423,24 +431,9 @@ SEXP vec_df_restore(SEXP x, SEXP to, SEXP n, const enum vctrs_owned owned);
 // equal_object() never propagates missingness, so
 // it can return a `bool`
 bool equal_object(SEXP x, SEXP y);
+bool equal_object_normalized(SEXP x, SEXP y);
 bool equal_names(SEXP x, SEXP y);
 
-/**
- * These functions are meant to be used in loops so it is the callers
- * responsibility to ensure that:
- *
- * - `x` and `y` have identical SEXTYPEs
- * - `i` is a valid index into `x`, and `j` is a valid index into `y`.
- *
- * The behaviour is undefined if these conditions are not true.
- */
-int equal_scalar(SEXP x, R_len_t i, SEXP y, R_len_t j, bool na_equal);
-int equal_scalar_na_equal_p(enum vctrs_type proxy_type,
-                            SEXP x, const void* x_p, R_len_t i,
-                            SEXP y, const void* y_p, R_len_t j);
-int equal_scalar_na_propagate_p(enum vctrs_type proxy_type,
-                                SEXP x, const void* x_p, R_len_t i,
-                                SEXP y, const void* y_p, R_len_t j);
 int compare_scalar(SEXP x, R_len_t i, SEXP y, R_len_t j, bool na_equal);
 
 uint32_t hash_object(SEXP x);
@@ -472,21 +465,30 @@ bool duplicated_any(SEXP names);
 struct df_short_circuit_info {
   SEXP row_known;
   bool* p_row_known;
+  PROTECT_INDEX row_known_pi;
   R_len_t remaining;
   R_len_t size;
 };
 
-#define PROTECT_DF_SHORT_CIRCUIT_INFO(info, n) do {  \
-  PROTECT((info)->row_known);                        \
-  *n += 1;                                           \
+#define PROTECT_DF_SHORT_CIRCUIT_INFO(p_info, p_n) do {             \
+  PROTECT_WITH_INDEX((p_info)->row_known, &(p_info)->row_known_pi); \
+  *(p_n) += 1;                                                      \
 } while (0)
 
-static inline struct df_short_circuit_info new_df_short_circuit_info(R_len_t size) {
-  SEXP row_known = PROTECT(Rf_allocVector(RAWSXP, size * sizeof(bool)));
-  bool* p_row_known = (bool*) RAW(row_known);
+static inline struct df_short_circuit_info new_df_short_circuit_info(R_len_t size, bool lazy) {
+  SEXP row_known;
+  bool* p_row_known;
 
-  // To begin with, no rows have a known comparison value
-  memset(p_row_known, false, size * sizeof(bool));
+  if (lazy) {
+    row_known = PROTECT(R_NilValue);
+    p_row_known = NULL;
+  } else {
+    row_known = PROTECT(Rf_allocVector(RAWSXP, size * sizeof(bool)));
+    p_row_known = (bool*) RAW(row_known);
+
+    // To begin with, no rows have a known comparison value
+    memset(p_row_known, false, size * sizeof(bool));
+  }
 
   struct df_short_circuit_info info = {
     .row_known = row_known,
@@ -497,6 +499,17 @@ static inline struct df_short_circuit_info new_df_short_circuit_info(R_len_t siz
 
   UNPROTECT(1);
   return info;
+}
+
+static inline void init_lazy_df_short_circuit_info(struct df_short_circuit_info* p_info) {
+  if (p_info->row_known != R_NilValue) {
+    return;
+  }
+
+  p_info->row_known = Rf_allocVector(RAWSXP, p_info->size * sizeof(bool));
+  REPROTECT(p_info->row_known, p_info->row_known_pi);
+
+  p_info->p_row_known = (bool*) RAW(p_info->row_known);
 }
 
 // Missing values -----------------------------------------------
@@ -563,11 +576,6 @@ SEXP vec_posixlt_restore(SEXP x, SEXP to, const enum vctrs_owned owned);
 
 SEXP date_datetime_ptype2(SEXP x, SEXP y);
 SEXP datetime_datetime_ptype2(SEXP x, SEXP y);
-
-// Character translation ---------------------------------------------
-
-SEXP obj_maybe_translate_encoding(SEXP x, R_len_t size);
-SEXP obj_maybe_translate_encoding2(SEXP x, R_len_t x_size, SEXP y, R_len_t y_size);
 
 // Growable vector ----------------------------------------------
 
@@ -637,7 +645,10 @@ void stop_corrupt_ordered_levels(SEXP x, struct vctrs_arg* arg) __attribute__((n
 # define COMPLEX_RO(x) ((const Rcomplex*) COMPLEX(x))
 # define STRING_PTR_RO(x) ((const SEXP*) STRING_PTR(x))
 # define RAW_RO(x) ((const Rbyte*) RAW(x))
+# define DATAPTR_RO(x) ((const void*) STRING_PTR(x))
 #endif
+
+#define VECTOR_PTR_RO(x) ((const SEXP*) DATAPTR_RO(x))
 
 
 #endif

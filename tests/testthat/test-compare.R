@@ -236,15 +236,21 @@ test_that("can compare non-equal strings with different encodings", {
   expect_equal(vec_compare(x, y), -1L)
 })
 
-test_that("equality can always be determined when strings have identical encodings", {
-  encs <- encodings(bytes = TRUE)
+test_that("comparison can be determined when strings have identical encodings", {
+  encs <- encodings()
 
   for (enc in encs) {
     expect_equal(vec_compare(enc, enc), 0L)
   }
 })
 
-test_that("equality is known to fail when comparing bytes to other encodings", {
+test_that("comparison is known to always fail with bytes", {
+  enc <- encoding_bytes()
+  error <- "translating strings with \"bytes\" encoding"
+  expect_error(vec_compare(enc, enc), error)
+})
+
+test_that("comparison is known to fail when comparing bytes to other encodings", {
   error <- "translating strings with \"bytes\" encoding"
 
   for (enc in encodings()) {
@@ -268,77 +274,4 @@ test_that("vec_compare() silently falls back to base data frame", {
     vec_compare(foobar(mtcars), foobar(tibble::as_tibble(mtcars))),
     rep(0L, 32)
   ))
-})
-
-# order/sort --------------------------------------------------------------
-
-test_that("can request NAs sorted first", {
-  expect_equal(vec_order(c(1, NA), "asc", "largest"), 1:2)
-  expect_equal(vec_order(c(1, NA), "desc", "largest"), 2:1)
-
-  expect_equal(vec_order(c(1, NA), "asc", "smallest"), 2:1)
-  expect_equal(vec_order(c(1, NA), "desc", "smallest"), 1:2)
-})
-
-test_that("can sort data frames", {
-  df <- data.frame(x = c(1, 2, 1), y = c(1, 2, 2))
-
-  out1 <- vec_sort(df)
-  expect_equal(out1, data.frame(x = c(1, 1, 2), y = c(1, 2, 2)))
-
-  out2 <- vec_sort(df, "desc")
-  expect_equal(out2, data.frame(x = c(2, 1, 1), y = c(2, 2, 1)))
-})
-
-test_that("can sort empty data frames (#356)", {
-  df1 <- data.frame()
-  expect_equal(vec_sort(df1), df1)
-
-  df2 <- data.frame(x = numeric(), y = integer())
-  expect_equal(vec_sort(df2), df2)
-})
-
-test_that("can order tibbles that contain non-comparable objects", {
-  expect_equal(vec_order(data_frame(x = list(10, 2, 1))), 1:3)
-})
-
-test_that("can order matrices and arrays (#306)", {
-  x <- matrix(c(1, 1, 1, 1, 2, 1), ncol = 2)
-  expect_identical(vec_order(x), c(1L, 3L, 2L))
-
-  x <- array(1:8, c(2, 2, 2))
-  x[2] <- 1
-  x[3] <- 5
-  expect_identical(vec_order(x), 2:1)
-})
-
-test_that("can order empty data frames (#356)", {
-  df1 <- data.frame()
-  expect_equal(vec_order(df1), integer())
-
-  df2 <- data.frame(x = numeric(), y = integer())
-  expect_equal(vec_order(df2), integer())
-})
-
-test_that("can order data frames with data frame columns (#527)", {
-  expect_equal(
-    vec_order(iris),
-    vec_order(data_frame(iris = iris))
-  )
-})
-
-test_that("can order data frames (and subclasses) with matrix columns", {
-  df <- new_data_frame(n = 2L)
-
-  df$x <- new_data_frame(list(y = matrix(1:2, 2)))
-  expect_identical(vec_order(df), 1:2)
-
-  df$x <- tibble::tibble(y = matrix(1:2, 2))
-  expect_identical(vec_order(df), 1:2)
-})
-
-test_that("classed proxies do not affect performance (tidyverse/dplyr#5423)", {
-  skip_on_cran()
-  x <- glue::glue("{1:10000}")
-  expect_time_lt(vec_order(x), 0.2)
 })

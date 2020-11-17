@@ -364,6 +364,91 @@ SEXP df_map(SEXP df, SEXP (*fn)(SEXP)) {
   return out;
 }
 
+#define RESIZE(CONST_DEREF, DEREF, CTYPE, SEXPTYPE) do {       \
+  if (x_size == size) {                                        \
+    return x;                                                  \
+  }                                                            \
+                                                               \
+  const CTYPE* p_x = CONST_DEREF(x);                           \
+                                                               \
+  SEXP out = PROTECT(Rf_allocVector(SEXPTYPE, size));          \
+  CTYPE* p_out = DEREF(out);                                   \
+                                                               \
+  r_ssize copy_size = (size > x_size) ? x_size : size;         \
+                                                               \
+  memcpy(p_out, p_x, copy_size * sizeof(CTYPE));               \
+                                                               \
+  UNPROTECT(1);                                                \
+  return out;                                                  \
+} while (0)
+
+#define RESIZE_BARRIER(CONST_DEREF, SEXPTYPE, SET) do {        \
+  if (x_size == size) {                                        \
+    return x;                                                  \
+  }                                                            \
+                                                               \
+  const SEXP* p_x = CONST_DEREF(x);                            \
+                                                               \
+  SEXP out = PROTECT(Rf_allocVector(SEXPTYPE, size));          \
+                                                               \
+  r_ssize copy_size = (size > x_size) ? x_size : size;         \
+                                                               \
+  for (r_ssize i = 0; i < copy_size; ++i) {                    \
+    SET(out, i, p_x[i]);                                       \
+  }                                                            \
+                                                               \
+  UNPROTECT(1);                                                \
+  return out;                                                  \
+} while (0)
+
+// Faster than `Rf_xlengthgets()` because that fills the new extended
+// locations with `NA`, which we don't need.
+// [[ include("utils.h") ]]
+SEXP int_resize(SEXP x, r_ssize x_size, r_ssize size) {
+  RESIZE(INTEGER_RO, INTEGER, int, INTSXP);
+}
+// [[ include("utils.h") ]]
+SEXP raw_resize(SEXP x, r_ssize x_size, r_ssize size) {
+  RESIZE(RAW_RO, RAW, Rbyte, RAWSXP);
+}
+// [[ include("utils.h") ]]
+SEXP chr_resize(SEXP x, r_ssize x_size, r_ssize size) {
+  RESIZE_BARRIER(STRING_PTR_RO, STRSXP, SET_STRING_ELT);
+}
+
+#undef RESIZE
+#undef RESIZE_BARRIER
+
+// [[ include("utils.h") ]]
+bool p_chr_any_reencode(const SEXP* p_x, r_ssize size) {
+  for (r_ssize i = 0; i < size; ++i) {
+    SEXP elt = p_x[i];
+
+    if (CHAR_NEEDS_REENCODE(elt)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// [[ include("utils.h") ]]
+void p_chr_copy_with_reencode(const SEXP* p_x, SEXP x_result, r_ssize size) {
+  const void* vmax = vmaxget();
+
+  for (r_ssize i = 0; i < size; ++i) {
+    SEXP elt = p_x[i];
+
+    if (CHAR_NEEDS_REENCODE(elt)) {
+      SET_STRING_ELT(x_result, i, CHAR_REENCODE(elt));
+    } else {
+      SET_STRING_ELT(x_result, i, elt);
+    }
+  }
+
+  vmaxset(vmax);
+}
+
 inline void never_reached(const char* fn) {
   Rf_error("Internal error in `%s()`: Reached the unreachable.", fn);
 }
@@ -891,6 +976,19 @@ bool is_integer64(SEXP x) {
   return TYPEOF(x) == REALSXP && Rf_inherits(x, "integer64");
 }
 
+// [[ include("utils.h") ]]
+bool lgl_any_na(SEXP x) {
+  R_xlen_t size = Rf_xlength(x);
+  const int* p_x = LOGICAL_RO(x);
+
+  for (R_xlen_t i = 0; i < size; ++i) {
+    if (p_x[i] == NA_LOGICAL) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 void* r_vec_deref(SEXP x) {
   switch (TYPEOF(x)) {
@@ -911,6 +1009,7 @@ const void* r_vec_deref_const(SEXP x) {
   case CPLXSXP: return COMPLEX_RO(x);
   case STRSXP: return STRING_PTR_RO(x);
   case RAWSXP: return RAW_RO(x);
+  case VECSXP: return VECTOR_PTR_RO(x);
   default: stop_unimplemented_type("r_vec_deref_const", TYPEOF(x));
   }
 }
@@ -974,23 +1073,33 @@ void r_vec_fill(SEXPTYPE type,
 #undef FILL
 
 
-R_len_t r_lgl_sum(SEXP x, bool na_true) {
+r_ssize r_lgl_sum(SEXP x, bool na_true) {
   if (TYPEOF(x) != LGLSXP) {
     stop_internal("r_lgl_sum", "Expected logical vector.");
   }
 
-  R_len_t n = Rf_length(x);
+  r_ssize n = r_length(x);
+  const int* p_x = LOGICAL(x);
 
-  R_len_t sum = 0;
-  int* ptr = LOGICAL(x);
+  // This can't overflow since `sum` is necessarily smaller or equal
+  // to the vector length expressed in `r_ssize`.
+  r_ssize sum = 0;
 
-  for (R_len_t i = 0; i < n; ++i, ++ptr) {
-    // This can't overflow since `sum` is necessarily smaller or equal
-    // to the vector length expressed in `R_len_t`.
-    if (na_true && *ptr) {
-      sum += 1;
-    } else if (*ptr == 1) {
-      sum += 1;
+  if (na_true) {
+    for (r_ssize i = 0; i < n; ++i) {
+      const int elt = p_x[i];
+
+      if (elt) {
+        ++sum;
+      }
+    }
+  } else {
+    for (r_ssize i = 0; i < n; ++i) {
+      const int elt = p_x[i];
+
+      if (elt == 1) {
+        ++sum;
+      }
     }
   }
 
@@ -1002,47 +1111,65 @@ SEXP r_lgl_which(SEXP x, bool na_propagate) {
     stop_internal("r_lgl_which", "Expected logical vector.");
   }
 
-  R_len_t n = Rf_length(x);
-  int* data = LOGICAL(x);
+  r_ssize n = r_length(x);
+  const int* p_x = LOGICAL(x);
 
-  R_len_t which_n = r_lgl_sum(x, na_propagate);
-  SEXP which = PROTECT(Rf_allocVector(INTSXP, which_n));
-  int* which_data = INTEGER(which);
+  r_ssize out_n = r_lgl_sum(x, na_propagate);
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, out_n));
+  int* p_out = INTEGER(out);
+  r_ssize loc = 0;
 
-  for (R_len_t i = 0; i < n; ++i, ++data) {
-    int elt = *data;
+  if (na_propagate) {
+    for (r_ssize i = 0; i < n; ++i) {
+      const int elt = p_x[i];
 
-    if (elt) {
-      if (na_propagate && elt == NA_LOGICAL) {
-        *which_data++ = NA_INTEGER;
-      } else if (elt != NA_LOGICAL) {
-        *which_data++ = i + 1;
+      if (elt) {
+        p_out[loc] = (elt == NA_LOGICAL) ? NA_INTEGER : i + 1;
+        ++loc;
+      }
+    }
+  } else {
+    for (r_ssize i = 0; i < n; ++i) {
+      const int elt = p_x[i];
+
+      if (elt) {
+        p_out[loc] = i + 1;
+        ++loc;
       }
     }
   }
 
   UNPROTECT(1);
-  return which;
+  return out;
 }
 
-
-#define FILL(CTYPE, DEREF)                      \
-  CTYPE* data = DEREF(x);                       \
-                                                \
-  for (R_len_t i = 0; i < n; ++i, ++data)       \
-    *data = value
-
-void r_lgl_fill(SEXP x, int value, R_len_t n) {
-  FILL(int, LOGICAL);
+#define FILL() {                      \
+  for (R_len_t i = 0; i < n; ++i) {   \
+    p_x[i] = value;                   \
+  }                                   \
 }
-void r_int_fill(SEXP x, int value, R_len_t n) {
-  FILL(int, INTEGER);
+
+void r_p_lgl_fill(int* p_x, int value, R_len_t n) {
+  FILL();
 }
-void r_chr_fill(SEXP x, SEXP value, R_len_t n) {
-  FILL(SEXP, STRING_PTR);
+void r_p_int_fill(int* p_x, int value, R_len_t n) {
+  FILL();
+}
+void r_p_chr_fill(SEXP* p_x, SEXP value, R_len_t n) {
+  FILL();
 }
 
 #undef FILL
+
+void r_lgl_fill(SEXP x, int value, R_len_t n) {
+  r_p_lgl_fill(LOGICAL(x), value, n);
+}
+void r_int_fill(SEXP x, int value, R_len_t n) {
+  r_p_int_fill(INTEGER(x), value, n);
+}
+void r_chr_fill(SEXP x, SEXP value, R_len_t n) {
+  r_p_chr_fill(STRING_PTR(x), value, n);
+}
 
 
 void r_int_fill_seq(SEXP x, int start, R_len_t n) {
@@ -1253,6 +1380,9 @@ bool r_is_number(SEXP x) {
   return TYPEOF(x) == INTSXP &&
     Rf_length(x) == 1 &&
     INTEGER(x)[0] != NA_INTEGER;
+}
+bool r_is_positive_number(SEXP x) {
+  return r_is_number(x) && INTEGER(x)[0] > 0;
 }
 
 SEXP r_peek_option(const char* option) {
@@ -1659,6 +1789,7 @@ SEXP strings_val = NULL;
 SEXP strings_group = NULL;
 SEXP strings_length = NULL;
 SEXP strings_vctrs_vctr = NULL;
+SEXP strings_times = NULL;
 
 SEXP chrs_subset = NULL;
 SEXP chrs_extract = NULL;
@@ -1742,6 +1873,7 @@ SEXP result_attrib = NULL;
 
 struct vctrs_arg args_empty_;
 struct vctrs_arg args_dot_ptype_;
+struct vctrs_arg args_max_fill_;
 
 
 SEXP r_new_shared_vector(SEXPTYPE type, R_len_t n) {
@@ -1804,7 +1936,7 @@ void vctrs_init_utils(SEXP ns) {
 
   // Holds the CHARSXP objects because unlike symbols they can be
   // garbage collected
-  strings = r_new_shared_vector(STRSXP, 20);
+  strings = r_new_shared_vector(STRSXP, 21);
 
   strings_dots = Rf_mkChar("...");
   SET_STRING_ELT(strings, 0, strings_dots);
@@ -1864,7 +1996,10 @@ void vctrs_init_utils(SEXP ns) {
   SET_STRING_ELT(strings, 18, strings_list);
 
   strings_vctrs_vctr = Rf_mkChar("vctrs_vctr");
-  SET_STRING_ELT(strings, 19, strings_list);
+  SET_STRING_ELT(strings, 19, strings_vctrs_vctr);
+
+  strings_times = Rf_mkChar("times");
+  SET_STRING_ELT(strings, 20, strings_times);
 
 
   classes_data_frame = r_new_shared_vector(STRSXP, 1);
@@ -2027,6 +2162,7 @@ void vctrs_init_utils(SEXP ns) {
 
   args_empty_ = new_wrapper_arg(NULL, "");
   args_dot_ptype_ = new_wrapper_arg(NULL, ".ptype");
+  args_max_fill_ = new_wrapper_arg(NULL, "max_fill");
 
   rlang_is_splice_box = (bool (*)(SEXP)) R_GetCCallable("rlang", "rlang_is_splice_box");
   rlang_unbox = (SEXP (*)(SEXP)) R_GetCCallable("rlang", "rlang_unbox");
@@ -2070,6 +2206,10 @@ void vctrs_init_utils(SEXP ns) {
   // We assume the following in `union vctrs_dbl_indicator`
   VCTRS_ASSERT(sizeof(double) == sizeof(int64_t));
   VCTRS_ASSERT(sizeof(double) == 2 * sizeof(int));
+
+  // We assume the following in `vec_order()`
+  VCTRS_ASSERT(sizeof(int) == sizeof(int32_t));
+  VCTRS_ASSERT(sizeof(double) == sizeof(int64_t));
 
   SEXP current_frame_body = PROTECT(r_parse_eval("as.call(list(sys.frame, -1))", R_BaseEnv));
   SEXP current_frame_fn = PROTECT(r_new_function(R_NilValue, current_frame_body, R_EmptyEnv));

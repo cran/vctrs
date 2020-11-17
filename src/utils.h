@@ -114,6 +114,13 @@ bool is_data_frame(SEXP x);
 bool is_bare_data_frame(SEXP x);
 bool is_bare_tibble(SEXP x);
 
+SEXP int_resize(SEXP x, r_ssize x_size, r_ssize size);
+SEXP raw_resize(SEXP x, r_ssize x_size, r_ssize size);
+SEXP chr_resize(SEXP x, r_ssize x_size, r_ssize size);
+
+bool p_chr_any_reencode(const SEXP* p_x, r_ssize size);
+void p_chr_copy_with_reencode(const SEXP* p_x, SEXP x_result, r_ssize size);
+
 SEXP vec_unique_names(SEXP x, bool quiet);
 SEXP vec_unique_colnames(SEXP x, bool quiet);
 
@@ -164,6 +171,9 @@ static struct vctrs_arg* const args_empty = &args_empty_;
 extern struct vctrs_arg args_dot_ptype_;
 static struct vctrs_arg* const args_dot_ptype = &args_dot_ptype_;
 
+extern struct vctrs_arg args_max_fill_;
+static struct vctrs_arg* const args_max_fill = &args_max_fill_;
+
 void never_reached(const char* fn) __attribute__((noreturn));
 
 enum vctrs_type2 vec_typeof2_impl(enum vctrs_type type_x, enum vctrs_type type_y, int* left);
@@ -191,6 +201,8 @@ R_len_t vec_subscript_size(SEXP x);
 
 bool is_integer64(SEXP x);
 
+bool lgl_any_na(SEXP x);
+
 SEXP apply_name_spec(SEXP name_spec, SEXP outer, SEXP inner, R_len_t n);
 SEXP outer_names(SEXP names, SEXP outer, R_len_t n);
 SEXP vec_set_names(SEXP x, SEXP names);
@@ -215,12 +227,16 @@ void r_vec_fill(SEXPTYPE type,
                 r_ssize src_i,
                 r_ssize n);
 
-R_len_t r_lgl_sum(SEXP lgl, bool na_true);
+r_ssize r_lgl_sum(SEXP lgl, bool na_true);
 SEXP r_lgl_which(SEXP x, bool na_true);
 
 void r_lgl_fill(SEXP x, int value, R_len_t n);
 void r_int_fill(SEXP x, int value, R_len_t n);
 void r_chr_fill(SEXP x, SEXP value, R_len_t n);
+
+void r_p_lgl_fill(int* p_x, int value, R_len_t n);
+void r_p_int_fill(int* p_x, int value, R_len_t n);
+void r_p_chr_fill(SEXP* p_x, SEXP value, R_len_t n);
 
 void r_int_fill_seq(SEXP x, int start, R_len_t n);
 SEXP r_seq(R_len_t from, R_len_t to);
@@ -253,6 +269,10 @@ SEXP r_new_character(R_len_t n) {
   return Rf_allocVector(STRSXP, n);
 }
 static inline
+SEXP r_new_raw(R_len_t n) {
+  return Rf_allocVector(RAWSXP, n);
+}
+static inline
 SEXP r_new_list(R_len_t n) {
   return Rf_allocVector(VECSXP, n);
 }
@@ -279,6 +299,7 @@ SEXP r_protect(SEXP x);
 bool r_is_true(SEXP x);
 bool r_is_string(SEXP x);
 bool r_is_number(SEXP x);
+bool r_is_positive_number(SEXP x);
 SEXP r_peek_option(const char* option);
 SEXP r_peek_frame();
 SEXP r_clone_referenced(SEXP x);
@@ -461,7 +482,7 @@ static inline const void* vec_type_missing_value(enum vctrs_type type) {
   case vctrs_type_double: return &NA_REAL;
   case vctrs_type_complex: return &vctrs_shared_na_cpl;
   case vctrs_type_character: return &NA_STRING;
-  case vctrs_type_list: return vctrs_shared_na_list;
+  case vctrs_type_list: return &R_NilValue;
   default: stop_unimplemented_vctrs_type("vec_type_missing_value", type);
   }
 }
@@ -479,6 +500,15 @@ intmax_t intmax_add(intmax_t x, intmax_t y) {
   }
 
   return x + y;
+}
+static inline
+intmax_t intmax_subtract(intmax_t x, intmax_t y) {
+  if ((y > 0 && x < (INTMAX_MIN + y)) ||
+      (y < 0 && x < (INTMAX_MAX + y))) {
+    stop_internal("intmax_subtract", "Subtraction resulted in overflow or underflow.");
+  }
+
+  return x - y;
 }
 
 static inline
@@ -530,6 +560,7 @@ extern SEXP strings_val;
 extern SEXP strings_group;
 extern SEXP strings_length;
 extern SEXP strings_vctrs_vctr;
+extern SEXP strings_times;
 
 extern SEXP chrs_subset;
 extern SEXP chrs_extract;
