@@ -1,3 +1,10 @@
+# vctrs 0.3.6
+
+* Fixed an issue with tibble 3.0.0 where removing column names with
+  `names(x) <- NULL` is now deprecated (#1298).
+
+* Fixed a GCC 11 issue revealed by CRAN checks.
+
 
 # vctrs 0.3.5
 
@@ -25,10 +32,11 @@
 * New `vec_identify_runs()` which returns a vector of identifiers for the
   elements of `x` that indicate which run of repeated values they fall in
   (#1081).
-  
+
 * Fixed an encoding translation bug with lists containing data frames which
   have columns where `vec_size()` is different from the low level
   `Rf_length()` (#1233).
+
 
 # vctrs 0.3.4
 
