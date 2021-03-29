@@ -10,6 +10,8 @@ partial_factor(levels = character())
 \item{levels}{Character vector of labels.}
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
+
 This special class can be passed as a \code{ptype} in order to specify that the
 result should be a factor that contains at least the specified levels.
 }

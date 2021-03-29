@@ -97,7 +97,7 @@ extern SEXP vctrs_try_catch_callback(SEXP, SEXP);
 extern SEXP vctrs_is_coercible(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_as_subscript(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_as_subscript_result(SEXP, SEXP, SEXP, SEXP, SEXP);
-extern SEXP vctrs_df_flat_width(SEXP);
+extern SEXP vctrs_df_flatten_info(SEXP);
 extern SEXP df_flatten(SEXP);
 extern SEXP vctrs_linked_version();
 extern SEXP vctrs_tib_ptype2(SEXP x, SEXP y, SEXP x_arg_, SEXP y_arg_);
@@ -125,12 +125,12 @@ extern SEXP vctrs_df_list(SEXP, SEXP, SEXP);
 extern SEXP vctrs_identify_runs(SEXP);
 extern SEXP vctrs_locate_runs(SEXP, SEXP);
 extern SEXP vctrs_detect_runs(SEXP, SEXP);
-extern SEXP vctrs_df_slice_complete(SEXP);
-extern SEXP vctrs_df_locate_complete(SEXP);
-extern SEXP vctrs_df_detect_complete(SEXP);
+extern SEXP vctrs_slice_complete(SEXP);
+extern SEXP vctrs_locate_complete(SEXP);
+extern SEXP vctrs_detect_complete(SEXP);
 extern SEXP vctrs_normalize_encoding(SEXP);
-extern SEXP vctrs_order(SEXP, SEXP, SEXP);
-extern SEXP vctrs_order_locs(SEXP, SEXP, SEXP);
+extern SEXP vctrs_order(SEXP, SEXP, SEXP, SEXP);
+extern SEXP vctrs_order_locs(SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_unrep(SEXP);
 extern SEXP vctrs_fill_missing(SEXP, SEXP, SEXP);
 extern SEXP vctrs_chr_paste_prefix(SEXP, SEXP, SEXP);
@@ -248,7 +248,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_is_coercible",               (DL_FUNC) &vctrs_is_coercible, 5},
   {"vctrs_as_subscript",               (DL_FUNC) &vctrs_as_subscript, 5},
   {"vctrs_as_subscript_result",        (DL_FUNC) &vctrs_as_subscript_result, 5},
-  {"vctrs_df_flat_width",              (DL_FUNC) &vctrs_df_flat_width, 1},
+  {"vctrs_df_flatten_info",            (DL_FUNC) &vctrs_df_flatten_info, 1},
   {"vctrs_df_flatten",                 (DL_FUNC) &df_flatten, 1},
   {"vctrs_linked_version",             (DL_FUNC) &vctrs_linked_version, 0},
   {"vctrs_tib_ptype2",                 (DL_FUNC) &vctrs_tib_ptype2, 4},
@@ -276,12 +276,12 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_identify_runs",              (DL_FUNC) &vctrs_identify_runs, 1},
   {"vctrs_locate_runs",                (DL_FUNC) &vctrs_locate_runs, 2},
   {"vctrs_detect_runs",                (DL_FUNC) &vctrs_detect_runs, 2},
-  {"vctrs_df_slice_complete",          (DL_FUNC) &vctrs_df_slice_complete, 1},
-  {"vctrs_df_locate_complete",         (DL_FUNC) &vctrs_df_locate_complete, 1},
-  {"vctrs_df_detect_complete",         (DL_FUNC) &vctrs_df_detect_complete, 1},
+  {"vctrs_slice_complete",             (DL_FUNC) &vctrs_slice_complete, 1},
+  {"vctrs_locate_complete",            (DL_FUNC) &vctrs_locate_complete, 1},
+  {"vctrs_detect_complete",            (DL_FUNC) &vctrs_detect_complete, 1},
   {"vctrs_normalize_encoding",         (DL_FUNC) &vctrs_normalize_encoding, 1},
-  {"vctrs_order",                      (DL_FUNC) &vctrs_order, 3},
-  {"vctrs_order_locs",                 (DL_FUNC) &vctrs_order_locs, 3},
+  {"vctrs_order",                      (DL_FUNC) &vctrs_order, 4},
+  {"vctrs_order_locs",                 (DL_FUNC) &vctrs_order_locs, 4},
   {"vctrs_unrep",                      (DL_FUNC) &vctrs_unrep, 1},
   {"vctrs_fill_missing",               (DL_FUNC) &vctrs_fill_missing, 3},
   {"vctrs_chr_paste_prefix",           (DL_FUNC) &vctrs_chr_paste_prefix, 3},

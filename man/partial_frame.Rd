@@ -10,6 +10,8 @@ partial_frame(...)
 \item{...}{Attributes of subclass}
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#experimental}{\figure{lifecycle-experimental.svg}{options: alt='[Experimental]'}}}{\strong{[Experimental]}}
+
 This special class can be passed to \code{.ptype} in order to specify the
 types of only some of the columns in a data frame.
 }
