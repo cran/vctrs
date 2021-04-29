@@ -1,9 +1,9 @@
-c00eeb6ff0e89c35312973158ac77a82 *DESCRIPTION
+3848ea61ddbdaed2a53fa27bdb82e312 *DESCRIPTION
 efb5a9df619b572f3449c7813bfdbac8 *LICENSE
 26e8ea3522f7f470d41408ce931449af *LICENSE.note
 0420f0ab9c1b93a97657274eab1bbc06 *NAMESPACE
-a6ef9860baaa76b142229a0f16e552b7 *NEWS.md
-073d0fec29db69ce086f977d3f2deab0 *R/aaa.R
+d78565a699dbf2e37b6139675f6777f7 *NEWS.md
+196356bc4e0a9a6bf85bde3ca1eaba7d *R/aaa.R
 f24fdf599a553075c2161da61e7b21f9 *R/arith.R
 0bb34f009c0bdbc5777b6721690225cd *R/assert.R
 54eee28208f7d3c435392cb8c9fc8b9f *R/bind.R
@@ -38,7 +38,7 @@ f505e15a583469413be4b578bd67cf3f *R/print-str.R
 252060600f95761c06c7164905715358 *R/proxy.R
 b4862b1b08e73e772f509f8e2b74ed6f *R/ptype-abbr-full.R
 e8cdc534f227acc05179e5db27988965 *R/recycle.R
-f05d935f9307a2d5810c0c098a1bfa7c *R/register-s3.R
+0c75a48abbe2319f57e1776721aafb19 *R/register-s3.R
 ef95fac91e65f47a8c415df8b63946dd *R/rep.R
 047f7bd6bf2d65c7f40c3dd442b74151 *R/runs.R
 b23fc3cfb673f0ad6fd06388a7e5247c *R/shape.R
@@ -72,7 +72,7 @@ d70b27c33e371915eb0fbb373638aea7 *R/type.R
 b19af3b1e1f5ca45efa105c97beac461 *R/utils.R
 1953849377a5a27baca8b56a1e030341 *R/vctrs-deprecated.R
 cf1d56499eae89996f3f357b5071423c *R/vctrs-package.R
-9f4f2fd4d3f8e2186c825ebf434e0522 *R/zzz.R
+d6975d26be4a786d8dca2dd949d73995 *R/zzz.R
 f2cf682fd34dd4c9cac43b40e63d285f *README.md
 dc4aacab93aa12cbe371fc9bca101a99 *build/vignette.rds
 43cc81e569685f0ede8af83150d4f016 *inst/WORDLIST
@@ -81,13 +81,13 @@ b1ae054dde163543fef592cd0d0bbc10 *inst/doc/pillar.R
 d6757b9f00a8f0a0877a4433fcee84b1 *inst/doc/pillar.html
 ae9e1fe9ceef6febb0d2fcc340b41f95 *inst/doc/s3-vector.R
 7aae14131fd15f5c67106e33f8a3b263 *inst/doc/s3-vector.Rmd
-2b508a105adc4e154c91dd4c502c116f *inst/doc/s3-vector.html
+6aea9deeba885fedb9468e90e7acdd17 *inst/doc/s3-vector.html
 eb2ce80049219a0c9e12195fb15ee16e *inst/doc/stability.R
 a16ae23dfc9ed0d60015bcfa8e899618 *inst/doc/stability.Rmd
-9ffca26690057d8e2d4549380943e206 *inst/doc/stability.html
+d1aa783a4288d8b39a01e71de7201830 *inst/doc/stability.html
 0352c1b2b6bfe4ec421cc38492b8ec6b *inst/doc/type-size.R
 72c63cb0dd9c179724530995e4cdf7f1 *inst/doc/type-size.Rmd
-482b1d7217bd3ab469aea1b07ded4e1e *inst/doc/type-size.html
+b97c927b21f85d0d8b4b9e40caf42177 *inst/doc/type-size.html
 96207f2b169b78506ee71004ae085ae9 *inst/include/vctrs.c
 37e713e13519edfe7a44eb1bcbdb6e35 *inst/include/vctrs.h
 6b865e241282842dfe6ebf1861cf5d5b *man/as-is.Rd
@@ -148,7 +148,7 @@ c27f4c03fec7bc8d9c384dec298dc6e5 *man/name_spec.Rd
 2a36787ed9c7d3bdaf57ba8c7d03ff7c *man/partial_factor.Rd
 9aab73d2dab1a252ddc23a457dfe798e *man/partial_frame.Rd
 3b7562d5b5d13c4a724341bedbf65c72 *man/reference-faq-compatibility.Rd
-b3baf86549ed065a23f9827616a2e4e9 *man/s3_register.Rd
+ca97743e34240e81c730e3e33d76656f *man/s3_register.Rd
 febea111fcbfa3fadeb25ea4a5239008 *man/table.Rd
 7394ba0933b57f2039c0d19a0df54cfc *man/theory-faq-coercion.Rd
 679d46a041225b72bf80ad526513cc47 *man/unspecified.Rd
@@ -295,7 +295,7 @@ f0ea654c49238baca6f6e5cec0481d8c *src/utils-rlang.h
 d1359dfa870477f6503d6cf6570e94d3 *src/utils.c
 a24ba1f8d221129458f173c3212f8097 *src/utils.h
 c462a97b920a7c1248e7465969094cf4 *src/vctrs.h
-19f1dc8dbfbcb92e260dac4895b885ab *src/version.c
+6e723c55b4cdcbaefb71e7c0a2880366 *src/version.c
 36298abc8bb1476f930ae3c5cfe46ffe *tests/testthat.R
 f392d42aabf155f2e7f0f0f39e590494 *tests/testthat/error/test-bind.txt
 6db85a51557210ffc0b33361a6dceba3 *tests/testthat/error/test-c.txt
