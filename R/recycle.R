@@ -22,6 +22,8 @@
 #' We say that two vectors have __compatible size__ if they can be
 #' recycled to be the same length.
 #'
+#' @inheritParams rlang::args_error_context
+#'
 #' @param x A vector to recycle.
 #' @param ...
 #'   * For `vec_recycle_common()`, vectors to recycle.
@@ -49,15 +51,16 @@
 #' vec_recycle_common(data.frame(x = 1), 1:5)
 #' vec_recycle_common(array(1:2, c(1, 2)), 1:5)
 #' vec_recycle_common(array(1:3, c(1, 3, 1)), 1:5)
-vec_recycle <- function(x, size, ..., x_arg = "") {
-  if (!missing(...)) {
-    ellipsis::check_dots_empty()
-  }
-  .Call(vctrs_recycle, x, size, x_arg)
+vec_recycle <- function(x, size, ..., x_arg = "", call = caller_env()) {
+  check_dots_empty0(...)
+  .Call(ffi_recycle, x, size, environment())
 }
 
 #' @export
 #' @rdname vec_recycle
-vec_recycle_common <- function(..., .size = NULL) {
-  .External2(vctrs_recycle_common, .size)
+vec_recycle_common <- function(...,
+                               .size = NULL,
+                               .arg = "",
+                               .call = caller_env()) {
+  .External2(ffi_recycle_common, .size)
 }

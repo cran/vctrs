@@ -1,8 +1,5 @@
-#include <math.h>
-#include "equal.h"
 #include "vctrs.h"
-#include "utils.h"
-#include "translate.h"
+#include <math.h>
 
 // -----------------------------------------------------------------------------
 
@@ -210,7 +207,7 @@ void vec_equal_col_na_equal(SEXP x,
   case vctrs_type_character: EQUAL_COL(SEXP, STRING_PTR_RO, chr_equal_na_equal); break;
   case vctrs_type_raw: EQUAL_COL(Rbyte, RAW_RO, raw_equal_na_equal); break;
   case vctrs_type_list: EQUAL_COL(SEXP, VECTOR_PTR_RO, list_equal_na_equal); break;
-  case vctrs_type_dataframe: stop_internal("vec_equal", "Data frame columns should be flattened already.");
+  case vctrs_type_dataframe: r_stop_internal("Data frame columns should be flattened already.");
   case vctrs_type_scalar: Rf_errorcall(R_NilValue, "Can't compare scalars with `vec_equal()`.");
   default: stop_unimplemented_vctrs_type("vec_equal", vec_proxy_typeof(x));
   }
@@ -229,7 +226,7 @@ void vec_equal_col_na_propagate(SEXP x,
   case vctrs_type_character: EQUAL_COL(SEXP, STRING_PTR_RO, chr_equal_na_propagate); break;
   case vctrs_type_raw: EQUAL_COL(Rbyte, RAW_RO, raw_equal_na_propagate); break;
   case vctrs_type_list: EQUAL_COL(SEXP, VECTOR_PTR_RO, list_equal_na_propagate); break;
-  case vctrs_type_dataframe: stop_internal("vec_equal", "Data frame columns should be flattened already.");
+  case vctrs_type_dataframe: r_stop_internal("Data frame columns should be flattened already.");
   case vctrs_type_scalar: Rf_errorcall(R_NilValue, "Can't compare scalars with `vec_equal()`.");
   default: stop_unimplemented_vctrs_type("vec_equal", vec_proxy_typeof(x));
   }
@@ -352,7 +349,7 @@ bool equal_object_normalized(SEXP x, SEXP y) {
   case ENVSXP:
   case EXTPTRSXP:
     // These are handled above with pointer comparison
-    stop_internal("equal_object_normalized", "Unexpected reference type.");
+    r_stop_internal("Unexpected reference type.");
 
   default:
     stop_unimplemented_type("equal_object_normalized", TYPEOF(x));
@@ -473,6 +470,10 @@ SEXP vec_equal_na(SEXP x) {
     SEXP out = df_equal_na(x, size);
     UNPROTECT(1);
     return out;
+  }
+  case vctrs_type_null: {
+    UNPROTECT(1);
+    return vctrs_shared_empty_lgl;
   }
   case vctrs_type_scalar:    Rf_errorcall(R_NilValue, "Can't detect `NA` values in scalars with `vctrs_equal_na()`.");
   default:                   Rf_error("Unimplemented type in `vctrs_equal_na()`.");

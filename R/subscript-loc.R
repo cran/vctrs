@@ -17,6 +17,8 @@
 #'   for extracting with `[[`.
 #'
 #' @inheritParams vec_slice
+#' @inheritParams rlang::args_error_context
+#'
 #' @param n A single integer representing the total size of the
 #'   object that `i` is meant to index into.
 #' @param names If `i` is a character vector, `names` should be a character
@@ -58,11 +60,12 @@ vec_as_location <- function(i,
                             names = NULL,
                             ...,
                             missing = c("propagate", "error"),
-                            arg = NULL) {
-  if (!missing(...)) ellipsis::check_dots_empty()
+                            arg = caller_arg(i),
+                            call = caller_env()) {
+  check_dots_empty0(...)
 
   .Call(
-    vctrs_as_location,
+    ffi_as_location,
     i = i,
     n = n,
     names = names,
@@ -70,7 +73,7 @@ vec_as_location <- function(i,
     loc_oob = "error",
     loc_zero = "remove",
     missing = missing,
-    arg = arg
+    frame = environment()
   )
 }
 #' @rdname vec_as_location
@@ -90,14 +93,15 @@ num_as_location <- function(i,
                             negative = c("invert", "error", "ignore"),
                             oob = c("error", "extend"),
                             zero = c("remove", "error", "ignore"),
-                            arg = NULL) {
-  if (!missing(...)) ellipsis::check_dots_empty()
+                            arg = caller_arg(i),
+                            call = caller_env()) {
+  check_dots_empty0(...)
 
   if (is.object(i) || !(is_integer(i) || is_double(i))) {
     abort("`i` must be a numeric vector.")
   }
   .Call(
-    vctrs_as_location,
+    ffi_as_location,
     i = i,
     n = n,
     names = NULL,
@@ -105,7 +109,7 @@ num_as_location <- function(i,
     loc_oob = oob,
     loc_zero = zero,
     missing = missing,
-    arg = arg
+    env = environment()
   )
 }
 
@@ -116,15 +120,17 @@ vec_as_location2 <- function(i,
                              names = NULL,
                              ...,
                              missing = c("error", "propagate"),
-                             arg = NULL) {
-  if (!missing(...)) ellipsis::check_dots_empty()
+                             arg = caller_arg(i),
+                             call = caller_env()) {
+  check_dots_empty0(...)
   result_get(vec_as_location2_result(
     i,
     n = n,
     names = names,
     negative = "error",
     missing = missing,
-    arg = arg
+    arg = arg,
+    call = call
   ))
 }
 #' @rdname vec_as_location
@@ -136,11 +142,12 @@ num_as_location2 <- function(i,
                              ...,
                              negative = c("error", "ignore"),
                              missing = c("error", "propagate"),
-                             arg = NULL) {
-  if (!missing(...)) ellipsis::check_dots_empty()
+                             arg = caller_arg(i),
+                             call = caller_env()) {
+  check_dots_empty0(...)
 
   if (!is_integer(i) && !is_double(i)) {
-    abort("`i` must be a numeric vector.")
+    abort("`i` must be a numeric vector.", call = vctrs_error_call(call))
   }
   result_get(vec_as_location2_result(
     i,
@@ -148,7 +155,8 @@ num_as_location2 <- function(i,
     names = NULL,
     negative = negative,
     missing = missing,
-    arg = arg
+    arg = arg,
+    call = call
   ))
 }
 
@@ -157,14 +165,16 @@ vec_as_location2_result <- function(i,
                                     names,
                                     missing,
                                     negative,
-                                    arg) {
+                                    arg,
+                                    call) {
   allow_missing <- arg_match0(missing, c("error", "propagate")) == "propagate"
   allow_negative <- arg_match0(negative, c("error", "ignore")) == "ignore"
 
   result <- vec_as_subscript2_result(
     i = i,
     arg = arg,
-    logical = "error"
+    logical = "error",
+    call = call
   )
 
   if (!is_null(result$err)) {
@@ -172,9 +182,8 @@ vec_as_location2_result <- function(i,
     return(result(err = new_error_location2_type(
       i = i,
       subscript_arg = arg,
-      # Should body fields in parents be automatically inherited?
       body = parent$body,
-      parent = parent
+      call = call
     )))
   }
 
@@ -185,7 +194,8 @@ vec_as_location2_result <- function(i,
     return(result(err = new_error_location2_type(
       i = i,
       subscript_arg = arg,
-      body = cnd_bullets_location2_need_scalar
+      body = cnd_bullets_location2_need_scalar,
+      call = call
     )))
   }
 
@@ -199,7 +209,8 @@ vec_as_location2_result <- function(i,
       result <- result(err = new_error_location2_type(
         i = i,
         subscript_arg = arg,
-        body = cnd_bullets_location2_need_present
+        body = cnd_bullets_location2_need_present,
+        call = call
       ))
     } else {
       result <- result(i)
@@ -211,7 +222,8 @@ vec_as_location2_result <- function(i,
     return(result(err = new_error_location2_type(
       i = i,
       subscript_arg = arg,
-      body = cnd_bullets_location2_need_positive
+      body = cnd_bullets_location2_need_positive,
+      call = call
     )))
   }
 
@@ -219,7 +231,8 @@ vec_as_location2_result <- function(i,
     return(result(err = new_error_location2_type(
       i = i,
       subscript_arg = arg,
-      body = cnd_bullets_location2_need_positive
+      body = cnd_bullets_location2_need_positive,
+      call = call
     )))
   }
 
@@ -242,18 +255,19 @@ vec_as_location2_result <- function(i,
   } else {
     result(err = new_error_location2_type(
       i = i,
-      parent = err,
-      subscript_arg = arg
+      subscript_arg = arg,
+      call = call
     ))
   }
 }
 
 
-stop_location_negative_missing <- function(i, ...) {
+stop_location_negative_missing <- function(i, ..., call = caller_env()) {
   cnd_signal(new_error_subscript_type(
     i,
     ...,
-    body = cnd_body_vctrs_error_location_negative_missing
+    body = cnd_body_vctrs_error_location_negative_missing,
+    call = call
   ))
 }
 cnd_body_vctrs_error_location_negative_missing <- function(cnd, ...) {
@@ -275,11 +289,12 @@ cnd_body_vctrs_error_location_negative_missing <- function(cnd, ...) {
   ))
 }
 
-stop_location_negative_positive <- function(i, ...) {
+stop_location_negative_positive <- function(i, ..., call = caller_env()) {
   cnd_signal(new_error_subscript_type(
     i,
     ...,
-    body = cnd_body_vctrs_error_location_negative_positive
+    body = cnd_body_vctrs_error_location_negative_positive,
+    call = call
   ))
 }
 cnd_body_vctrs_error_location_negative_positive <- function(cnd, ...) {
@@ -333,11 +348,12 @@ cnd_bullets_location2_need_positive <- function(cnd, ...) {
   ))
 }
 
-stop_location_negative <- function(i, ...) {
+stop_location_negative <- function(i, ..., call = caller_env()) {
   cnd_signal(new_error_subscript_type(
     i,
     body = cnd_bullets_location_need_non_negative,
-    ...
+    ...,
+    call = call
   ))
 }
 cnd_bullets_location_need_non_negative <- function(cnd, ...) {
@@ -347,11 +363,12 @@ cnd_bullets_location_need_non_negative <- function(cnd, ...) {
   ))
 }
 
-stop_location_zero <- function(i, ...) {
+stop_location_zero <- function(i, ..., call = caller_env()) {
   cnd_signal(new_error_subscript_type(
     i,
     body = cnd_bullets_location_need_non_zero,
-    ...
+    ...,
+    call = call
   ))
 }
 cnd_bullets_location_need_non_zero <- function(cnd, ...) {
@@ -373,11 +390,12 @@ cnd_bullets_location_need_non_zero <- function(cnd, ...) {
   ))
 }
 
-stop_subscript_missing <- function(i, ...) {
+stop_subscript_missing <- function(i, ..., call = caller_env()) {
   cnd_signal(new_error_subscript_type(
     i = i,
     body = cnd_bullets_subscript_missing,
-    ...
+    ...,
+    call = call
   ))
 }
 cnd_bullets_subscript_missing <- function(cnd, ...) {
@@ -397,12 +415,13 @@ cnd_bullets_subscript_missing <- function(cnd, ...) {
   ))
 }
 
-stop_indicator_size <- function(i, n, ...) {
+stop_indicator_size <- function(i, n, ..., call = caller_env()) {
   cnd_signal(new_error_subscript_size(
     i,
     n = n,
     ...,
-    body = cnd_body_vctrs_error_indicator_size
+    body = cnd_body_vctrs_error_indicator_size,
+    call = call
   ))
 }
 cnd_body_vctrs_error_indicator_size <- function(cnd, ...) {
@@ -414,12 +433,16 @@ cnd_body_vctrs_error_indicator_size <- function(cnd, ...) {
   )
 }
 
-stop_subscript_oob <- function(i, subscript_type, ...) {
+stop_subscript_oob <- function(i,
+                               subscript_type,
+                               ...,
+                               call = caller_env()) {
   stop_subscript(
     class = "vctrs_error_subscript_oob",
     i = i,
     subscript_type = subscript_type,
-    ...
+    ...,
+    call = call
   )
 }
 
@@ -432,7 +455,11 @@ cnd_header.vctrs_error_subscript_oob <- function(cnd, ...) {
   elt <- cnd_subscript_element(cnd)
   action <- cnd_subscript_action(cnd)
 
-  glue::glue("Can't {action} {elt[[2]]} that don't exist.")
+  if (action == "rename") {
+    glue::glue("Can't rename {elt[[2]]} that don't exist.")
+  } else {
+    glue::glue("Can't {action} {elt[[2]]} past the end.")
+  }
 }
 
 #' @export
@@ -451,7 +478,6 @@ cnd_body.vctrs_error_subscript_oob <- function(cnd, ...) {
 }
 cnd_body_vctrs_error_subscript_oob_location <- function(cnd, ...) {
   i <- cnd$i
-  elt <- cnd_subscript_element(cnd)
 
   # In case of negative indexing
   i <- abs(i)
@@ -460,19 +486,16 @@ cnd_body_vctrs_error_subscript_oob_location <- function(cnd, ...) {
   i <- i[!is.na(i)]
 
   oob <- i[i > cnd$size]
-  oob_enum <- enumerate(oob)
+  oob_enum <- vctrs_cli_vec(oob)
 
-  format_error_bullets(c(
-    x = glue::glue(ngettext(
-      length(oob),
-      "Location {oob_enum} doesn't exist.",
-      "Locations {oob_enum} don't exist."
-    )),
-    i = glue::glue(ngettext(
-      cnd$size,
-      "There are only {cnd$size} {elt[[1]]}.",
-      "There are only {cnd$size} {elt[[2]]}.",
-    ))
+  n_loc <- length(oob)
+  n <- cnd$size
+  elt <- cnd_subscript_element_cli(n, cnd)
+
+  # TODO: Switch to `format_inline()` and format bullets lazily through rlang
+  cli::format_error(c(
+    "i" = "{cli::qty(n_loc)} Location{?s} {oob_enum} do{?esn't/n't} exist.",
+    "i" = "There {cli::qty(n)} {?is/are} only {elt}."
   ))
 }
 cnd_body_vctrs_error_subscript_oob_name <- function(cnd, ...) {
@@ -489,13 +512,21 @@ cnd_body_vctrs_error_subscript_oob_name <- function(cnd, ...) {
   ))
 }
 
-stop_location_oob_non_consecutive <- function(i, size, ...) {
+vctrs_cli_vec <- function(x, ..., vec_trunc = 5) {
+  cli::cli_vec(as.character(x), list(..., vec_trunc = vec_trunc))
+}
+
+stop_location_oob_non_consecutive <- function(i,
+                                              size,
+                                              ...,
+                                              call = caller_env()) {
   stop_subscript_oob(
     i = i,
     size = size,
     subscript_type = "numeric",
     subscript_oob_non_consecutive = TRUE,
-    ...
+    ...,
+    call = call
   )
 }
 

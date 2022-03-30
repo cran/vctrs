@@ -1,7 +1,14 @@
 #ifndef VCTRS_EQUAL_H
 #define VCTRS_EQUAL_H
 
-#include "vctrs.h"
+#include "vctrs-core.h"
+#include "utils.h"
+
+// equal_object() never propagates missingness, so
+// it can return a `bool`
+bool equal_object(SEXP x, SEXP y);
+bool equal_object_normalized(SEXP x, SEXP y);
+bool equal_names(SEXP x, SEXP y);
 
 // -----------------------------------------------------------------------------
 
@@ -37,8 +44,9 @@ static inline bool list_is_missing(SEXP x) {
   return IS_MISSING(((const CTYPE*) p_x)[i]);  \
 } while (0)
 
-static inline bool p_nil_is_missing(const void* p_x, r_ssize i) {
-  stop_internal("p_nil_is_missing", "Can't check NULL for missingness.");
+static r_no_return
+inline bool p_nil_is_missing(const void* p_x, r_ssize i) {
+  r_stop_internal("Can't check NULL for missingness.");
 }
 static inline bool p_lgl_is_missing(const void* p_x, r_ssize i) {
   P_IS_MISSING(int, lgl_is_missing);
@@ -115,8 +123,9 @@ static inline int list_equal_na_equal(SEXP x, SEXP y) {
   return EQUAL_NA_EQUAL(((const CTYPE*) p_x)[i], ((const CTYPE*) p_y)[j]); \
 } while (0)
 
-static inline int p_nil_equal_na_equal(const void* p_x, r_ssize i, const void* p_y, r_ssize j) {
-  stop_internal("p_nil_equal_na_equal", "Can't compare NULL for equality.");
+static r_no_return
+inline int p_nil_equal_na_equal(const void* p_x, r_ssize i, const void* p_y, r_ssize j) {
+  r_stop_internal("Can't compare NULL for equality.");
 }
 static inline int p_lgl_equal_na_equal(const void* p_x, r_ssize i, const void* p_y, r_ssize j) {
   P_EQUAL_NA_EQUAL(int, lgl_equal_na_equal);
@@ -218,8 +227,9 @@ static inline int list_equal_na_propagate(SEXP x, SEXP y) {
   return EQUAL_NA_PROPAGATE(((const CTYPE*) p_x)[i], ((const CTYPE*) p_y)[j]); \
 } while (0)
 
-static inline int p_nil_equal_na_propagate(const void* p_x, r_ssize i, const void* p_y, r_ssize j) {
-  stop_internal("p_nil_equal_na_propagate", "Can't compare NULL for equality.");
+static r_no_return
+inline int p_nil_equal_na_propagate(const void* p_x, r_ssize i, const void* p_y, r_ssize j) {
+  r_stop_internal("Can't compare NULL for equality.");
 }
 static inline int p_lgl_equal_na_propagate(const void* p_x, r_ssize i, const void* p_y, r_ssize j) {
   P_EQUAL_NA_PROPAGATE(int, lgl_equal_na_propagate);
