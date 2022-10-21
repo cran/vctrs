@@ -130,6 +130,12 @@ stop_incompatible_type <- function(x,
     from_dispatch = match_from_dispatch(...)
   )
 
+  subclass <- switch(
+    action,
+    combine = "vctrs_error_ptype2",
+    convert = "vctrs_error_cast"
+  )
+
   stop_incompatible(
     x, y,
     x_arg = x_arg,
@@ -137,7 +143,7 @@ stop_incompatible_type <- function(x,
     details = details,
     ...,
     message = message,
-    class = c(class, "vctrs_error_incompatible_type"),
+    class = c(class, subclass, "vctrs_error_incompatible_type"),
     call = call
   )
 }
@@ -250,12 +256,14 @@ cnd_type_message <- function(x,
     y_type <- cnd_type_message_type_label(y)
   }
 
+  converting <- action == "convert"
+
   # If we are here directly from dispatch, this means there is no
   # ptype2 method implemented and the is-same-class fallback has
   # failed because of diverging attributes. The author of the class
   # should implement a ptype2 method as documented in the FAQ
   # indicated below.
-  if (from_dispatch && identical(class(x)[[1]], class(y)[[1]])) {
+  if (from_dispatch && !converting && identical(class(x)[[1]], class(y)[[1]])) {
     details <- c(incompatible_attrib_bullets(), details)
     details <- format_error_bullets(details)
   }
@@ -266,7 +274,7 @@ cnd_type_message <- function(x,
     end <- glue::glue("; falling back to {fallback}.")
   }
 
-  if (action == "convert" && nzchar(y_arg)) {
+  if (converting && nzchar(y_arg)) {
     header <- glue::glue("Can't convert{x_name}<{x_type}> to match type of{y_name}<{y_type}>{end}")
   } else {
     header <- glue::glue("Can't {action}{x_name}<{x_type}> {separator}{y_name}<{y_type}>{end}")
@@ -498,19 +506,6 @@ stop_lossy_cast <- function(x,
   )
 }
 
-#' @export
-conditionMessage.vctrs_error_cast_lossy <- function(c) {
-  # FIXME: Remove `message` argument
-  if (is_string(c$message) && nzchar(c$message)) {
-    return(c$message)
-  }
-
-  # FIXME: Add `cnd_details()`?
-  glue_lines(
-    cnd_message(c),
-    c$details
-  )
-}
 #' @export
 cnd_header.vctrs_error_cast_lossy <- function(cnd, ...) {
   x_label <- format_arg_label(vec_ptype_full(cnd$x), cnd$x_arg)
@@ -827,12 +822,14 @@ ensure_full_stop <- function(x) {
 }
 
 
-# TODO! cli + .internal
 stop_native_implementation <- function(fn) {
-  abort(paste_line(
-    glue::glue("`{fn}()` is implemented at C level."),
-    "This R function is purely indicative and should never be called."
-  ))
+  cli::cli_abort(
+    c(
+      "{.fn {fn}} is implemented at C level.",
+      " " = "This R function is purely indicative and should never be called."
+    ),
+    .internal = TRUE
+  )
 }
 
 

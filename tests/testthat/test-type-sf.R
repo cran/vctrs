@@ -102,10 +102,6 @@ test_that("can combine sf data frames", {
 	sf1 = st_sf(x = c(TRUE, FALSE), geo1 = sfc1)
 	sf2 = st_sf(y = "", geo2 = sfc2, x = 0, stringsAsFactors = FALSE)
 
-	# FIXME: Currently `vec_rbind()` returns a data frame because we
-	# are temporarily working around bugs due to bad interaction of
-	# different fallbacks. `bind_rows()` returns an `sf` data frame as
-	# expected because of `dplyr_reconstruct()`.
 	exp = data_frame(
 		x = c(1, 0, 0),
 		geo1 = sfc1[c(1:2, NA)],
@@ -233,6 +229,41 @@ test_that("`precision` and `crs` attributes of `sfc` vectors are combined", {
 	y = st_sfc(st_point(c(0, 0)), precision = 1e-4, crs = 4326)
 	expect_identical(vctrs::vec_c(x, y), c(x, y))
 	# expect_error(vctrs::vec_c(x, y), "coordinate reference systems not equal")
+})
+
+test_that("`vec_locate_matches()` works with `sfc` vectors", {
+  x <- c(
+    st_sfc(st_point(c(0, 0))),
+    st_sfc(st_point(c(0, 1))),
+    st_sfc(st_point(c(2, 1))),
+    st_sfc(c(st_point(c(0, 1)), st_point(c(0, 1))))
+  )
+
+  y <- c(
+    st_sfc(c(st_point(c(0, 1)), st_point(c(0, 1)))),
+    st_sfc(st_point(c(0, 0))),
+    st_sfc(st_point(c(0, 3))),
+    st_sfc(st_point(c(0, 0))),
+    st_sfc(st_point(c(0, 1)))
+  )
+
+  out <- vec_locate_matches(x, y)
+  expect_identical(out$needles,  c(1L, 1L, 2L, 3L, 4L))
+  expect_identical(out$haystack, c(2L, 4L, 5L, NA, 1L))
+})
+
+test_that("`vec_rbind()` doesn't leak common type fallbacks (#1331)", {
+	sf = st_sf(id = 1:2, geo = st_sfc(st_point(c(1, 1)), st_point(c(2, 2))))
+
+	expect_equal(
+		vec_rbind(sf, sf),
+		data_frame(id = rep(1:2, 2), geo = rep(sf$geo, 2))
+	)
+
+	expect_equal(
+		vec_rbind(sf, sf, .names_to = "id"),
+		data_frame(id = rep(1:2, each = 2), geo = rep(sf$geo, 2))
+	)
 })
 
 

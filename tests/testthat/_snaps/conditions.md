@@ -149,13 +149,21 @@
       ! Can't convert from `"a"` <character> to <factor<9b7e3>> due to loss of generality.
       * Locations: 1
 
+# lossy cast `conditionMessage()` result matches `cnd_message()` (#1592)
+
+    Code
+      cat(conditionMessage(cnd))
+    Output
+      Can't convert from `1.5` <double> to <integer> due to loss of precision.
+      * Locations: 1
+
 # ordered cast failures mention conversion
 
     Code
       (expect_error(vec_cast(ordered("x"), ordered("y")), class = "vctrs_error_incompatible_type")
       )
     Output
-      <error/vctrs_error_incompatible_type>
+      <error/vctrs_error_cast>
       Error:
       ! Can't convert `ordered("x")` <ordered<bf275>> to <ordered<fd1ad>>.
 

@@ -21,7 +21,7 @@ vec_coerce_bare <- function(x, type) {
 # Matches the semantics of c() - based on experimenting with the output
 # of c(), not reading the source code.
 outer_names <- function(names, outer, n) {
-  .Call(vctrs_outer_names, names, outer, vec_cast(n, int()))
+  .Call(ffi_outer_names, names, outer, vec_cast(n, int()))
 }
 
 has_inner_names <- function(x) {
@@ -168,6 +168,35 @@ s3_find_method <- function(x, generic, ns = "base") {
   table <- ns_methods(ns_env(ns))
   .Call(vctrs_s3_find_method, generic, x, table)
 }
+s3_get_method <- function(class, generic, ns = "base") {
+  stopifnot(
+    is_string(class),
+    is_string(generic),
+    is_string(ns)
+  )
+  table <- ns_methods(ns_env(ns))
+  .Call(ffi_s3_get_method, generic, class, table)
+}
+
+s3_method_specific <- function(x,
+                               generic,
+                               ns = "base",
+                               default = TRUE) {
+  classes <- class(x)[[1]]
+
+  if (default) {
+    classes <- c(classes, "default")
+  }
+
+  for (class in classes) {
+    method <- s3_get_method(class, generic, ns = ns)
+    if (!is_null(method)) {
+      return(method)
+    }
+  }
+
+  cli::cli_abort("Can't find {.fn {generic}} method for {.cls {class}}.")
+}
 
 df_has_base_subset <- function(x) {
   method <- s3_find_method(x, "[", ns = "base")
@@ -298,4 +327,9 @@ browser <- function(...,
   # expected place. Ideally `skipCalls` would not skip but exit the
   # contexts.
   on.exit(base::browser(..., skipCalls = skipCalls + 1))
+}
+
+vec_paste0 <- function(...) {
+  args <- vec_recycle_common(...)
+  exec(paste0, !!!args)
 }

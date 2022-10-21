@@ -132,9 +132,6 @@ SEXP int_resize(SEXP x, r_ssize x_size, r_ssize size);
 SEXP raw_resize(SEXP x, r_ssize x_size, r_ssize size);
 SEXP chr_resize(SEXP x, r_ssize x_size, r_ssize size);
 
-SEXP vec_unique_names(SEXP x, bool quiet);
-SEXP vec_unique_colnames(SEXP x, bool quiet);
-
 // Returns S3 / S4 method for `generic` suitable for the class of `x`. The
 // inheritance hierarchy is explored except for the default method.
 SEXP s3_get_method(const char* generic, const char* cls, SEXP table);
@@ -173,14 +170,11 @@ SEXP node_compact_d(SEXP xs);
 
 void never_reached(const char* fn) __attribute__((noreturn));
 
-enum vctrs_type2 vec_typeof2_impl(enum vctrs_type type_x, enum vctrs_type type_y, int* left);
-enum vctrs_type2_s3 vec_typeof2_s3_impl(SEXP x, SEXP y, enum vctrs_type type_x, enum vctrs_type type_y, int* left);
-
 SEXP new_empty_factor(SEXP levels);
 SEXP new_empty_ordered(SEXP levels);
 
 bool list_has_inner_vec_names(SEXP x, R_len_t size);
-SEXP list_pluck(SEXP xs, R_len_t i);
+r_obj* list_pluck(r_obj* xs, r_ssize i);
 
 void init_compact_seq(int* p, R_len_t start, R_len_t size, bool increasing);
 SEXP compact_seq(R_len_t start, R_len_t size, bool increasing);
@@ -198,10 +192,8 @@ bool is_integer64(SEXP x);
 
 bool lgl_any_na(SEXP x);
 
-SEXP apply_name_spec(SEXP name_spec, SEXP outer, SEXP inner, R_len_t n);
-SEXP outer_names(SEXP names, SEXP outer, R_len_t n);
-SEXP vec_set_names(SEXP x, SEXP names);
 SEXP colnames(SEXP x);
+r_obj* colnames2(r_obj* x);
 
 extern bool (*rlang_is_splice_box)(SEXP);
 extern SEXP (*rlang_unbox)(SEXP);
@@ -371,17 +363,17 @@ static inline SEXP expr_protect(SEXP x) {
 
 static inline const void* vec_type_missing_value(enum vctrs_type type) {
   switch (type) {
-  case vctrs_type_logical: return &NA_LOGICAL;
-  case vctrs_type_integer: return &NA_INTEGER;
-  case vctrs_type_double: return &NA_REAL;
-  case vctrs_type_complex: return &vctrs_shared_na_cpl;
-  case vctrs_type_character: return &NA_STRING;
-  case vctrs_type_list: return &R_NilValue;
+  case VCTRS_TYPE_logical: return &NA_LOGICAL;
+  case VCTRS_TYPE_integer: return &NA_INTEGER;
+  case VCTRS_TYPE_double: return &NA_REAL;
+  case VCTRS_TYPE_complex: return &vctrs_shared_na_cpl;
+  case VCTRS_TYPE_character: return &NA_STRING;
+  case VCTRS_TYPE_list: return &R_NilValue;
   default: stop_unimplemented_vctrs_type("vec_type_missing_value", type);
   }
 }
 
-void c_print_backtrace();
+void c_print_backtrace(void);
 
 SEXP chr_c(SEXP x, SEXP y);
 
@@ -415,6 +407,8 @@ extern SEXP strings_minimal;
 extern SEXP strings_unique;
 extern SEXP strings_universal;
 extern SEXP strings_check_unique;
+extern SEXP strings_unique_quiet;
+extern SEXP strings_universal_quiet;
 extern SEXP strings_key;
 extern SEXP strings_loc;
 extern SEXP strings_val;
@@ -461,7 +455,6 @@ extern SEXP syms_y_size;
 extern SEXP syms_to;
 extern SEXP syms_dots;
 extern SEXP syms_bracket;
-extern SEXP syms_arg;
 extern SEXP syms_x_arg;
 extern SEXP syms_y_arg;
 extern SEXP syms_to_arg;
@@ -494,7 +487,6 @@ extern SEXP syms_character;
 extern SEXP syms_body;
 extern SEXP syms_parent;
 extern SEXP syms_from_dispatch;
-extern SEXP syms_df_fallback;
 extern SEXP syms_s3_fallback;
 extern SEXP syms_stop_incompatible_type;
 extern SEXP syms_stop_incompatible_size;
@@ -513,6 +505,7 @@ extern SEXP syms_chr_proxy_collate;
 extern SEXP syms_actual;
 extern SEXP syms_required;
 extern SEXP syms_call;
+extern SEXP syms_dot_call;
 
 static const char * const c_strs_vctrs_common_class_fallback = "vctrs:::common_class_fallback";
 

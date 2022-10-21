@@ -1,3 +1,4 @@
+#include "vctrs-core.h"
 #include "vctrs.h"
 #include "type-data-frame.h"
 #include <R_ext/Rdynload.h>
@@ -62,11 +63,7 @@ static SEXP vctrs_eval_mask_n_impl(SEXP fn_sym, SEXP fn, SEXP* syms, SEXP* args,
  * @param env The environment in which to evaluate.
  */
 SEXP vctrs_eval_mask_n(SEXP fn, SEXP* syms, SEXP* args) {
-  SEXP mask = PROTECT(r_peek_frame());
-  SEXP out = vctrs_eval_mask_n_impl(R_NilValue, fn, syms, args, mask);
-
-  UNPROTECT(1);
-  return out;
+  return vctrs_eval_mask_n_impl(R_NilValue, fn, syms, args, vctrs_ns_env);
 }
 SEXP vctrs_eval_mask1(SEXP fn,
                       SEXP x_sym, SEXP x) {
@@ -239,7 +236,7 @@ SEXP vctrs_maybe_shared_col(SEXP x, SEXP i) {
 }
 
 // [[ register() ]]
-SEXP vctrs_new_df_unshared_col() {
+SEXP vctrs_new_df_unshared_col(void) {
   SEXP col = PROTECT(Rf_allocVector(INTSXP, 1));
   INTEGER(col)[0] = 1;
 
@@ -357,7 +354,10 @@ SEXP bare_df_map(SEXP df, SEXP (*fn)(SEXP)) {
   SEXP out = PROTECT(map(df, fn));
 
   // Total ownership because `map()` generates a fresh list
-  out = vec_bare_df_restore(out, df, vctrs_shared_zero_int, VCTRS_OWNED_true);
+  out = vec_bare_df_restore(out,
+                            df,
+                            VCTRS_OWNED_true,
+                            VCTRS_RECURSE_false);
 
   UNPROTECT(1);
   return out;
@@ -368,7 +368,10 @@ SEXP df_map(SEXP df, SEXP (*fn)(SEXP)) {
   SEXP out = PROTECT(map(df, fn));
 
   // Total ownership because `map()` generates a fresh list
-  out = vec_df_restore(out, df, vctrs_shared_zero_int, VCTRS_OWNED_true);
+  out = vec_df_restore(out,
+                       df,
+                       VCTRS_OWNED_true,
+                       VCTRS_RECURSE_false);
 
   UNPROTECT(1);
   return out;
@@ -477,6 +480,19 @@ SEXP s3_sym_get_method(SEXP sym, SEXP table) {
 // [[ register() ]]
 SEXP vctrs_s3_find_method(SEXP generic, SEXP x, SEXP table) {
   return s3_find_method(r_chr_get_c_string(generic, 0), x, table);
+}
+
+// [[ register() ]]
+r_obj* ffi_s3_get_method(r_obj* generic, r_obj* class, r_obj* table) {
+  if (!r_is_string(generic)) {
+    r_stop_internal("`generic` must be a string");
+  }
+  if (!r_is_string(class)) {
+    r_stop_internal("`class` must be a string");
+  }
+  return s3_get_method(r_chr_get_c_string(generic, 0),
+                       r_chr_get_c_string(class, 0),
+                       table);
 }
 
 // [[ include("utils.h") ]]
@@ -650,9 +666,9 @@ SEXP s4_class_find_method(SEXP class, SEXP table) {
 // [[ include("utils.h") ]]
 bool vec_implements_ptype2(SEXP x) {
   switch (vec_typeof(x)) {
-  case vctrs_type_scalar:
+  case VCTRS_TYPE_scalar:
     return false;
-  case vctrs_type_s3: {
+  case VCTRS_TYPE_s3: {
     SEXP method_sym = R_NilValue;
     SEXP method = s3_find_method_xy("vec_ptype2", x, x, vctrs_method_table, &method_sym);
 
@@ -784,16 +800,20 @@ bool list_has_inner_vec_names(SEXP x, R_len_t size) {
  * @return A list of the same length as `xs`.
  */
 // [[ include("utils.h") ]]
-SEXP list_pluck(SEXP xs, R_len_t i) {
-  R_len_t n = Rf_length(xs);
-  SEXP out = PROTECT(r_new_list(n));
+r_obj* list_pluck(r_obj* xs, r_ssize i) {
+  r_ssize n = r_length(xs);
+  r_obj* const * v_xs = r_list_cbegin(xs);
 
-  for (R_len_t j = 0; j < n; ++j) {
-    SEXP x = r_list_get(xs, j);
-    r_list_poke(out, j, r_list_get(x, i));
+  r_obj* out = KEEP(r_new_list(n));
+
+  for (r_ssize j = 0; j < n; ++j) {
+    r_obj* x = v_xs[j];
+    if (x != r_null) {
+      r_list_poke(out, j, r_list_get(x, i));
+    }
   }
 
-  UNPROTECT(1);
+  FREE(1);
   return out;
 }
 
@@ -934,6 +954,15 @@ static SEXP fns_colnames = NULL;
 SEXP colnames(SEXP x) {
   return vctrs_dispatch1(syms_colnames, fns_colnames,
                          syms_x, x);
+}
+
+r_obj* colnames2(r_obj* x) {
+  r_obj* names = colnames(x);
+  if (names == r_null) {
+    return r_alloc_character(Rf_ncols(x));
+  } else {
+    return names;
+  }
 }
 
 // [[ include("utils.h") ]]
@@ -1468,16 +1497,7 @@ bool vctrs_debug_verbose = false;
 SEXP vctrs_ns_env = NULL;
 SEXP vctrs_shared_empty_str = NULL;
 
-SEXP vctrs_shared_empty_lgl = NULL;
-SEXP vctrs_shared_empty_int = NULL;
-SEXP vctrs_shared_empty_dbl = NULL;
-SEXP vctrs_shared_empty_cpl = NULL;
-SEXP vctrs_shared_empty_chr = NULL;
-SEXP vctrs_shared_empty_raw = NULL;
-SEXP vctrs_shared_empty_list = NULL;
 SEXP vctrs_shared_empty_date = NULL;
-SEXP vctrs_shared_true = NULL;
-SEXP vctrs_shared_false = NULL;
 
 Rcomplex vctrs_shared_na_cpl;
 SEXP vctrs_shared_na_lgl = NULL;
@@ -1493,6 +1513,8 @@ SEXP strings_minimal = NULL;
 SEXP strings_unique = NULL;
 SEXP strings_universal = NULL;
 SEXP strings_check_unique = NULL;
+SEXP strings_unique_quiet = NULL;
+SEXP strings_universal_quiet = NULL;
 SEXP strings_key = NULL;
 SEXP strings_loc = NULL;
 SEXP strings_val = NULL;
@@ -1539,7 +1561,6 @@ SEXP syms_y_size = NULL;
 SEXP syms_to = NULL;
 SEXP syms_dots = NULL;
 SEXP syms_bracket = NULL;
-SEXP syms_arg = NULL;
 SEXP syms_x_arg = NULL;
 SEXP syms_y_arg = NULL;
 SEXP syms_to_arg = NULL;
@@ -1592,6 +1613,7 @@ SEXP syms_chr_proxy_collate = NULL;
 SEXP syms_actual = NULL;
 SEXP syms_required = NULL;
 SEXP syms_call = NULL;
+SEXP syms_dot_call = NULL;
 
 SEXP fns_bracket = NULL;
 SEXP fns_quote = NULL;
@@ -1613,7 +1635,7 @@ SEXP r_new_shared_character(const char* name) {
   return out;
 }
 
-void c_print_backtrace() {
+void c_print_backtrace(void) {
 #if defined(RLIB_DEBUG)
 #include <execinfo.h>
 #include <stdlib.h>
@@ -1632,8 +1654,6 @@ void c_print_backtrace() {
 }
 
 
-struct r_lazy r_lazy_null;
-
 void vctrs_init_utils(SEXP ns) {
   vctrs_ns_env = ns;
 
@@ -1651,7 +1671,7 @@ void vctrs_init_utils(SEXP ns) {
 
   // Holds the CHARSXP objects because unlike symbols they can be
   // garbage collected
-  strings2 = r_new_shared_vector(STRSXP, 23);
+  strings2 = r_new_shared_vector(STRSXP, 25);
 
   strings_dots = Rf_mkChar("...");
   SET_STRING_ELT(strings2, 0, strings_dots);
@@ -1685,6 +1705,12 @@ void vctrs_init_utils(SEXP ns) {
 
   strings_check_unique = Rf_mkChar("check_unique");
   SET_STRING_ELT(strings2, 10, strings_check_unique);
+
+  strings_unique_quiet = Rf_mkChar("unique_quiet");
+  SET_STRING_ELT(strings2, 23, strings_unique_quiet);
+
+  strings_universal_quiet = Rf_mkChar("universal_quiet");
+  SET_STRING_ELT(strings2, 24, strings_universal_quiet);
 
   strings_key = Rf_mkChar("key");
   SET_STRING_ELT(strings2, 11, strings_key);
@@ -1784,21 +1810,8 @@ void vctrs_init_utils(SEXP ns) {
   SET_STRING_ELT(classes_vctrs_group_rle, 2, Rf_mkChar("vctrs_vctr"));
 
 
-  vctrs_shared_empty_lgl = r_new_shared_vector(LGLSXP, 0);
-  vctrs_shared_empty_int = r_new_shared_vector(INTSXP, 0);
-  vctrs_shared_empty_dbl = r_new_shared_vector(REALSXP, 0);
-  vctrs_shared_empty_cpl = r_new_shared_vector(CPLXSXP, 0);
-  vctrs_shared_empty_chr = r_new_shared_vector(STRSXP, 0);
-  vctrs_shared_empty_raw = r_new_shared_vector(RAWSXP, 0);
-  vctrs_shared_empty_list = r_new_shared_vector(VECSXP, 0);
   vctrs_shared_empty_date = r_new_shared_vector(REALSXP, 0);
   Rf_setAttrib(vctrs_shared_empty_date, R_ClassSymbol, classes_date);
-
-  vctrs_shared_true = r_new_shared_vector(LGLSXP, 1);
-  LOGICAL(vctrs_shared_true)[0] = 1;
-
-  vctrs_shared_false = r_new_shared_vector(LGLSXP, 1);
-  LOGICAL(vctrs_shared_false)[0] = 0;
 
   vctrs_shared_na_cpl.i = NA_REAL;
   vctrs_shared_na_cpl.r = NA_REAL;
@@ -1821,7 +1834,6 @@ void vctrs_init_utils(SEXP ns) {
   syms_to = Rf_install("to");
   syms_dots = Rf_install("...");
   syms_bracket = Rf_install("[");
-  syms_arg = Rf_install("arg");
   syms_x_arg = Rf_install("x_arg");
   syms_y_arg = Rf_install("y_arg");
   syms_to_arg = Rf_install("to_arg");
@@ -1857,7 +1869,6 @@ void vctrs_init_utils(SEXP ns) {
   syms_parent = Rf_install("parent");
   syms_s3_methods_table = Rf_install(".__S3MethodsTable__.");
   syms_from_dispatch = Rf_install("vctrs:::from_dispatch");
-  syms_df_fallback = Rf_install("vctrs:::df_fallback");
   syms_s3_fallback = Rf_install("vctrs:::s3_fallback");
   syms_stop_incompatible_type = Rf_install("stop_incompatible_type");
   syms_stop_incompatible_size = Rf_install("stop_incompatible_size");
@@ -1876,6 +1887,7 @@ void vctrs_init_utils(SEXP ns) {
   syms_actual = Rf_install("actual");
   syms_required = Rf_install("required");
   syms_call = Rf_install("call");
+  syms_dot_call = Rf_install(".call");
 
   fns_bracket = Rf_findVar(syms_bracket, R_BaseEnv);
   fns_quote = Rf_findVar(Rf_install("quote"), R_BaseEnv);
@@ -1925,8 +1937,6 @@ void vctrs_init_utils(SEXP ns) {
     MARK_NOT_MUTABLE(result_attrib);
     UNPROTECT(4);
   }
-
-  r_lazy_null = (struct r_lazy) { 0 };
 
   // We assume the following in `union vctrs_dbl_indicator`
   VCTRS_ASSERT(sizeof(double) == sizeof(int64_t));

@@ -1,4 +1,5 @@
 #include "vctrs.h"
+#include "type-data-frame.h"
 #include "decl/dictionary-decl.h"
 
 // Initialised at load time
@@ -69,11 +70,11 @@ static struct dictionary* new_dictionary_opts(SEXP x, struct dictionary_opts* op
   enum vctrs_type type = vec_proxy_typeof(x);
 
   struct poly_vec* p_poly_vec = new_poly_vec(x, type);
-  PROTECT_POLY_VEC(p_poly_vec, &nprot);
+  KEEP_N(p_poly_vec->shelter, &nprot);
   d->p_poly_vec = p_poly_vec;
 
-  d->p_equal_na_equal = new_poly_p_equal_na_equal(type);
-  d->p_is_incomplete = new_poly_p_is_incomplete(type);
+  d->p_equal_na_equal = poly_p_equal_na_equal(type);
+  d->p_is_incomplete = poly_p_is_incomplete(type);
 
   d->used = 0;
 
@@ -329,6 +330,8 @@ SEXP vctrs_id(SEXP x) {
 // [[ register() ]]
 SEXP vctrs_match(SEXP needles, SEXP haystack, SEXP na_equal,
                  SEXP frame) {
+  struct r_lazy call = { .x = frame, .env = r_null };
+
   struct r_lazy needles_arg_ = { .x = syms.needles_arg, .env = frame };
   struct vctrs_arg needles_arg = new_lazy_arg(&needles_arg_);
 
@@ -339,7 +342,8 @@ SEXP vctrs_match(SEXP needles, SEXP haystack, SEXP na_equal,
                           haystack,
                           r_bool_as_int(na_equal),
                           &needles_arg,
-                          &haystack_arg);
+                          &haystack_arg,
+                          call);
 }
 
 static inline void vec_match_loop(int* p_out,
@@ -355,24 +359,25 @@ SEXP vec_match_params(SEXP needles,
                       SEXP haystack,
                       bool na_equal,
                       struct vctrs_arg* needles_arg,
-                      struct vctrs_arg* haystack_arg) {
+                      struct vctrs_arg* haystack_arg,
+                      struct r_lazy call) {
   int nprot = 0;
   int _;
   SEXP type = vec_ptype2_params(needles, haystack,
                                 needles_arg, haystack_arg,
-                                DF_FALLBACK_quiet,
+                                call,
                                 &_);
   PROTECT_N(type, &nprot);
 
   needles = vec_cast_params(needles, type,
                             needles_arg, vec_args.empty,
-                            DF_FALLBACK_quiet,
+                            call,
                             S3_FALLBACK_false);
   PROTECT_N(needles, &nprot);
 
   haystack = vec_cast_params(haystack, type,
                              haystack_arg, vec_args.empty,
-                             DF_FALLBACK_quiet,
+                             call,
                              S3_FALLBACK_false);
   PROTECT_N(haystack, &nprot);
 
@@ -452,6 +457,8 @@ static inline void vec_match_loop_propagate(int* p_out,
 
 // [[ register() ]]
 SEXP vctrs_in(SEXP needles, SEXP haystack, SEXP na_equal_, SEXP frame) {
+  struct r_lazy call = { .x = frame, .env = r_null };
+
   int nprot = 0;
   bool na_equal = r_bool_as_int(na_equal_);
 
@@ -465,19 +472,19 @@ SEXP vctrs_in(SEXP needles, SEXP haystack, SEXP na_equal_, SEXP frame) {
 
   SEXP type = vec_ptype2_params(needles, haystack,
                                 &needles_arg, &haystack_arg,
-                                DF_FALLBACK_quiet,
+                                call,
                                 &_);
   PROTECT_N(type, &nprot);
 
   needles = vec_cast_params(needles, type,
                             &needles_arg, vec_args.empty,
-                            DF_FALLBACK_quiet,
+                            call,
                             S3_FALLBACK_false);
   PROTECT_N(needles, &nprot);
 
   haystack = vec_cast_params(haystack, type,
                              &haystack_arg, vec_args.empty,
-                             DF_FALLBACK_quiet,
+                             call,
                              S3_FALLBACK_false);
   PROTECT_N(haystack, &nprot);
 
@@ -535,42 +542,47 @@ SEXP vctrs_count(SEXP x) {
   struct dictionary* d = new_dictionary(x);
   PROTECT_DICT(d, &nprot);
 
-  SEXP val = PROTECT_N(Rf_allocVector(INTSXP, d->size), &nprot);
-  int* p_val = INTEGER(val);
+  SEXP count = PROTECT_N(Rf_allocVector(INTSXP, d->size), &nprot);
+  int* p_count = INTEGER(count);
 
   for (int i = 0; i < n; ++i) {
     uint32_t hash = dict_hash_scalar(d, i);
 
     if (d->key[hash] == DICT_EMPTY) {
       dict_put(d, hash, i);
-      p_val[hash] = 0;
+      p_count[hash] = 0;
     }
-    p_val[hash]++;
+    p_count[hash]++;
   }
 
   // Create output
-  SEXP out_key = PROTECT_N(Rf_allocVector(INTSXP, d->used), &nprot);
-  SEXP out_val = PROTECT_N(Rf_allocVector(INTSXP, d->used), &nprot);
-  int* p_out_key = INTEGER(out_key);
-  int* p_out_val = INTEGER(out_val);
+  SEXP out_loc = PROTECT_N(Rf_allocVector(INTSXP, d->used), &nprot);
+  int* p_out_loc = INTEGER(out_loc);
+
+  // Reuse `count` storage, which will be narrowed
+  SEXP out_count = count;
+  int* p_out_count = p_count;
 
   int i = 0;
   for (uint32_t hash = 0; hash < d->size; ++hash) {
     if (d->key[hash] == DICT_EMPTY)
       continue;
 
-    p_out_key[i] = d->key[hash] + 1;
-    p_out_val[i] = p_val[hash];
+    p_out_loc[i] = d->key[hash] + 1;
+    p_out_count[i] = p_count[hash];
     i++;
   }
 
+  out_count = PROTECT_N(r_int_resize(out_count, d->used), &nprot);
+
   SEXP out = PROTECT_N(Rf_allocVector(VECSXP, 2), &nprot);
-  SET_VECTOR_ELT(out, 0, out_key);
-  SET_VECTOR_ELT(out, 1, out_val);
+  SET_VECTOR_ELT(out, 0, out_loc);
+  SET_VECTOR_ELT(out, 1, out_count);
   SEXP names = PROTECT_N(Rf_allocVector(STRSXP, 2), &nprot);
-  SET_STRING_ELT(names, 0, Rf_mkChar("key"));
-  SET_STRING_ELT(names, 1, Rf_mkChar("val"));
+  SET_STRING_ELT(names, 0, Rf_mkChar("loc"));
+  SET_STRING_ELT(names, 1, Rf_mkChar("count"));
   Rf_setAttrib(out, R_NamesSymbol, names);
+  init_data_frame(out, d->used);
 
   UNPROTECT(nprot);
   return out;

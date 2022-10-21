@@ -15,11 +15,12 @@
 #'
 #' ## vctrs dependencies
 #'
-#' - [vec_unchop()]
+#' - [list_unchop()]
 #'
 #' @inheritParams vec_c
 #'
-#' @param ... Vectors to interleave. These will be recycled to a common size.
+#' @param ... Vectors to interleave. These will be
+#'   [recycled][vector_recycling_rules] to a common size.
 #'
 #' @export
 #' @examples
@@ -37,13 +38,12 @@
 vec_interleave <- function(...,
                            .ptype = NULL,
                            .name_spec = NULL,
-                           .name_repair = c("minimal", "unique", "check_unique", "universal")) {
+                           .name_repair = c("minimal", "unique", "check_unique", "universal", "unique_quiet", "universal_quiet")) {
   args <- list2(...)
 
-  # TODO: Use `vec_drop_missing()`
   # `NULL`s must be dropped up front to generate appropriate indices
-  missing <- vec_equal_na(args)
-  if (any(missing)) {
+  if (vec_any_missing(args)) {
+    missing <- vec_detect_missing(args)
     args <- vec_slice(args, !missing)
   }
 
@@ -52,7 +52,7 @@ vec_interleave <- function(...,
 
   indices <- vec_interleave_indices(n, size)
 
-  vec_unchop(
+  list_unchop(
     x = args,
     indices = indices,
     ptype = .ptype,

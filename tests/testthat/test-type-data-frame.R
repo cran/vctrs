@@ -53,21 +53,13 @@ test_that("combining data frames with foreign classes uses fallback", {
   foo <- foobar(data.frame())
   df <- data.frame()
 
-  # Same type fallback
   expect_identical(vec_ptype_common(foo, foo, foo), foo)
-  expect_incompatible_df(vec_ptype_common(foo, foo, df, foo), df)
+  expect_identical(vec_ptype_common(foo, foo, df, foo), df)
 
-  expect_df_fallback_warning(res <- vec_ptype2_fallback(foo, df))
-  expect_identical(res, new_fallback_df(df, c("vctrs_foobar", "data.frame")))
-
-  expect_df_fallback_warning(res <- vec_ptype2_fallback(df, foo))
-  expect_identical(res, new_fallback_df(df, c("data.frame", "vctrs_foobar")))
-
-  expect_df_fallback_warning(res <- vec_ptype_common_df_fallback(foo, df))
-  expect_identical(res, df)
-
-  expect_df_fallback_warning(res <- vec_ptype_common_df_fallback(df, foo))
-  expect_identical(res, df)
+  expect_identical(vec_ptype2(foo, df), data.frame())
+  expect_identical(vec_ptype2(df, foo), data.frame())
+  expect_identical(vec_ptype_common(foo, df), df)
+  expect_identical(vec_ptype_common(df, foo), df)
 
   cnds <- list()
   withCallingHandlers(
@@ -76,48 +68,22 @@ test_that("combining data frames with foreign classes uses fallback", {
       invokeRestart("muffleWarning")
     },
     expect_identical(
-      vec_ptype_common_df_fallback(foo, df, foo, foo),
+      vec_ptype_common(foo, df, foo, foo),
       df
     )
   )
 
-  # There should be only one warning even if many fallbacks
-  expect_length(cnds, 1)
-  expect_s3_class(cnds[[1]], "warning")
-  expect_match(cnds[[1]]$message, "falling back to <data.frame>")
+  # There are no longer any warnings
+  expect_length(cnds, 0)
 
-  expect_incompatible_df(
+  expect_equal(
     vec_cbind(foobar(data.frame(x = 1)), data.frame(y = 2)),
     data.frame(x = 1, y = 2)
   )
-  expect_incompatible_df(
+  expect_equal(
     vec_rbind(foo, data.frame(), foo),
     df
   )
-
-  foo <- structure(mtcars[1:3], class = c("foo", "data.frame"))
-  bar <- structure(mtcars[4:6], class = c("bar", "data.frame"))
-  baz <- structure(mtcars[7:9], class = c("baz", "data.frame"))
-
-  with_fallback_warning(expect_df_fallback_warning(invisible(vec_rbind(foo, data.frame(), foo))))
-  with_fallback_warning(expect_df_fallback_warning(invisible(vec_cbind(foo, data.frame(x = 1)))))
-  with_fallback_warning(expect_df_fallback_warning(invisible(vec_cbind(foo, data.frame(x = 1), bar))))
-  with_fallback_warning(expect_df_fallback_warning(invisible(vec_rbind(foo, baz, bar, baz, foo, bar))))
-
-  expect_snapshot({
-    vec_ptype_common_df_fallback(foo, bar, baz)
-    vec_ptype_common_df_fallback(foo, baz, bar, baz, foo, bar)
-
-    with_fallback_warning(invisible(vec_rbind(foo, data.frame(), foo)))
-    with_fallback_warning(invisible(vec_cbind(foo, data.frame(x = 1))))
-    with_fallback_warning(invisible(vec_cbind(foo, data.frame(x = 1), bar)))
-    with_fallback_warning(invisible(vec_rbind(foo, baz, bar, baz, foo, bar)))
-
-    with_fallback_quiet(invisible(vec_rbind(foo, data.frame(), foo)))
-    with_fallback_quiet(invisible(vec_cbind(foo, data.frame(x = 1))))
-    with_fallback_quiet(invisible(vec_cbind(foo, data.frame(x = 1), bar)))
-    with_fallback_quiet(invisible(vec_rbind(foo, baz, bar, baz, foo, bar)))
-  })
 })
 
 
@@ -448,10 +414,14 @@ test_that("new_data_frame() zaps existing attributes", {
 test_that("data_frame() and df_list() report error context", {
   expect_snapshot({
     (expect_error(data_frame(a = 1, a = 1)))
+    (expect_error(data_frame(a = 1, a = 1, .error_call = call("foo"))))
     (expect_error(data_frame(a = 1:2, b = int())))
+    (expect_error(data_frame(a = 1:2, b = int(), .error_call = call("foo"))))
 
     (expect_error(df_list(a = 1, a = 1)))
+    (expect_error(df_list(a = 1, a = 1, .error_call = call("foo"))))
     (expect_error(df_list(a = 1:2, b = int())))
+    (expect_error(df_list(a = 1:2, b = int(), .error_call = call("foo"))))
   })
 })
 
@@ -489,23 +459,50 @@ test_that("unnamed input is auto named with empty strings", {
   expect_named(data_frame(1, 2, .name_repair = "minimal"), c("", ""))
 })
 
-test_that("unnamed data frames are auto spliced", {
+test_that("unnamed data frames are auto unpacked", {
   expect_identical(
     data_frame(w = 1, data_frame(x = 2, y = 3), z = 4),
     data_frame(w = 1, x = 2, y = 3, z = 4)
   )
 })
 
-test_that("named data frames are not spliced", {
+test_that("named data frames are not unpacked", {
   df_col <- data_frame(x = 2, y = 3)
   df <- data_frame(w = 1, col = data_frame(x = 2, y = 3), z = 4)
 
   expect_identical(df$col, df_col)
 })
 
-test_that("spliced data frames without names are caught", {
+test_that("unpacked data frames without names are caught", {
   df_col <- new_data_frame(list(1))
   expect_error(data_frame(df_col), "corrupt data frame")
+})
+
+test_that("unpacking in `df_list()` can be disabled with `.unpack = FALSE`", {
+  out <- df_list(
+    w = 1,
+    data_frame(x = 2, y = 3),
+    z = 4,
+    .unpack = FALSE,
+    .name_repair = "minimal"
+  )
+
+  expect <- list(
+    w = 1,
+    data_frame(x = 2, y = 3),
+    z = 4
+  )
+
+  expect_identical(out, expect)
+})
+
+test_that("`.unpack` is validated", {
+  expect_snapshot(error = TRUE, {
+    df_list(.unpack = 1)
+  })
+  expect_snapshot(error = TRUE, {
+    df_list(.unpack = c(TRUE, FALSE))
+  })
 })
 
 test_that("`NULL` inputs are dropped", {
@@ -541,6 +538,22 @@ test_that("`.name_repair` happens after splicing", {
   expect_named(res, c("x...1", "x...2"))
 })
 
+test_that("`.name_repair` can be quiet", {
+  local_name_repair_verbose()
+
+  expect_snapshot({
+    dfl_unique <- df_list(1, 2, .name_repair = "unique_quiet")
+    dfl_universal <- df_list("if" = 1, "in" = 2, .name_repair = "universal_quiet")
+    df_unique <- data_frame(1, 2, .name_repair = "unique_quiet")
+    df_universal <- data_frame("if" = 1, "in" = 2, .name_repair = "universal_quiet")
+  })
+
+  expect_named(dfl_unique, c("...1", "...2"))
+  expect_named(dfl_universal, c(".if", ".in"))
+  expect_named(df_unique, c("...1", "...2"))
+  expect_named(df_universal, c(".if", ".in"))
+})
+
 # fallback ----------------------------------------------------------------
 
 test_that("data frame fallback handles column types (#999)", {
@@ -552,6 +565,10 @@ test_that("data frame fallback handles column types (#999)", {
   expect_identical(vec_ptype2(df1, df2), common)
   expect_identical(vec_ptype2(df2, df1), common)
 
+  exp <- foobar(data_frame(x = 1, y = na_dbl))
+  expect_identical(vec_cast(df1, df2), exp)
+  expect_identical(vec_cast(set_tibble(df1), set_tibble(df2)), set_tibble(exp))
+
   expect_snapshot({
     local_error_call(call("my_function"))
     (expect_error(
@@ -562,16 +579,11 @@ test_that("data frame fallback handles column types (#999)", {
       vec_ptype2(df3, df1),
       class = "vctrs_error_incompatible_type"
     ))
+    (expect_error(
+      vec_cast(df2, df1),
+      class = "vctrs_error_incompatible_type"
+    ))
   })
-
-  expect_identical(
-    vec_cast(df1, df2),
-    foobar(data.frame(x = 1, y = na_dbl))
-  )
-  expect_error(
-    vec_cast(df2, df1),
-    class = "vctrs_error_cast_lossy"
-  )
 
   expect_identical(
     vec_rbind(df1, df2),
@@ -582,7 +594,7 @@ test_that("data frame fallback handles column types (#999)", {
   df1_attrib <- foobar(df1, foo = "foo")
   df2_attrib <- foobar(df2, bar = "bar")
   exp <- data.frame(x = c(1, 1), y = c(NA, 2))
-  expect_incompatible_df(
+  expect_equal(
     vec_rbind(df1_attrib, df2_attrib),
     exp
   )
@@ -597,80 +609,14 @@ test_that("data frame fallback handles column types (#999)", {
     },
     vec_rbind(df1_attrib, df2_attrib)
   )
-
-  expect_identical(out, foobar(exp, dispatched = TRUE))
+  expect_identical(out, exp)
 })
 
 test_that("falls back to tibble for tibble subclasses (#1025)", {
   foo <- foobar(tibble::as_tibble(mtcars))
-  expect_s3_class(expect_df_fallback_warning_maybe(vec_rbind(foo, mtcars)), "tbl_df")
-  expect_s3_class(expect_df_fallback_warning_maybe(vec_rbind(foo, mtcars, mtcars)), "tbl_df")
-  expect_s3_class(expect_df_fallback_warning_maybe(vec_rbind(foo, mtcars, foobar(mtcars))), "tbl_df")
-
-  with_fallback_warning(expect_df_fallback_warning(
-    vec_rbind(
-      foobar(tibble::as_tibble(mtcars)),
-      mtcars,
-      foobaz(mtcars)
-    )
-  ))
-  with_fallback_warning(expect_df_fallback_warning(
-    vec_rbind(
-      tibble::as_tibble(mtcars),
-      foobar(tibble::as_tibble(mtcars))
-    )
-  ))
-  with_fallback_warning(expect_df_fallback_warning(
-    vec_rbind(
-      foobar(tibble::as_tibble(mtcars)),
-      mtcars,
-      foobar(tibble::as_tibble(mtcars))
-    )
-  ))
-
-  expect_snapshot({
-    with_fallback_warning(
-      invisible(vec_rbind(
-        foobar(tibble::as_tibble(mtcars)),
-        mtcars,
-        foobaz(mtcars)
-      ))
-    )
-    with_fallback_warning(
-      invisible(vec_rbind(
-        tibble::as_tibble(mtcars),
-        foobar(tibble::as_tibble(mtcars))
-      ))
-    )
-    with_fallback_warning(
-      invisible(vec_rbind(
-        foobar(tibble::as_tibble(mtcars)),
-        mtcars,
-        foobar(tibble::as_tibble(mtcars))
-      ))
-    )
-
-    with_fallback_quiet(
-      invisible(vec_rbind(
-        foobar(tibble::as_tibble(mtcars)),
-        mtcars,
-        foobaz(mtcars)
-      ))
-    )
-    with_fallback_quiet(
-      invisible(vec_rbind(
-        tibble::as_tibble(mtcars),
-        foobar(tibble::as_tibble(mtcars))
-      ))
-    )
-    with_fallback_quiet(
-      invisible(vec_rbind(
-        foobar(tibble::as_tibble(mtcars)),
-        mtcars,
-        foobar(tibble::as_tibble(mtcars))
-      ))
-    )
-  })
+  expect_s3_class(vec_rbind(foo, mtcars), "tbl_df")
+  expect_s3_class(vec_rbind(foo, mtcars, mtcars), "tbl_df")
+  expect_s3_class(vec_rbind(foo, mtcars, foobar(mtcars)), "tbl_df")
 })
 
 test_that("fallback is recursive", {
@@ -681,8 +627,8 @@ test_that("fallback is recursive", {
   baz <- new_data_frame(list(y = 1:3, x = foobar(df, bar = TRUE)))
 
   exp <- new_data_frame(list(x = vec_rbind(df, df)))
-  expect_incompatible_df(vec_rbind(foo, bar), exp)
+  expect_equal(vec_rbind(foo, bar), exp)
 
   exp <- new_data_frame(list(x = vec_rbind(df, df), y = c(NA, NA, NA, 1:3)))
-  expect_incompatible_df(vec_rbind(foo, baz), exp)
+  expect_equal(vec_rbind(foo, baz), exp)
 })

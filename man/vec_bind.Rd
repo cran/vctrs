@@ -10,15 +10,19 @@ vec_rbind(
   ...,
   .ptype = NULL,
   .names_to = rlang::zap(),
-  .name_repair = c("unique", "universal", "check_unique"),
-  .name_spec = NULL
+  .name_repair = c("unique", "universal", "check_unique", "unique_quiet",
+    "universal_quiet"),
+  .name_spec = NULL,
+  .error_call = current_env()
 )
 
 vec_cbind(
   ...,
   .ptype = NULL,
   .size = NULL,
-  .name_repair = c("unique", "universal", "check_unique", "minimal")
+  .name_repair = c("unique", "universal", "check_unique", "minimal", "unique_quiet",
+    "universal_quiet"),
+  .error_call = current_env()
 )
 }
 \arguments{
@@ -53,9 +57,9 @@ not named, an integer column is used instead.
 \item If \code{NULL}, the input names are used as row names.
 }}
 
-\item{.name_repair}{One of \code{"unique"}, \code{"universal"}, or
-\code{"check_unique"}. See \code{\link[=vec_as_names]{vec_as_names()}} for the meaning of these
-options.
+\item{.name_repair}{One of \code{"unique"}, \code{"universal"}, \code{"check_unique"},
+\code{"unique_quiet"}, or  \code{"universal_quiet"}. See \code{\link[=vec_as_names]{vec_as_names()}} for the
+meaning of these options.
 
 With \code{vec_rbind()}, the repair function is applied to all inputs
 separately. This is because \code{vec_rbind()} needs to align their
@@ -71,11 +75,16 @@ names of the inputs. This only has an effect when \code{.names_to} is
 set to \code{NULL}, which causes the input names to be assigned as row
 names.}
 
-\item{.size}{If, \code{NULL}, the default, will determine the number of
-rows in \code{vec_cbind()} output by using the standard recycling rules.
+\item{.error_call}{The execution environment of a currently
+running function, e.g. \code{caller_env()}. The function will be
+mentioned in error messages as the source of the error. See the
+\code{call} argument of \code{\link[rlang:abort]{abort()}} for more information.}
 
-Alternatively, specify the desired number of rows, and any inputs
-of length 1 will be recycled appropriately.}
+\item{.size}{If, \code{NULL}, the default, will determine the number of rows in
+\code{vec_cbind()} output by using the tidyverse \link[=vector_recycling_rules]{recycling rules}.
+
+Alternatively, specify the desired number of rows, and any inputs of length
+1 will be recycled appropriately.}
 }
 \value{
 A data frame, or subclass of data frame.

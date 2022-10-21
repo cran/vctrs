@@ -184,7 +184,7 @@
     Code
       (expect_error(vec_assert(1, size = "x")))
     Output
-      <error/vctrs_error_incompatible_type>
+      <error/vctrs_error_cast>
       Error in `vec_assert()`:
       ! Can't convert `size` <character> to <integer>.
 
@@ -206,6 +206,14 @@
       <error/rlang_error>
       Error in `my_function()`:
       ! `my_arg` must be a list, not an environment.
+
+# vec_check_list() uses a special error when `arg` is the empty string (#1604)
+
+    Code
+      vec_check_list(1, arg = "")
+    Condition
+      Error:
+      ! Input must be a list, not a number.
 
 # vec_check_list() and list_check_all_vectors() work
 
@@ -234,4 +242,82 @@
       <error/vctrs_error_scalar_type>
       Error in `my_function()`:
       ! `my_arg$foo` must be a vector, not an environment.
+
+# list_check_all_size() works
+
+    Code
+      my_function <- (function(my_arg, size) list_check_all_size(my_arg, size))
+      (expect_error(list_check_all_size(list(1:2, 1:3), 2)))
+    Output
+      <error/vctrs_error_assert_size>
+      Error:
+      ! `list(1:2, 1:3)[[2]]` must have size 2, not size 3.
+    Code
+      (expect_error(my_function(list(1:2, 1:3), 2)))
+    Output
+      <error/vctrs_error_assert_size>
+      Error in `my_function()`:
+      ! `my_arg[[2]]` must have size 2, not size 3.
+    Code
+      (expect_error(my_function(list(NULL, 1:2), 2)))
+    Output
+      <error/vctrs_error_assert_size>
+      Error in `my_function()`:
+      ! `my_arg[[1]]` must have size 2, not size 0.
+
+# list_all_size() and list_check_all_size() error on scalars
+
+    Code
+      (expect_error(list_all_size(x, 2)))
+    Output
+      <error/vctrs_error_scalar_type>
+      Error in `list_all_size()`:
+      ! `x[[1]]` must be a vector, not an environment.
+    Code
+      my_function <- (function(my_arg, size) list_check_all_size(my_arg, size))
+      (expect_error(my_function(x, 2)))
+    Output
+      <error/vctrs_error_scalar_type>
+      Error in `my_function()`:
+      ! `my_arg[[1]]` must be a vector, not an environment.
+
+# list_all_size() and list_check_all_size() throw error using internal call on non-list input
+
+    Code
+      (expect_error(list_all_size(1, 2)))
+    Output
+      <error/rlang_error>
+      Error in `list_all_size()`:
+      ! `x` must be a list, not a number.
+    Code
+      (expect_error(list_check_all_size(1, 2, arg = "arg", call = call("foo"))))
+    Output
+      <error/rlang_error>
+      Error in `list_check_all_size()`:
+      ! `x` must be a list, not a number.
+
+# list_all_size() and list_check_all_size() validate `size`
+
+    Code
+      (expect_error(list_all_size(list(), size = "x")))
+    Output
+      <error/rlang_error>
+      Error in `list_all_size()`:
+      ! `size` must be a scalar integer or double.
+    Code
+      (expect_error(list_check_all_size(list(), size = "x")))
+    Output
+      <error/rlang_error>
+      Error in `list_check_all_size()`:
+      ! `size` must be a scalar integer or double.
+
+# informative messages when 1d array doesn't match vector
+
+    Code
+      (expect_error(vec_assert(x, int())))
+    Output
+      <error/vctrs_error_assert_ptype>
+      Error:
+      ! `x` must be a vector with type <integer>.
+      Instead, it has type <integer[1d]>.
 

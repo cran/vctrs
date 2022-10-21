@@ -160,7 +160,7 @@ test_that("data frames are always classified as such even when dispatch is off",
 
 test_that("assertion is not applied on proxy", {
   local_methods(
-    vec_proxy.vctrs_foobar = unclass,
+    vec_proxy.vctrs_foobar = function(x, ...) unclass(x),
     vec_restore.vctrs_foobar = function(x, ...) foobar(x),
     `[.vctrs_foobar` = function(x, i) vec_slice(x, i)
   )
@@ -337,6 +337,12 @@ test_that("vec_check_list() works", {
   })
 })
 
+test_that("vec_check_list() uses a special error when `arg` is the empty string (#1604)", {
+  expect_snapshot(error = TRUE, {
+    vec_check_list(1, arg = "")
+  })
+})
+
 test_that("vec_check_list() and list_check_all_vectors() work", {
   expect_null(list_check_all_vectors(list()))
   expect_null(list_check_all_vectors(list(1, mtcars)))
@@ -347,4 +353,68 @@ test_that("vec_check_list() and list_check_all_vectors() work", {
     (expect_error(my_function(list(1, name = env()))))
     (expect_error(my_function(list(1, foo = env()))))
   })
+})
+
+test_that("list_all_size() works", {
+  expect_true(list_all_size(list(), 2))
+  expect_true(list_all_size(list(integer()), 0))
+  expect_true(list_all_size(list(NULL), 0))
+  expect_true(list_all_size(list(1:2, 2:3), 2))
+
+  expect_false(list_all_size(list(1:2, 1:3), 2))
+  expect_false(list_all_size(list(NULL, 1:2), 2))
+
+  expect_true(list_all_size(list_of(1:3, 2:4), 3))
+  expect_false(list_all_size(list_of(1:3, 2:4), 4))
+})
+
+test_that("list_check_all_size() works", {
+  expect_null(list_check_all_size(list(), 2))
+  expect_null(list_check_all_size(list(integer()), 0))
+  expect_null(list_check_all_size(list(NULL), 0))
+  expect_null(list_check_all_size(list(1:2, 2:3), 2))
+
+  expect_snapshot({
+    my_function <- function(my_arg, size) list_check_all_size(my_arg, size)
+
+    # Validates sizes
+    (expect_error(list_check_all_size(list(1:2, 1:3), 2)))
+    (expect_error(my_function(list(1:2, 1:3), 2)))
+
+    # `NULL` is not ignored
+    (expect_error(my_function(list(NULL, 1:2), 2)))
+  })
+})
+
+test_that("list_all_size() and list_check_all_size() error on scalars", {
+  x <- list(env())
+
+  expect_snapshot({
+    # Error considered internal to `list_all_size()`
+    (expect_error(list_all_size(x, 2)))
+
+    my_function <- function(my_arg, size) list_check_all_size(my_arg, size)
+    (expect_error(my_function(x, 2)))
+  })
+})
+
+test_that("list_all_size() and list_check_all_size() throw error using internal call on non-list input", {
+  expect_snapshot({
+    (expect_error(list_all_size(1, 2)))
+
+    # `arg` and `call` are ignored
+    (expect_error(list_check_all_size(1, 2, arg = "arg", call = call("foo"))))
+  })
+})
+
+test_that("list_all_size() and list_check_all_size() validate `size`", {
+  expect_snapshot({
+    (expect_error(list_all_size(list(), size = "x")))
+    (expect_error(list_check_all_size(list(), size = "x")))
+  })
+})
+
+test_that("informative messages when 1d array doesn't match vector", {
+  x <- array(1:3)
+  expect_snapshot((expect_error(vec_assert(x, int()))))
 })

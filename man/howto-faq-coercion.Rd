@@ -256,11 +256,11 @@ doesn’t know how to combine natural with the richer integer and double
 types:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{vec_c(new_natural(1), 10L)
-#> Error:
-#> ! Can't convert <my_natural> to <integer>.
+#> Error in `vec_c()`:
+#> ! Can't convert `..1` <my_natural> to <integer>.
 vec_c(1.5, new_natural(1))
-#> Error:
-#> ! Can't convert <my_natural> to <double>.
+#> Error in `vec_c()`:
+#> ! Can't convert `..2` <my_natural> to <double>.
 }\if{html}{\out{</div>}}
 
 This is quick work which completes the implementation of coercion

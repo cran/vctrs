@@ -7,7 +7,10 @@
 df_list(
   ...,
   .size = NULL,
-  .name_repair = c("check_unique", "unique", "universal", "minimal")
+  .unpack = TRUE,
+  .name_repair = c("check_unique", "unique", "universal", "minimal", "unique_quiet",
+    "universal_quiet"),
+  .error_call = current_env()
 )
 }
 \arguments{
@@ -17,8 +20,17 @@ are used for names of the resulting list.}
 \item{.size}{The common size of vectors supplied in \code{...}. If \code{NULL}, this
 will be computed as the common size of the inputs.}
 
-\item{.name_repair}{One of \code{"check_unique"}, \code{"unique"}, \code{"universal"} or
-\code{"minimal"}. See \code{\link[=vec_as_names]{vec_as_names()}} for the meaning of these options.}
+\item{.unpack}{Should unnamed data frame inputs be unpacked? Defaults to
+\code{TRUE}.}
+
+\item{.name_repair}{One of \code{"check_unique"}, \code{"unique"}, \code{"universal"},
+\code{"minimal"}, \code{"unique_quiet"}, or \code{"universal_quiet"}. See \code{\link[=vec_as_names]{vec_as_names()}}
+for the meaning of these options.}
+
+\item{.error_call}{The execution environment of a currently
+running function, e.g. \code{caller_env()}. The function will be
+mentioned in error messages as the source of the error. See the
+\code{call} argument of \code{\link[rlang:abort]{abort()}} for more information.}
 }
 \description{
 \code{df_list()} constructs the data structure underlying a data
@@ -29,11 +41,12 @@ a helper function for data frame subclasses.
 \section{Properties}{
 
 \itemize{
-\item Inputs are recycled to a common size with \code{\link[=vec_recycle_common]{vec_recycle_common()}}.
+\item Inputs are \link[=vector_recycling_rules]{recycled} to a common size with
+\code{\link[=vec_recycle_common]{vec_recycle_common()}}.
 \item With the exception of data frames, inputs are not modified in any way.
 Character vectors are never converted to factors, and lists are stored
 as-is for easy creation of list-columns.
-\item Unnamed data frame inputs are automatically spliced. Named data frame
+\item Unnamed data frame inputs are automatically unpacked. Named data frame
 inputs are stored unmodified as data frame columns.
 \item \code{NULL} inputs are completely ignored.
 \item The dots are dynamic, allowing for splicing of lists with \verb{!!!} and

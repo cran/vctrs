@@ -3,7 +3,6 @@
 \name{list_of}
 \alias{list_of}
 \alias{as_list_of}
-\alias{validate_list_of}
 \alias{is_list_of}
 \alias{vec_ptype2.vctrs_list_of}
 \alias{vec_cast.vctrs_list_of}
@@ -12,8 +11,6 @@
 list_of(..., .ptype = NULL)
 
 as_list_of(x, ...)
-
-validate_list_of(x)
 
 is_list_of(x)
 
@@ -35,11 +32,7 @@ this is a convenient way to make production code demand fixed types.}
 
 \item{y, to}{Arguments to \code{vec_ptype2()} and \code{vec_cast()}.}
 
-\item{x_arg}{Argument names for \code{x} and \code{y}. These are used
-in error messages to inform the user about the locations of
-incompatible types (see \code{\link[=stop_incompatible_type]{stop_incompatible_type()}}).}
-
-\item{y_arg}{Argument names for \code{x} and \code{y}. These are used
+\item{x_arg, y_arg}{Argument names for \code{x} and \code{y}. These are used
 in error messages to inform the user about the locations of
 incompatible types (see \code{\link[=stop_incompatible_type]{stop_incompatible_type()}}).}
 }

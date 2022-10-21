@@ -41,12 +41,6 @@ vec_restore.vctrs_rcrd <- function(x, to, ...) {
 }
 
 #' @export
-vec_proxy_equal.vctrs_rcrd <- function(x, ...) {
-  # Recursively proxy using a data frame
-  vec_proxy_equal(new_data_frame(x))
-}
-
-#' @export
 length.vctrs_rcrd <- function(x) {
   vec_size(x)
 }
@@ -95,7 +89,10 @@ vec_cast.vctrs_rcrd.vctrs_rcrd <- function(x, to, ...) {
 
 #' @export
 `[.vctrs_rcrd` <-  function(x, i, ...) {
-  vec_index(x, i, ...)
+  if (!missing(...)) {
+    abort("Can't index record vectors on dimensions greater than 1.")
+  }
+  vec_slice(x, maybe_missing(i))
 }
 
 #' @export

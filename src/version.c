@@ -1,7 +1,7 @@
 #define R_NO_REMAP
 #include <Rinternals.h>
 
-const char* vctrs_version = "0.4.2";
+const char* vctrs_version = "0.5.0";
 
 /**
  * This file records the expected package version in the shared
@@ -22,6 +22,6 @@ const char* vctrs_version = "0.4.2";
  */
 
 // [[ register() ]]
-SEXP vctrs_linked_version() {
+SEXP vctrs_linked_version(void) {
   return Rf_mkString(vctrs_version);
 }
