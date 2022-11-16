@@ -1,8 +1,8 @@
-285606d192e775ea98e17c58bd490c96 *DESCRIPTION
+bf995e8d641657711eaf475093b9cd7d *DESCRIPTION
 efb5a9df619b572f3449c7813bfdbac8 *LICENSE
 26e8ea3522f7f470d41408ce931449af *LICENSE.note
 50dd86896abc5b0927074814dc55b917 *NAMESPACE
-a647bf5aa30ffe46e41378ff587f9e8f *NEWS.md
+541dfedf2914cd8edc1265ddb87e0cbe *NEWS.md
 aa8a25ae369276c1dab0b1a900b9365e *R/aaa.R
 d0e98a3acb7a27924a7fac1435a02047 *R/altrep.R
 5fa87a23bec0d23042ba59613fa1f61d *R/arith.R
@@ -74,14 +74,14 @@ ea38cede4649e54c852d5ff84f16324a *R/type-sf.R
 f436fec5de5f7708e5672ce7accc05a8 *R/type-unspecified.R
 27b2b810b65e05c6fc6bbae3ef02cb56 *R/type-vctr.R
 6f0bea2d57fcfd4f739fa4aa3b8dbd69 *R/type.R
-b0b9e3a6620c93c054ca5cfbe1b26686 *R/type2.R
+485175b5607e1ea5eea8022c2b868386 *R/type2.R
 6137f151be3f347f7585f08fe722db83 *R/utils-cli.R
 ec4ee23ee6dbf4ddb33f852ce0f5cbdd *R/utils.R
 bdf5b41f02930f8e6559583b0f65232d *R/vctrs-deprecated.R
 a772f8c96ead388a24680bc4f67a1cc8 *R/vctrs-package.R
 36862a97f4e7ccedd87b75c7137b78e4 *R/zzz.R
 555bfd2a8cab84612cd3140cc15a6f9e *README.md
-d58adf20ac67ac8cd9419bb036b1c461 *build/vignette.rds
+2bafa6c1cfc9889077db7a888a3d3ccd *build/vignette.rds
 43cc81e569685f0ede8af83150d4f016 *inst/WORDLIST
 4d40df320b2e4c7062d437ca8a842532 *inst/doc/pillar.R
 7dec628565582a504f5aa9744f865cd9 *inst/doc/pillar.Rmd
@@ -91,7 +91,7 @@ bf23d34490edf83c1f19d878af4bca71 *inst/doc/pillar.html
 c08614f886f10161081953a7b4067217 *inst/doc/s3-vector.html
 eb2ce80049219a0c9e12195fb15ee16e *inst/doc/stability.R
 a16ae23dfc9ed0d60015bcfa8e899618 *inst/doc/stability.Rmd
-ee1289d03b107808978d39525306477a *inst/doc/stability.html
+4ae5bc7ead0ece2420998f85bbc0f828 *inst/doc/stability.html
 0352c1b2b6bfe4ec421cc38492b8ec6b *inst/doc/type-size.R
 72c63cb0dd9c179724530995e4cdf7f1 *inst/doc/type-size.Rmd
 ec6dad9dbb30aae5d2bb7408298e9702 *inst/doc/type-size.html
@@ -464,7 +464,7 @@ af3e3334d49927ec35b071a80149c81b *src/utils.h
 07bcb4acb7eff02dbd36fba1d2a8c0f9 *src/vctrs-core.c
 46297f9703f668d9b1522ad777151db2 *src/vctrs-core.h
 360e7d65d40dabcf1f3181ddba200843 *src/vctrs.h
-1726deeba66a3dfa57157e22fc968396 *src/version.c
+770025a9c0a03ee98dfa3e896d8dbbdc *src/version.c
 8ed8f6a8bd8f35f801d615323a1830a6 *tests/testthat.R
 3eb8556a629a4ffae1eb59b4fcd143bc *tests/testthat/_snaps/assert.md
 d1b8e10db72f4fa7acc9e9a28663572a *tests/testthat/_snaps/bind.md
@@ -564,7 +564,7 @@ f6d1a19c960c09ea8353bc391ed0712d *tests/testthat/test-ptype-abbr-full.R
 240acbbf684c59e1be0a64cb362ecea2 *tests/testthat/test-s4.R
 a1284c1c014465bf31c2a0aef958e1b9 *tests/testthat/test-shape.R
 9a392de979d068fd3f45412952abf149 *tests/testthat/test-size.R
-ed28364fed6232f3fa70004d910eb65a *tests/testthat/test-slice-assign.R
+817876d8c5396a95cbbadd4616976298 *tests/testthat/test-slice-assign.R
 49ff54f09a1960fd0f0eada1aae6c2c4 *tests/testthat/test-slice-chop.R
 67da07de8d4f61664ecc036bd805ec3e *tests/testthat/test-slice-interleave.R
 34d4ec00e420a360741eb468b2b2afb7 *tests/testthat/test-slice.R
@@ -576,7 +576,7 @@ b4088244c50a2bc053c95a872351fd46 *tests/testthat/test-subscript.R
 6c09f9d38bdca5a3ae2f3bc4a00e6717 *tests/testthat/test-type-bare.R
 cc7667e6cc84fe07e7a11d7599b181a5 *tests/testthat/test-type-data-frame.R
 0b9a4018ea47f41170eeafdf7d11212d *tests/testthat/test-type-date-time.R
-9d417fd255b0aae8451e71e7f565997b *tests/testthat/test-type-dplyr.R
+96ce90b3dccf9e644e40b964191ec6a7 *tests/testthat/test-type-dplyr.R
 aedac30767993b9ecbb775b1f77d8f64 *tests/testthat/test-type-factor.R
 bc45b95977f5b48fa8e12f35eaecf1a7 *tests/testthat/test-type-integer64.R
 84fb9313caf4798466830052212215cc *tests/testthat/test-type-list-of.R
