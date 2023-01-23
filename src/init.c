@@ -120,9 +120,9 @@ extern r_obj* ffi_cast_dispatch_native(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r
 extern SEXP vctrs_fast_c(SEXP, SEXP);
 extern r_obj* ffi_data_frame(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_df_list(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
-extern SEXP vctrs_identify_runs(SEXP);
-extern SEXP vctrs_locate_runs(SEXP, SEXP);
-extern SEXP vctrs_detect_runs(SEXP, SEXP);
+extern SEXP ffi_vec_detect_run_bounds(r_obj*, r_obj*);
+extern SEXP ffi_vec_locate_run_bounds(r_obj*, r_obj*);
+extern SEXP ffi_vec_identify_runs(r_obj*);
 extern SEXP vctrs_slice_complete(SEXP);
 extern SEXP vctrs_locate_complete(SEXP);
 extern SEXP vctrs_detect_complete(SEXP);
@@ -152,6 +152,11 @@ extern r_obj* ffi_as_short_length(r_obj*, r_obj*);
 extern r_obj* ffi_s3_get_method(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_list_all_size(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_list_check_all_size(r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_set_intersect(r_obj*, r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_set_difference(r_obj*, r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_set_union(r_obj*, r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_set_symmetric_difference(r_obj*, r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_expand_grid(r_obj*, r_obj*, r_obj*, r_obj*);
 
 
 // Maturing
@@ -295,9 +300,9 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_fast_c",                          (DL_FUNC) &vctrs_fast_c, 2},
   {"ffi_data_frame",                        (DL_FUNC) &ffi_data_frame, 4},
   {"ffi_df_list",                           (DL_FUNC) &ffi_df_list, 5},
-  {"vctrs_identify_runs",                   (DL_FUNC) &vctrs_identify_runs, 1},
-  {"vctrs_locate_runs",                     (DL_FUNC) &vctrs_locate_runs, 2},
-  {"vctrs_detect_runs",                     (DL_FUNC) &vctrs_detect_runs, 2},
+  {"ffi_vec_detect_run_bounds",             (DL_FUNC) &ffi_vec_detect_run_bounds, 2},
+  {"ffi_vec_locate_run_bounds",             (DL_FUNC) &ffi_vec_locate_run_bounds, 2},
+  {"ffi_vec_identify_runs",                 (DL_FUNC) &ffi_vec_identify_runs, 1},
   {"vctrs_slice_complete",                  (DL_FUNC) &vctrs_slice_complete, 1},
   {"vctrs_locate_complete",                 (DL_FUNC) &vctrs_locate_complete, 1},
   {"vctrs_detect_complete",                 (DL_FUNC) &vctrs_detect_complete, 1},
@@ -327,6 +332,11 @@ static const R_CallMethodDef CallEntries[] = {
   {"ffi_s3_get_method",                     (DL_FUNC) &ffi_s3_get_method, 3},
   {"ffi_list_all_size",                     (DL_FUNC) &ffi_list_all_size, 3},
   {"ffi_list_check_all_size",               (DL_FUNC) &ffi_list_check_all_size, 3},
+  {"ffi_vec_set_intersect",                 (DL_FUNC) &ffi_vec_set_intersect, 4},
+  {"ffi_vec_set_difference",                (DL_FUNC) &ffi_vec_set_difference, 4},
+  {"ffi_vec_set_union",                     (DL_FUNC) &ffi_vec_set_union, 4},
+  {"ffi_vec_set_symmetric_difference",      (DL_FUNC) &ffi_vec_set_symmetric_difference, 4},
+  {"ffi_vec_expand_grid",                   (DL_FUNC) &ffi_vec_expand_grid, 4},
   {"ffi_exp_vec_cast",                      (DL_FUNC) &exp_vec_cast, 2},
   {NULL, NULL, 0}
 };
