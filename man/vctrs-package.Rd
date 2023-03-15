@@ -22,18 +22,18 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Lionel Henry \email{lionel@rstudio.com}
+\strong{Maintainer}: Davis Vaughan \email{davis@posit.co}
 
 Authors:
 \itemize{
-  \item Hadley Wickham \email{hadley@rstudio.com}
-  \item Davis Vaughan \email{davis@rstudio.com}
+  \item Hadley Wickham \email{hadley@posit.co}
+  \item Lionel Henry \email{lionel@posit.co}
 }
 
 Other contributors:
 \itemize{
   \item data.table team (Radix sort based on data.table's forder() and their contribution to R's order()) [copyright holder]
-  \item RStudio [copyright holder]
+  \item Posit Software, PBC [copyright holder, funder]
 }
 
 }

@@ -7,11 +7,14 @@ set.seed(1014)
 
 ## ----setup--------------------------------------------------------------------
 library(vctrs)
+library(rlang)
 library(zeallot)
 
 ## -----------------------------------------------------------------------------
 new_percent <- function(x = double()) {
-  vec_assert(x, double())
+  if (!is_double(x)) {
+    abort("`x` must be a double vector.")
+  }
   new_vctr(x, class = "vctrs_percent")
 }
 
@@ -132,8 +135,13 @@ as_percent.character <- function(x) {
 
 ## -----------------------------------------------------------------------------
 new_decimal <- function(x = double(), digits = 2L) {
-  vec_assert(x, ptype = double())
-  vec_assert(digits, ptype = integer(), size = 1)
+  if (!is_double(x)) {
+    abort("`x` must be a double vector.")
+  }
+  if (!is_integer(digits)) {
+    abort("`digits` must be an integer vector.")
+  }
+  vec_check_size(digits, size = 1L)
 
   new_vctr(x, digits = digits, class = "vctrs_decimal")
 }
@@ -196,8 +204,13 @@ vec_cast(c(1.5, 2, 10.5), to = integer())
 
 ## -----------------------------------------------------------------------------
 new_cached_sum <- function(x = double(), sum = 0L) {
-  vec_assert(x, ptype = double())
-  vec_assert(sum, ptype = double(), size = 1L)
+  if (!is_double(x)) {
+    abort("`x` must be a double vector.")
+  }
+  if (!is_double(sum)) {
+    abort("`sum` must be a double vector.")
+  }
+  vec_check_size(sum, size = 1L)
 
   new_vctr(x, sum = sum, class = "vctrs_cached_sum")
 }
@@ -249,8 +262,12 @@ unclass(x)[[1]] # the first component, the number of seconds
 
 ## -----------------------------------------------------------------------------
 new_rational <- function(n = integer(), d = integer()) {
-  vec_assert(n, ptype = integer())
-  vec_assert(d, ptype = integer())
+  if (!is_integer(n)) {
+    abort("`n` must be an integer vector.")
+  }
+  if (!is_integer(d)) {
+    abort("`d` must be an integer vector.")
+  }
 
   new_rcrd(list(n = n, d = d), class = "vctrs_rational")
 }
@@ -315,9 +332,16 @@ vec_c(rational(1, 2), 1L, NA)
 
 ## -----------------------------------------------------------------------------
 new_decimal2 <- function(l, r, scale = 2L) {
-  vec_assert(l, ptype = integer())
-  vec_assert(r, ptype = integer())
-  vec_assert(scale, ptype = integer(), size = 1L)
+  if (!is_integer(l)) {
+    abort("`l` must be an integer vector.")
+  }
+  if (!is_integer(r)) {
+    abort("`r` must be an integer vector.")
+  }
+  if (!is_integer(scale)) {
+    abort("`scale` must be an integer vector.")
+  }
+  vec_check_size(scale, size = 1L)
 
   new_rcrd(list(l = l, r = r), scale = scale, class = "vctrs_decimal2")
 }
@@ -428,7 +452,7 @@ p[2]
 p[[2]]
 
 ## -----------------------------------------------------------------------------
-vec_is_list(p)
+obj_is_list(p)
 
 ## -----------------------------------------------------------------------------
 poly <- function(...) {
@@ -445,7 +469,7 @@ p <- poly(1, c(1, 0, 0, 0, 2), c(1, 0, 1))
 p
 
 ## -----------------------------------------------------------------------------
-vec_is_list(p)
+obj_is_list(p)
 
 ## -----------------------------------------------------------------------------
 p[[2]]
@@ -597,7 +621,9 @@ vec_arith.vctrs_meter.MISSING <- function(op, x, y, ...) {
 
 ## -----------------------------------------------------------------------------
 new_percent <- function(x = double()) {
-  vec_assert(x, double())
+  if (!is_double(x)) {
+    abort("`x` must be a double vector.")
+  }
   new_vctr(x, class = "pizza_percent")
 }
 

@@ -256,13 +256,6 @@ SEXP r_new_list(R_len_t n) {
   return Rf_allocVector(VECSXP, n);
 }
 
-static inline
-SEXP r_new_environment(SEXP parent) {
-  SEXP env = Rf_allocSExp(ENVSXP);
-  SET_ENCLOS(env, parent);
-  return env;
-}
-
 SEXP r_protect(SEXP x);
 bool r_is_number(SEXP x);
 bool r_is_positive_number(SEXP x);
@@ -445,8 +438,10 @@ extern SEXP chrs_asc;
 extern SEXP chrs_desc;
 extern SEXP chrs_largest;
 extern SEXP chrs_smallest;
+extern SEXP chrs_which;
 
 extern SEXP syms_i;
+extern SEXP syms_j;
 extern SEXP syms_n;
 extern SEXP syms_x;
 extern SEXP syms_y;
@@ -496,6 +491,10 @@ extern SEXP syms_stop_matches_remaining;
 extern SEXP syms_stop_matches_incomplete;
 extern SEXP syms_stop_matches_multiple;
 extern SEXP syms_warn_matches_multiple;
+extern SEXP syms_stop_matches_relationship_one_to_one;
+extern SEXP syms_stop_matches_relationship_one_to_many;
+extern SEXP syms_stop_matches_relationship_many_to_one;
+extern SEXP syms_warn_matches_relationship_many_to_many;
 extern SEXP syms_action;
 extern SEXP syms_vctrs_common_class_fallback;
 extern SEXP syms_fallback_class;
@@ -506,6 +505,7 @@ extern SEXP syms_actual;
 extern SEXP syms_required;
 extern SEXP syms_call;
 extern SEXP syms_dot_call;
+extern SEXP syms_which;
 
 static const char * const c_strs_vctrs_common_class_fallback = "vctrs:::common_class_fallback";
 

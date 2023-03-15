@@ -40,7 +40,9 @@ extern SEXP vctrs_dim(SEXP);
 extern SEXP vctrs_dim_n(SEXP);
 extern SEXP vctrs_is_unspecified(SEXP);
 extern SEXP vctrs_typeof(SEXP, SEXP);
-extern SEXP vctrs_is_vector(SEXP);
+extern r_obj* ffi_obj_is_vector(r_obj*);
+extern r_obj* ffi_obj_check_vector(r_obj*, r_obj*);
+extern r_obj* ffi_vec_check_size(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_ptype2(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_typeof2(r_obj*, r_obj*);
 extern r_obj* ffi_typeof2_s3(r_obj*, r_obj*);
@@ -48,9 +50,9 @@ extern r_obj* ffi_cast(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_as_location(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_slice(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_init(r_obj*, r_obj*, r_obj*);
-extern SEXP vctrs_chop(SEXP, SEXP);
+extern r_obj* ffi_vec_chop(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_list_unchop(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
-extern SEXP vctrs_chop_seq(SEXP, SEXP, SEXP, SEXP);
+extern r_obj* ffi_vec_chop_seq(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_slice_seq(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_slice_rep(r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_vec_restore(r_obj*, r_obj*);
@@ -90,7 +92,7 @@ extern SEXP vctrs_validate_name_repair_arg(SEXP);
 extern SEXP vctrs_validate_minimal_names(SEXP, SEXP);
 extern r_obj* ffi_vec_as_names(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_is_partial(r_obj*);
-extern SEXP vctrs_is_list(SEXP);
+extern r_obj* ffi_obj_is_list(r_obj*);
 extern SEXP vctrs_try_catch_callback(SEXP, SEXP);
 extern r_obj* ffi_is_coercible(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_as_subscript(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
@@ -120,9 +122,10 @@ extern r_obj* ffi_cast_dispatch_native(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r
 extern SEXP vctrs_fast_c(SEXP, SEXP);
 extern r_obj* ffi_data_frame(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_df_list(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
-extern SEXP ffi_vec_detect_run_bounds(r_obj*, r_obj*);
-extern SEXP ffi_vec_locate_run_bounds(r_obj*, r_obj*);
-extern SEXP ffi_vec_identify_runs(r_obj*);
+extern r_obj* ffi_vec_detect_run_bounds(r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_locate_run_bounds(r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_vec_identify_runs(r_obj*, r_obj*);
+extern r_obj* ffi_vec_run_sizes(r_obj*, r_obj*);
 extern SEXP vctrs_slice_complete(SEXP);
 extern SEXP vctrs_locate_complete(SEXP);
 extern SEXP vctrs_detect_complete(SEXP);
@@ -130,7 +133,7 @@ extern SEXP vctrs_normalize_encoding(SEXP);
 extern SEXP vctrs_order(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_locate_sorted_groups(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP vctrs_order_info(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-extern r_obj* ffi_vec_unrep(r_obj*);
+extern r_obj* ffi_vec_unrep(r_obj*, r_obj*);
 extern SEXP vctrs_fill_missing(SEXP, SEXP, SEXP);
 extern r_obj* ffi_chr_paste_prefix(r_obj*, r_obj*, r_obj*);
 extern r_obj* vctrs_rank(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
@@ -140,7 +143,7 @@ extern r_obj* vctrs_list_drop_empty(r_obj*);
 extern r_obj* vctrs_is_altrep(r_obj* x);
 extern r_obj* ffi_interleave_indices(r_obj*, r_obj*);
 extern r_obj* ffi_compute_nesting_container_info(r_obj*, r_obj*);
-extern r_obj* ffi_locate_matches(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
+extern r_obj* ffi_locate_matches(r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_interval_groups(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_interval_locate_groups(r_obj*, r_obj*, r_obj*, r_obj*);
 extern r_obj* ffi_interval_complement(r_obj*, r_obj*, r_obj*, r_obj*);
@@ -161,7 +164,7 @@ extern r_obj* ffi_vec_expand_grid(r_obj*, r_obj*, r_obj*, r_obj*);
 
 // Maturing
 // In the public header
-extern bool vec_is_vector(SEXP);
+extern bool obj_is_vector(SEXP);
 extern R_len_t short_vec_size(SEXP);
 extern SEXP short_vec_recycle(SEXP, R_len_t);
 
@@ -216,7 +219,9 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_in",                              (DL_FUNC) &vctrs_in, 4},
   {"vctrs_typeof",                          (DL_FUNC) &vctrs_typeof, 2},
   {"vctrs_init_library",                    (DL_FUNC) &vctrs_init_library, 1},
-  {"vctrs_is_vector",                       (DL_FUNC) &vctrs_is_vector, 1},
+  {"ffi_obj_is_vector",                     (DL_FUNC) &ffi_obj_is_vector, 1},
+  {"ffi_obj_check_vector",                  (DL_FUNC) &ffi_obj_check_vector, 2},
+  {"ffi_vec_check_size",                    (DL_FUNC) &ffi_vec_check_size, 3},
   {"ffi_ptype2",                            (DL_FUNC) &ffi_ptype2, 3},
   {"ffi_typeof2",                           (DL_FUNC) &ffi_typeof2, 2},
   {"ffi_typeof2_s3",                        (DL_FUNC) &ffi_typeof2_s3, 2},
@@ -224,9 +229,9 @@ static const R_CallMethodDef CallEntries[] = {
   {"ffi_as_location",                       (DL_FUNC) &ffi_as_location, 8},
   {"ffi_slice",                             (DL_FUNC) &ffi_slice, 3},
   {"ffi_init",                              (DL_FUNC) &ffi_init, 3},
-  {"vctrs_chop",                            (DL_FUNC) &vctrs_chop, 2},
+  {"ffi_vec_chop",                          (DL_FUNC) &ffi_vec_chop, 3},
   {"ffi_list_unchop",                       (DL_FUNC) &ffi_list_unchop, 6},
-  {"vctrs_chop_seq",                        (DL_FUNC) &vctrs_chop_seq, 4},
+  {"ffi_vec_chop_seq",                      (DL_FUNC) &ffi_vec_chop_seq, 4},
   {"ffi_slice_seq",                         (DL_FUNC) &ffi_slice_seq, 4},
   {"ffi_slice_rep",                         (DL_FUNC) &ffi_slice_rep, 3},
   {"ffi_vec_restore",                       (DL_FUNC) &ffi_vec_restore, 2},
@@ -270,7 +275,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_validate_minimal_names",          (DL_FUNC) &vctrs_validate_minimal_names, 2},
   {"ffi_vec_as_names",                      (DL_FUNC) &ffi_vec_as_names, 4},
   {"ffi_is_partial",                        (DL_FUNC) &ffi_is_partial, 1},
-  {"vctrs_is_list",                         (DL_FUNC) &vctrs_is_list, 1},
+  {"ffi_obj_is_list",                       (DL_FUNC) &ffi_obj_is_list, 1},
   {"vctrs_try_catch_callback",              (DL_FUNC) &vctrs_try_catch_callback, 2},
   {"ffi_is_coercible",                      (DL_FUNC) &ffi_is_coercible, 4},
   {"ffi_as_subscript",                      (DL_FUNC) &ffi_as_subscript, 5},
@@ -300,9 +305,10 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_fast_c",                          (DL_FUNC) &vctrs_fast_c, 2},
   {"ffi_data_frame",                        (DL_FUNC) &ffi_data_frame, 4},
   {"ffi_df_list",                           (DL_FUNC) &ffi_df_list, 5},
-  {"ffi_vec_detect_run_bounds",             (DL_FUNC) &ffi_vec_detect_run_bounds, 2},
-  {"ffi_vec_locate_run_bounds",             (DL_FUNC) &ffi_vec_locate_run_bounds, 2},
-  {"ffi_vec_identify_runs",                 (DL_FUNC) &ffi_vec_identify_runs, 1},
+  {"ffi_vec_detect_run_bounds",             (DL_FUNC) &ffi_vec_detect_run_bounds, 3},
+  {"ffi_vec_locate_run_bounds",             (DL_FUNC) &ffi_vec_locate_run_bounds, 3},
+  {"ffi_vec_identify_runs",                 (DL_FUNC) &ffi_vec_identify_runs, 2},
+  {"ffi_vec_run_sizes",                     (DL_FUNC) &ffi_vec_run_sizes, 2},
   {"vctrs_slice_complete",                  (DL_FUNC) &vctrs_slice_complete, 1},
   {"vctrs_locate_complete",                 (DL_FUNC) &vctrs_locate_complete, 1},
   {"vctrs_detect_complete",                 (DL_FUNC) &vctrs_detect_complete, 1},
@@ -310,7 +316,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_order",                           (DL_FUNC) &vctrs_order, 5},
   {"vctrs_locate_sorted_groups",            (DL_FUNC) &vctrs_locate_sorted_groups, 5},
   {"vctrs_order_info",                      (DL_FUNC) &vctrs_order_info, 6},
-  {"ffi_vec_unrep",                         (DL_FUNC) &ffi_vec_unrep, 1},
+  {"ffi_vec_unrep",                         (DL_FUNC) &ffi_vec_unrep, 2},
   {"vctrs_fill_missing",                    (DL_FUNC) &vctrs_fill_missing, 3},
   {"ffi_chr_paste_prefix",                  (DL_FUNC) &ffi_chr_paste_prefix, 3},
   {"vctrs_rank",                            (DL_FUNC) &vctrs_rank, 7},
@@ -320,7 +326,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"vctrs_is_altrep",                       (DL_FUNC) &vctrs_is_altrep, 1},
   {"ffi_interleave_indices",                (DL_FUNC) &ffi_interleave_indices, 2},
   {"ffi_compute_nesting_container_info",    (DL_FUNC) &ffi_compute_nesting_container_info, 2},
-  {"ffi_locate_matches",                    (DL_FUNC) &ffi_locate_matches, 13},
+  {"ffi_locate_matches",                    (DL_FUNC) &ffi_locate_matches, 14},
   {"ffi_interval_groups",                   (DL_FUNC) &ffi_interval_groups, 4},
   {"ffi_interval_locate_groups",            (DL_FUNC) &ffi_interval_locate_groups, 4},
   {"ffi_interval_complement",               (DL_FUNC) &ffi_interval_complement, 4},
@@ -374,9 +380,14 @@ export void R_init_vctrs(DllInfo *dll)
 
     // Maturing
     // In the public header
-    R_RegisterCCallable("vctrs", "vec_is_vector",      (DL_FUNC) &vec_is_vector);
+    R_RegisterCCallable("vctrs", "obj_is_vector",      (DL_FUNC) &obj_is_vector);
     R_RegisterCCallable("vctrs", "short_vec_size",     (DL_FUNC) &short_vec_size);
     R_RegisterCCallable("vctrs", "short_vec_recycle",  (DL_FUNC) &short_vec_recycle);
+
+    // Deprecated
+    // In the public header
+    // See `inst/include/vctrs.h` for details
+    R_RegisterCCallable("vctrs", "vec_is_vector", (DL_FUNC) &obj_is_vector);
 
     // Experimental
     // Exported but not available in the public header

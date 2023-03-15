@@ -90,11 +90,11 @@ enum vctrs_type vec_proxy_typeof(r_obj* x) {
 
 
 // [[ register() ]]
-r_obj* vctrs_is_list(r_obj* x) {
-  return r_lgl(vec_is_list(x));
+r_obj* ffi_obj_is_list(r_obj* x) {
+  return r_lgl(obj_is_list(x));
 }
 
-bool vec_is_list(r_obj* x) {
+bool obj_is_list(r_obj* x) {
   // Require `x` to be a list internally
   if (r_typeof(x) != R_TYPE_list) {
     return false;
@@ -112,12 +112,11 @@ bool vec_is_list(r_obj* x) {
   return (type == VCTRS_CLASS_list) || (type == VCTRS_CLASS_bare_asis);
 }
 
-// [[ register() ]]
-r_obj* vctrs_is_vector(r_obj* x) {
-  return r_lgl(vec_is_vector(x));
+r_obj* ffi_obj_is_vector(r_obj* x) {
+  return r_lgl(obj_is_vector(x));
 }
 
-bool vec_is_vector(r_obj* x) {
+bool obj_is_vector(r_obj* x) {
   if (x == r_null) {
     return false;
   }
@@ -128,7 +127,7 @@ bool vec_is_vector(r_obj* x) {
 
 // [[ register() ]]
 r_obj* ffi_list_all_vectors(r_obj* x, r_obj* frame) {
-  vec_check_list(x, vec_args.x, (struct r_lazy) { frame, r_null });
+  obj_check_list(x, vec_args.x, (struct r_lazy) { frame, r_null });
   return r_lgl(list_all_vectors(x));
 }
 
@@ -136,7 +135,20 @@ bool list_all_vectors(r_obj* x) {
   if (r_typeof(x) != R_TYPE_list) {
     r_stop_unexpected_type(r_typeof(x));
   }
-  return r_list_all_of(x, &vec_is_vector);
+
+  // TODO: Use `r_list_all_of(x, &obj_is_vector)` when we add it back in
+  const r_ssize size = r_length(x);
+  r_obj* const* v_x = r_list_cbegin(x);
+
+  for (r_ssize i = 0; i < size; ++i) {
+    r_obj* elt = v_x[i];
+
+    if (!obj_is_vector(elt)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 
@@ -197,12 +209,5 @@ const char* vec_type_as_str(enum vctrs_type type) {
 
 
 void vctrs_init_type_info(r_obj* ns) {
-  syms_vec_is_vector_dispatch = r_sym("vec_is_vector");
-  fns_vec_is_vector_dispatch = r_eval(syms_vec_is_vector_dispatch, ns);
+
 }
-
-static
-r_obj* syms_vec_is_vector_dispatch = NULL;
-
-static
-r_obj* fns_vec_is_vector_dispatch = NULL;

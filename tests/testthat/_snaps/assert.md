@@ -1,3 +1,27 @@
+# obj_check_vector() errors on scalars
+
+    Code
+      obj_check_vector(quote(foo))
+    Condition
+      Error:
+      ! `quote(foo)` must be a vector, not a symbol.
+
+---
+
+    Code
+      obj_check_vector(foobar())
+    Condition
+      Error:
+      ! `foobar()` must be a vector, not a <vctrs_foobar> object.
+
+# obj_check_vector() error respects `arg` and `call`
+
+    Code
+      my_check_vector(foobar())
+    Condition
+      Error in `my_check_vector()`:
+      ! `foo` must be a vector, not a <vctrs_foobar> object.
+
 # assertion failures are explained
 
     Code
@@ -188,6 +212,78 @@
       Error in `vec_assert()`:
       ! Can't convert `size` <character> to <integer>.
 
+# vec_check_size() errors on the wrong size
+
+    Code
+      vec_check_size(1:5, size = 1L)
+    Condition
+      Error:
+      ! `1:5` must have size 1, not size 5.
+
+---
+
+    Code
+      vec_check_size(1:5, size = 10L)
+    Condition
+      Error:
+      ! `1:5` must have size 10, not size 5.
+
+# vec_check_size() errors on scalars
+
+    Code
+      vec_check_size(quote(foo), size = 1L)
+    Condition
+      Error:
+      ! `quote(foo)` must be a vector, not a symbol.
+
+---
+
+    Code
+      vec_check_size(foobar(), size = 1L)
+    Condition
+      Error:
+      ! `foobar()` must be a vector, not a <vctrs_foobar> object.
+
+# vec_check_size() error respects `arg` and `call`
+
+    Code
+      my_check_size(1L, size = 5L)
+    Condition
+      Error in `my_check_size()`:
+      ! `foo` must have size 5, not size 1.
+
+---
+
+    Code
+      my_check_size(foobar(), size = 5L)
+    Condition
+      Error in `my_check_size()`:
+      ! `foo` must be a vector, not a <vctrs_foobar> object.
+
+# vec_check_size() validates `size`
+
+    Code
+      vec_check_size(1, size = "x")
+    Condition
+      Error in `vec_check_size()`:
+      ! `size` must be a scalar integer or double.
+
+---
+
+    Code
+      vec_check_size(1, size = c(1L, 2L))
+    Condition
+      Error in `vec_check_size()`:
+      ! `size` must be a scalar integer or double.
+
+---
+
+    Code
+      vec_check_size(1, size = 1.5)
+    Condition
+      Error in `vec_check_size()`:
+      ! `size` must be a whole number, not a decimal number.
+
 # list_all_vectors() works
 
     Code
@@ -197,25 +293,25 @@
       Error in `list_all_vectors()`:
       ! `x` must be a list, not an environment.
 
-# vec_check_list() works
+# obj_check_list() works
 
     Code
-      my_function <- (function(my_arg) vec_check_list(my_arg))
+      my_function <- (function(my_arg) obj_check_list(my_arg))
       (expect_error(my_function(env())))
     Output
       <error/rlang_error>
       Error in `my_function()`:
       ! `my_arg` must be a list, not an environment.
 
-# vec_check_list() uses a special error when `arg` is the empty string (#1604)
+# obj_check_list() uses a special error when `arg` is the empty string (#1604)
 
     Code
-      vec_check_list(1, arg = "")
+      obj_check_list(1, arg = "")
     Condition
       Error:
-      ! Input must be a list, not a number.
+      ! Input must be a list, not the number 1.
 
-# vec_check_list() and list_check_all_vectors() work
+# obj_check_list() and list_check_all_vectors() work
 
     Code
       my_function <- (function(my_arg) list_check_all_vectors(my_arg))
@@ -288,13 +384,13 @@
     Output
       <error/rlang_error>
       Error in `list_all_size()`:
-      ! `x` must be a list, not a number.
+      ! `x` must be a list, not the number 1.
     Code
       (expect_error(list_check_all_size(1, 2, arg = "arg", call = call("foo"))))
     Output
       <error/rlang_error>
       Error in `list_check_all_size()`:
-      ! `x` must be a list, not a number.
+      ! `x` must be a list, not the number 1.
 
 # list_all_size() and list_check_all_size() validate `size`
 

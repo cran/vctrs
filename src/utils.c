@@ -205,7 +205,7 @@ SEXP vctrs_dispatch6(SEXP fn_sym, SEXP fn,
 }
 
 static SEXP vctrs_eval_mask_n_impl(SEXP fn_sym, SEXP fn, SEXP* syms, SEXP* args, SEXP env) {
-  SEXP mask = PROTECT(r_new_environment(env));
+  SEXP mask = PROTECT(r_alloc_empty_environment(env));
 
   if (fn_sym != R_NilValue) {
     Rf_defineVar(fn_sym, fn, mask);
@@ -822,7 +822,7 @@ r_obj* list_pluck(r_obj* xs, r_ssize i) {
 SEXP compact_seq_attrib = NULL;
 
 // p[0] = Start value
-// p[1] = Sequence size. Always >= 1.
+// p[1] = Sequence size. Always >= 0.
 // p[2] = Step size to increment/decrement `start` with
 void init_compact_seq(int* p, R_len_t start, R_len_t size, bool increasing) {
   int step = increasing ? 1 : -1;
@@ -1179,23 +1179,6 @@ static SEXP new_env_call = NULL;
 static SEXP new_env__parent_node = NULL;
 static SEXP new_env__size_node = NULL;
 
-#if 0
-SEXP r_new_environment(SEXP parent, R_len_t size) {
-  parent = parent ? parent : R_EmptyEnv;
-  SETCAR(new_env__parent_node, parent);
-
-  size = size ? size : 29;
-  SETCAR(new_env__size_node, Rf_ScalarInteger(size));
-
-  SEXP env = Rf_eval(new_env_call, R_BaseEnv);
-
-  // Free for gc
-  SETCAR(new_env__parent_node, R_NilValue);
-
-  return env;
-}
-#endif
-
 // [[ include("utils.h") ]]
 SEXP r_protect(SEXP x) {
   return Rf_lang2(fns_quote, x);
@@ -1551,8 +1534,10 @@ SEXP chrs_asc = NULL;
 SEXP chrs_desc = NULL;
 SEXP chrs_largest = NULL;
 SEXP chrs_smallest = NULL;
+SEXP chrs_which = NULL;
 
 SEXP syms_i = NULL;
+SEXP syms_j = NULL;
 SEXP syms_n = NULL;
 SEXP syms_x = NULL;
 SEXP syms_y = NULL;
@@ -1604,6 +1589,10 @@ SEXP syms_stop_matches_remaining = NULL;
 SEXP syms_stop_matches_incomplete = NULL;
 SEXP syms_stop_matches_multiple = NULL;
 SEXP syms_warn_matches_multiple = NULL;
+SEXP syms_stop_matches_relationship_one_to_one = NULL;
+SEXP syms_stop_matches_relationship_one_to_many = NULL;
+SEXP syms_stop_matches_relationship_many_to_one = NULL;
+SEXP syms_warn_matches_relationship_many_to_many = NULL;
 SEXP syms_action = NULL;
 SEXP syms_vctrs_common_class_fallback = NULL;
 SEXP syms_fallback_class = NULL;
@@ -1614,6 +1603,7 @@ SEXP syms_actual = NULL;
 SEXP syms_required = NULL;
 SEXP syms_call = NULL;
 SEXP syms_dot_call = NULL;
+SEXP syms_which = NULL;
 
 SEXP fns_bracket = NULL;
 SEXP fns_quote = NULL;
@@ -1793,6 +1783,7 @@ void vctrs_init_utils(SEXP ns) {
   chrs_desc = r_new_shared_character("desc");
   chrs_largest = r_new_shared_character("largest");
   chrs_smallest = r_new_shared_character("smallest");
+  chrs_which = r_new_shared_character("which");
 
   classes_tibble = r_new_shared_vector(STRSXP, 3);
 
@@ -1826,6 +1817,7 @@ void vctrs_init_utils(SEXP ns) {
   INTEGER(vctrs_shared_zero_int)[0] = 0;
 
   syms_i = Rf_install("i");
+  syms_j = Rf_install("j");
   syms_n = Rf_install("n");
   syms_x = Rf_install("x");
   syms_y = Rf_install("y");
@@ -1878,6 +1870,10 @@ void vctrs_init_utils(SEXP ns) {
   syms_stop_matches_incomplete = Rf_install("stop_matches_incomplete");
   syms_stop_matches_multiple = Rf_install("stop_matches_multiple");
   syms_warn_matches_multiple = Rf_install("warn_matches_multiple");
+  syms_stop_matches_relationship_one_to_one = Rf_install("stop_matches_relationship_one_to_one");
+  syms_stop_matches_relationship_one_to_many = Rf_install("stop_matches_relationship_one_to_many");
+  syms_stop_matches_relationship_many_to_one = Rf_install("stop_matches_relationship_many_to_one");
+  syms_warn_matches_relationship_many_to_many = Rf_install("warn_matches_relationship_many_to_many");
   syms_action = Rf_install("action");
   syms_vctrs_common_class_fallback = Rf_install(c_strs_vctrs_common_class_fallback);
   syms_fallback_class = Rf_install("fallback_class");
@@ -1888,6 +1884,7 @@ void vctrs_init_utils(SEXP ns) {
   syms_required = Rf_install("required");
   syms_call = Rf_install("call");
   syms_dot_call = Rf_install(".call");
+  syms_which = Rf_install("which");
 
   fns_bracket = Rf_findVar(syms_bracket, R_BaseEnv);
   fns_quote = Rf_findVar(Rf_install("quote"), R_BaseEnv);
