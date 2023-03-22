@@ -1,3 +1,7 @@
+# vctrs 0.6.1
+
+* Fixed a test related to `c.sfc()` changes in sf 1.0-10 (#1817).
+
 # vctrs 0.6.0
 
 * New `vec_run_sizes()` for computing the size of each run within a vector. It
