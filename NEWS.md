@@ -1,3 +1,19 @@
+# vctrs 0.6.3
+
+* Fixed an issue where certain ALTREP row names were being materialized when
+  passed to `new_data_frame()`. We've fixed this by removing a safeguard in
+  `new_data_frame()` that performed a compatibility check when both `n` and
+  `row.names` were provided. Because this is a low level function designed for
+  performance, it is up to the caller to ensure these inputs are compatible
+  (tidyverse/dplyr#6596).
+
+* Fixed an issue where `vec_set_*()` used with data frames could accidentally
+  return an object with the type of the proxy rather than the type of the
+  original inputs (#1837).
+
+* Fixed a rare `vec_locate_matches()` bug that could occur when using a max/min
+  `filter` (tidyverse/dplyr#6835).
+
 # vctrs 0.6.2
 
 * Fixed conditional S3 registration to avoid a CRAN check NOTE that appears in

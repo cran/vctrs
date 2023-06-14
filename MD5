@@ -1,9 +1,10 @@
-51869465b64b7e497d2ca25a6c4d3f4f *DESCRIPTION
+76abd277709715e8c8a306c559d859f0 *DESCRIPTION
 bb38d60fdc799f700b0f8537f9fc4110 *LICENSE
 26e8ea3522f7f470d41408ce931449af *LICENSE.note
 b29d26a3acc8fc3be7b570b00281774d *NAMESPACE
-0cef81c787901b96b143dada90716be7 *NEWS.md
+037d069876c879d15cb47a7921d4ad2e *NEWS.md
 aa8a25ae369276c1dab0b1a900b9365e *R/aaa.R
+0bbbaba064d71671123f99018084f9de *R/altrep-lazy-character.R
 d0e98a3acb7a27924a7fac1435a02047 *R/altrep.R
 5fa87a23bec0d23042ba59613fa1f61d *R/arith.R
 91e62177e2ced57ecea18e239635266b *R/assert.R
@@ -58,7 +59,7 @@ b47bc675e9f5c42c22e52843f3da1f62 *R/subscript.R
 8df766ac76d37fb6d47979756441c6de *R/translate.R
 ee6f53133e7f63ffad088a9fa70fd20a *R/type-asis.R
 0a988558ff6cdce41f6addf188133df5 *R/type-bare.R
-54e66bb8e86f8c44563310a30e78f6d1 *R/type-data-frame.R
+196f4bf75e1e006210dff8bbb72bf777 *R/type-data-frame.R
 ebec573d77d615cc3f6e262791a89960 *R/type-data-table.R
 da512af73114614d1311a0998fc10be1 *R/type-date-time.R
 6c5b781dd535f55c378c80a90c6fb0ef *R/type-dplyr.R
@@ -92,7 +93,7 @@ a4ea10221c80d1855953ac3c4f083fc2 *inst/doc/s3-vector.Rmd
 1da2a558a99b8550680fb8069956164f *inst/doc/s3-vector.html
 deaacd36df590ff4a3d0f535bd24e3dc *inst/doc/stability.R
 4839ddd2a359470622d6edcca6c49edf *inst/doc/stability.Rmd
-1a2ce62587abc579567c3b2daa95fd3f *inst/doc/stability.html
+2259cf636078d369305865f5b4956e1c *inst/doc/stability.html
 0352c1b2b6bfe4ec421cc38492b8ec6b *inst/doc/type-size.R
 72c63cb0dd9c179724530995e4cdf7f1 *inst/doc/type-size.Rmd
 907f82944fa0d02d6f02df63630f3e79 *inst/doc/type-size.html
@@ -148,7 +149,7 @@ adb03fe5026bdbf0027002f12f8792d5 *man/int64.Rd
 96052f38ddd3ccff3dd2e6b657aedeae *man/maybe_lossy_cast.Rd
 135c38fc7e19016453eafc6f609a052a *man/missing.Rd
 51cc0cbcd6d2dddb05f661f82320cc71 *man/name_spec.Rd
-8fad77609cc985ea0f0502759e5001b8 *man/new_data_frame.Rd
+af444cb8c20bd85d2ee2877ae42a65ce *man/new_data_frame.Rd
 96a6f14e3014f3b7e3e9db90d0516fc4 *man/new_date.Rd
 75dcc37c27e47ab214a3fb275e49365a *man/new_factor.Rd
 4b83a08a6ed1055066d2860e552b8b46 *man/new_list_of.Rd
@@ -224,6 +225,7 @@ fbfda16f107405d27db7c4183f77823b *man/vec_unchop.Rd
 47ace24cf648d9009dd6a38895bf1224 *man/vector-checks.Rd
 f8599455b26f57973390aed0fcece3e4 *man/vector_recycling_rules.Rd
 1ac3ccfefdee618d4e30507fd0e26932 *src/Makevars
+623f395690c6470bb705b34c358b4038 *src/altrep-lazy-character.c
 8ad6a265b2d872f5146f399387e01c05 *src/altrep-rle.c
 c5b1a3e04c67fd31fdfd169c66b17047 *src/altrep-rle.h
 90da5d638848476a43c1fae8c367202e *src/altrep.c
@@ -288,7 +290,7 @@ fa32dd09cfed1e5108349d6abca484ac *src/decl/slice-chop-decl.h
 e6acffa66af158b07f1539bb5b475189 *src/decl/slice-interleave-decl.h
 433555dc73a06e3feee90942b96007c3 *src/decl/subscript-decl.h
 1c4e53904d5ed995cae8864bfb363c24 *src/decl/subscript-loc-decl.h
-f6f58422f13d152452f7fff32fcc3710 *src/decl/type-data-frame-decl.h
+a533376e96a5d92d10dbde4ca664b6b3 *src/decl/type-data-frame-decl.h
 f68cd5eba5e27490973538366080e5f4 *src/decl/type-info-decl.h
 7680470962f71a166726dcd0f737fc25 *src/decl/type-integer64-decl.h
 373619649f37a04eca81cd284b208c85 *src/decl/typeof2-s3-decl.h
@@ -310,13 +312,13 @@ ed38937cc81ce53e8b8da52e62778d5e *src/globals.c
 32b9453f80cb11322c6d39586d5483d6 *src/growable.c
 048b74ac43be2e6c2fe16fc02ab9302e *src/hash.c
 4604e7db87456d74586450eef43c6ff6 *src/hash.h
-31fd74781552dd0918384cb79f0bfc6d *src/init.c
+7806a9b1faf2e477e109c1d03d35a24e *src/init.c
 61595259254e2ddd646234670fb1fecc *src/interval.c
 3b257e25e40f98525eb76dbb7a1b3bd9 *src/lazy.h
 60e3f13f2150fcd5e6ef005b19da59d9 *src/match-compare.h
 63143432d5951a31b85f7e121a0eeaf5 *src/match-joint.c
 3c3253e8f0505f5fbebf757fd4029abe *src/match-joint.h
-b510b93788e8774929d1c6035f69226d *src/match.c
+bfe410751c411253c2e5088d845b9d73 *src/match.c
 f2b1208dbea45d1a9399e378f85ae1cf *src/missing.c
 b42039098e67e5741f5c9405a543506b *src/missing.h
 2fe7fef1f1c9bc68b033d6e74afced21 *src/names.c
@@ -336,7 +338,7 @@ d1692ccd4f7ead763ee37cd314d64e16 *src/owned.h
 4b410e5028e060a372e23694ec0d4731 *src/poly-op.h
 8cb351004bc46087dbcdb7f5a9ee6aad *src/proxy-restore.c
 eb97b901a499fa9a94ffe1377c40e369 *src/proxy-restore.h
-c89f55fbf522ccf5b1d6d34b9227610a *src/proxy.c
+6e1409609f8496a7221e44571e247532 *src/proxy.c
 17d8d3155bcf4dbb6b3d800bd35b65b4 *src/proxy.h
 4150f286d20c0c7b3b2bfee768827f91 *src/ptype-common.c
 0477f638def3427bce5d6c60063d2374 *src/ptype-common.h
@@ -454,7 +456,7 @@ b04dfaae02340e9cf1992ca5588c3afe *src/strides.h
 a207b17397e8887f94851554736ec0ff *src/translate.c
 a22c51f8acb72248cd47da10a7c37b27 *src/translate.h
 d859889b2a2b4e25557d2fd205700028 *src/type-complex.h
-cb99daa3adff87a30af59fc4bee9789b *src/type-data-frame.c
+deac45deba3b5b63eafaae3b2f7e3db5 *src/type-data-frame.c
 5abc5a1bde13711cf58d81be207980dd *src/type-data-frame.h
 0839a5563c902122093eb6892dc0b677 *src/type-date-time.c
 9b0f4d12a4ca52dc2198939fcbaab6c8 *src/type-factor.c
@@ -477,7 +479,7 @@ f0cad8b72a42ea05f555e1f2a6ad2f82 *src/typeof2.h
 46297f9703f668d9b1522ad777151db2 *src/vctrs-core.h
 92c0cd678d2d54b5e3936653f4153b93 *src/vctrs.h
 bae3061fb0a426f520601485ffdafba6 *src/vec-bool.h
-87a1e50e1b9898f23123dac25da97008 *src/version.c
+1b7760bd70ec4bcc11c4a0e736fdc440 *src/version.c
 8ed8f6a8bd8f35f801d615323a1830a6 *tests/testthat.R
 6b203eef9d423c321c3b4c42fae12d76 *tests/testthat/_snaps/assert.md
 d1b8e10db72f4fa7acc9e9a28663572a *tests/testthat/_snaps/bind.md
@@ -493,7 +495,7 @@ a0186d4baa38fb882db2c8107b3fc6b7 *tests/testthat/_snaps/error-call.md
 3e9f1f3efa867cf57cbfd59d80985427 *tests/testthat/_snaps/hash.md
 3244f798510f053b0c0253ef3baa7c73 *tests/testthat/_snaps/interval.md
 5eb46ec1f853d51dd0232bc6731941ed *tests/testthat/_snaps/lifecycle-deprecated.md
-63dc0a4ccb5aa1caf78a46bfc82bccda *tests/testthat/_snaps/match.md
+a3306964833a393435d53460b340fab2 *tests/testthat/_snaps/match.md
 3c2be4ef8e796d64260b595a5f85ff22 *tests/testthat/_snaps/names.md
 376e5c53749aabd269289e8470b4dddd *tests/testthat/_snaps/order.md
 c1c42a5bc8b55f7fb15079756893faba *tests/testthat/_snaps/partial-factor.md
@@ -566,7 +568,7 @@ bd48cd5bcd6b514e65ee591d83638329 *tests/testthat/test-fill.R
 1a56091941b82c85ad0eceffd903253e *tests/testthat/test-hash.R
 82221732b8a1647127363b10c8d912c9 *tests/testthat/test-interval.R
 63e526afb54d81d35ea6d175692b6d8f *tests/testthat/test-lifecycle-deprecated.R
-ae573a11446b7d7e90dbceb1270920c9 *tests/testthat/test-match.R
+3a380d44f02f9c483289743c15fe7f5e *tests/testthat/test-match.R
 14f9a4218e41e303dd2c826c138763ca *tests/testthat/test-missing.R
 64fbe5396f2e56767923df38e953eff3 *tests/testthat/test-names.R
 541f1c45078a15297914c37fbeeeaa0e *tests/testthat/test-order.R
@@ -581,7 +583,7 @@ f6d1a19c960c09ea8353bc391ed0712d *tests/testthat/test-ptype-abbr-full.R
 cd3fafb9f7c74eab2477b6bd83a17779 *tests/testthat/test-rep.R
 3034696516dfa719dc9b5fb538971de7 *tests/testthat/test-runs.R
 240acbbf684c59e1be0a64cb362ecea2 *tests/testthat/test-s4.R
-6bdd85de01648c22fabf0d2a21d3ce4c *tests/testthat/test-set.R
+401fd12bdb3e7d26099ccfbc45bf8819 *tests/testthat/test-set.R
 a1284c1c014465bf31c2a0aef958e1b9 *tests/testthat/test-shape.R
 9a392de979d068fd3f45412952abf149 *tests/testthat/test-size.R
 817876d8c5396a95cbbadd4616976298 *tests/testthat/test-slice-assign.R
@@ -594,7 +596,7 @@ b4088244c50a2bc053c95a872351fd46 *tests/testthat/test-subscript.R
 8eaae25fb4ec6dbb832ddb714a3d2636 *tests/testthat/test-translate.R
 6cadf712fbe378068dca8f15edd8edc1 *tests/testthat/test-type-asis.R
 d0096610954933a1802fece670879b63 *tests/testthat/test-type-bare.R
-cc7667e6cc84fe07e7a11d7599b181a5 *tests/testthat/test-type-data-frame.R
+5fee6cb3a9b7069a2b0c28b2f286ca6e *tests/testthat/test-type-data-frame.R
 051c2a8ab161e9f2ded850a1331e5275 *tests/testthat/test-type-data-table.R
 0b9a4018ea47f41170eeafdf7d11212d *tests/testthat/test-type-date-time.R
 96ce90b3dccf9e644e40b964191ec6a7 *tests/testthat/test-type-dplyr.R
