@@ -386,7 +386,7 @@ custom equality method.</p></li>
 <li><p>Meter: a numeric vector with meter units. This is the simplest
 possible class with interesting algebraic properties.</p></li>
 <li><p>Period and frequency: a pair of classes represent a period, or
-it’s inverse, frequency. This allows us to explore more arithmetic
+its inverse, frequency. This allows us to explore more arithmetic
 operators.</p></li>
 </ul>
 <div id="basics" class="section level2">
@@ -700,21 +700,21 @@ integer vector of length 1).</p>
 user-friendly constructor, a <code>format()</code> method, and a
 <code>vec_ptype_abbr()</code>. Note that additional object attributes
 are simply passed along to <code>new_vctr()</code>:</p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a>new_decimal <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">x =</span> <span class="fu">double</span>(), <span class="at">digits =</span> 2L) {</span>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a>new_decimal <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">x =</span> <span class="fu">double</span>(), <span class="at">digits =</span> <span class="dv">2</span><span class="dt">L</span>) {</span>
 <span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is_double</span>(x)) {</span>
 <span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a>    <span class="fu">abort</span>(<span class="st">&quot;`x` must be a double vector.&quot;</span>)</span>
 <span id="cb22-4"><a href="#cb22-4" tabindex="-1"></a>  }</span>
 <span id="cb22-5"><a href="#cb22-5" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is_integer</span>(digits)) {</span>
 <span id="cb22-6"><a href="#cb22-6" tabindex="-1"></a>    <span class="fu">abort</span>(<span class="st">&quot;`digits` must be an integer vector.&quot;</span>)</span>
 <span id="cb22-7"><a href="#cb22-7" tabindex="-1"></a>  }</span>
-<span id="cb22-8"><a href="#cb22-8" tabindex="-1"></a>  <span class="fu">vec_check_size</span>(digits, <span class="at">size =</span> 1L)</span>
+<span id="cb22-8"><a href="#cb22-8" tabindex="-1"></a>  <span class="fu">vec_check_size</span>(digits, <span class="at">size =</span> <span class="dv">1</span><span class="dt">L</span>)</span>
 <span id="cb22-9"><a href="#cb22-9" tabindex="-1"></a></span>
 <span id="cb22-10"><a href="#cb22-10" tabindex="-1"></a>  <span class="fu">new_vctr</span>(x, <span class="at">digits =</span> digits, <span class="at">class =</span> <span class="st">&quot;vctrs_decimal&quot;</span>)</span>
 <span id="cb22-11"><a href="#cb22-11" tabindex="-1"></a>}</span>
 <span id="cb22-12"><a href="#cb22-12" tabindex="-1"></a></span>
-<span id="cb22-13"><a href="#cb22-13" tabindex="-1"></a>decimal <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">x =</span> <span class="fu">double</span>(), <span class="at">digits =</span> 2L) {</span>
+<span id="cb22-13"><a href="#cb22-13" tabindex="-1"></a>decimal <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">x =</span> <span class="fu">double</span>(), <span class="at">digits =</span> <span class="dv">2</span><span class="dt">L</span>) {</span>
 <span id="cb22-14"><a href="#cb22-14" tabindex="-1"></a>  x <span class="ot">&lt;-</span> <span class="fu">vec_cast</span>(x, <span class="fu">double</span>())</span>
-<span id="cb22-15"><a href="#cb22-15" tabindex="-1"></a>  digits <span class="ot">&lt;-</span> <span class="fu">vec_recycle</span>(<span class="fu">vec_cast</span>(digits, <span class="fu">integer</span>()), 1L)</span>
+<span id="cb22-15"><a href="#cb22-15" tabindex="-1"></a>  digits <span class="ot">&lt;-</span> <span class="fu">vec_recycle</span>(<span class="fu">vec_cast</span>(digits, <span class="fu">integer</span>()), <span class="dv">1</span><span class="dt">L</span>)</span>
 <span id="cb22-16"><a href="#cb22-16" tabindex="-1"></a></span>
 <span id="cb22-17"><a href="#cb22-17" tabindex="-1"></a>  <span class="fu">new_decimal</span>(x, <span class="at">digits =</span> digits)</span>
 <span id="cb22-18"><a href="#cb22-18" tabindex="-1"></a>}</span>
@@ -729,7 +729,7 @@ are simply passed along to <code>new_vctr()</code>:</p>
 <span id="cb22-27"><a href="#cb22-27" tabindex="-1"></a>  <span class="st">&quot;dec&quot;</span></span>
 <span id="cb22-28"><a href="#cb22-28" tabindex="-1"></a>}</span>
 <span id="cb22-29"><a href="#cb22-29" tabindex="-1"></a></span>
-<span id="cb22-30"><a href="#cb22-30" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">decimal</span>(<span class="fu">runif</span>(<span class="dv">10</span>), 1L)</span>
+<span id="cb22-30"><a href="#cb22-30" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">decimal</span>(<span class="fu">runif</span>(<span class="dv">10</span>), <span class="dv">1</span><span class="dt">L</span>)</span>
 <span id="cb22-31"><a href="#cb22-31" tabindex="-1"></a>x</span>
 <span id="cb22-32"><a href="#cb22-32" tabindex="-1"></a><span class="co">#&gt; &lt;vctrs_decimal[10]&gt;</span></span>
 <span id="cb22-33"><a href="#cb22-33" tabindex="-1"></a><span class="co">#&gt;  [1] 0.1 0.8 0.6 0.2 0.0 0.5 0.5 0.3 0.7 0.8</span></span></code></pre></div>
@@ -805,14 +805,14 @@ integers without losing resolution.</p>
 attributes. To explore this idea we’ll create a vector that caches the
 sum of its values. As usual, we start with low-level and user-friendly
 constructors:</p>
-<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a>new_cached_sum <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">x =</span> <span class="fu">double</span>(), <span class="at">sum =</span> 0L) {</span>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a>new_cached_sum <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">x =</span> <span class="fu">double</span>(), <span class="at">sum =</span> <span class="dv">0</span><span class="dt">L</span>) {</span>
 <span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is_double</span>(x)) {</span>
 <span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a>    <span class="fu">abort</span>(<span class="st">&quot;`x` must be a double vector.&quot;</span>)</span>
 <span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a>  }</span>
 <span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is_double</span>(sum)) {</span>
 <span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a>    <span class="fu">abort</span>(<span class="st">&quot;`sum` must be a double vector.&quot;</span>)</span>
 <span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a>  }</span>
-<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a>  <span class="fu">vec_check_size</span>(sum, <span class="at">size =</span> 1L)</span>
+<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a>  <span class="fu">vec_check_size</span>(sum, <span class="at">size =</span> <span class="dv">1</span><span class="dt">L</span>)</span>
 <span id="cb28-9"><a href="#cb28-9" tabindex="-1"></a></span>
 <span id="cb28-10"><a href="#cb28-10" tabindex="-1"></a>  <span class="fu">new_vctr</span>(x, <span class="at">sum =</span> sum, <span class="at">class =</span> <span class="st">&quot;vctrs_cached_sum&quot;</span>)</span>
 <span id="cb28-11"><a href="#cb28-11" tabindex="-1"></a>}</span>
@@ -1014,7 +1014,7 @@ doubles.</p>
 <span id="cb42-6"><a href="#cb42-6" tabindex="-1"></a>vec_cast.double.vctrs_rational <span class="ot">&lt;-</span> <span class="cf">function</span>(x, to, ...) <span class="fu">field</span>(x, <span class="st">&quot;n&quot;</span>) <span class="sc">/</span> <span class="fu">field</span>(x, <span class="st">&quot;d&quot;</span>)</span>
 <span id="cb42-7"><a href="#cb42-7" tabindex="-1"></a>vec_cast.vctrs_rational.integer <span class="ot">&lt;-</span> <span class="cf">function</span>(x, to, ...) <span class="fu">rational</span>(x, <span class="dv">1</span>)</span>
 <span id="cb42-8"><a href="#cb42-8" tabindex="-1"></a></span>
-<span id="cb42-9"><a href="#cb42-9" tabindex="-1"></a><span class="fu">vec_c</span>(<span class="fu">rational</span>(<span class="dv">1</span>, <span class="dv">2</span>), 1L, <span class="cn">NA</span>)</span>
+<span id="cb42-9"><a href="#cb42-9" tabindex="-1"></a><span class="fu">vec_c</span>(<span class="fu">rational</span>(<span class="dv">1</span>, <span class="dv">2</span>), <span class="dv">1</span><span class="dt">L</span>, <span class="cn">NA</span>)</span>
 <span id="cb42-10"><a href="#cb42-10" tabindex="-1"></a><span class="co">#&gt; &lt;rational[3]&gt;</span></span>
 <span id="cb42-11"><a href="#cb42-11" tabindex="-1"></a><span class="co">#&gt; [1] 1/2  1/1  &lt;NA&gt;</span></span></code></pre></div>
 </div>
@@ -1030,7 +1030,7 @@ integers, one for the value to the left of the decimal point, and the
 other for the value to the right (divided by a <code>scale</code>). The
 following code is a very quick sketch of how you might start creating
 such a class:</p>
-<div class="sourceCode" id="cb43"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" tabindex="-1"></a>new_decimal2 <span class="ot">&lt;-</span> <span class="cf">function</span>(l, r, <span class="at">scale =</span> 2L) {</span>
+<div class="sourceCode" id="cb43"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" tabindex="-1"></a>new_decimal2 <span class="ot">&lt;-</span> <span class="cf">function</span>(l, r, <span class="at">scale =</span> <span class="dv">2</span><span class="dt">L</span>) {</span>
 <span id="cb43-2"><a href="#cb43-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is_integer</span>(l)) {</span>
 <span id="cb43-3"><a href="#cb43-3" tabindex="-1"></a>    <span class="fu">abort</span>(<span class="st">&quot;`l` must be an integer vector.&quot;</span>)</span>
 <span id="cb43-4"><a href="#cb43-4" tabindex="-1"></a>  }</span>
@@ -1040,12 +1040,12 @@ such a class:</p>
 <span id="cb43-8"><a href="#cb43-8" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is_integer</span>(scale)) {</span>
 <span id="cb43-9"><a href="#cb43-9" tabindex="-1"></a>    <span class="fu">abort</span>(<span class="st">&quot;`scale` must be an integer vector.&quot;</span>)</span>
 <span id="cb43-10"><a href="#cb43-10" tabindex="-1"></a>  }</span>
-<span id="cb43-11"><a href="#cb43-11" tabindex="-1"></a>  <span class="fu">vec_check_size</span>(scale, <span class="at">size =</span> 1L)</span>
+<span id="cb43-11"><a href="#cb43-11" tabindex="-1"></a>  <span class="fu">vec_check_size</span>(scale, <span class="at">size =</span> <span class="dv">1</span><span class="dt">L</span>)</span>
 <span id="cb43-12"><a href="#cb43-12" tabindex="-1"></a></span>
 <span id="cb43-13"><a href="#cb43-13" tabindex="-1"></a>  <span class="fu">new_rcrd</span>(<span class="fu">list</span>(<span class="at">l =</span> l, <span class="at">r =</span> r), <span class="at">scale =</span> scale, <span class="at">class =</span> <span class="st">&quot;vctrs_decimal2&quot;</span>)</span>
 <span id="cb43-14"><a href="#cb43-14" tabindex="-1"></a>}</span>
 <span id="cb43-15"><a href="#cb43-15" tabindex="-1"></a></span>
-<span id="cb43-16"><a href="#cb43-16" tabindex="-1"></a>decimal2 <span class="ot">&lt;-</span> <span class="cf">function</span>(l, r, <span class="at">scale =</span> 2L) {</span>
+<span id="cb43-16"><a href="#cb43-16" tabindex="-1"></a>decimal2 <span class="ot">&lt;-</span> <span class="cf">function</span>(l, r, <span class="at">scale =</span> <span class="dv">2</span><span class="dt">L</span>) {</span>
 <span id="cb43-17"><a href="#cb43-17" tabindex="-1"></a>  l <span class="ot">&lt;-</span> <span class="fu">vec_cast</span>(l, <span class="fu">integer</span>())</span>
 <span id="cb43-18"><a href="#cb43-18" tabindex="-1"></a>  r <span class="ot">&lt;-</span> <span class="fu">vec_cast</span>(r, <span class="fu">integer</span>())</span>
 <span id="cb43-19"><a href="#cb43-19" tabindex="-1"></a>  <span class="fu">c</span>(l, r) <span class="sc">%&lt;-%</span> <span class="fu">vec_recycle_common</span>(l, r)</span>
@@ -1220,7 +1220,7 @@ the constructor.</p>
 <span id="cb50-20"><a href="#cb50-20" tabindex="-1"></a>    } <span class="cf">else</span> {</span>
 <span id="cb50-21"><a href="#cb50-21" tabindex="-1"></a>      suffix <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">paste0</span>(<span class="st">&quot;\u22C5x^&quot;</span>, <span class="fu">seq</span>(<span class="fu">length</span>(x) <span class="sc">-</span> <span class="dv">1</span>, <span class="dv">1</span>)), <span class="st">&quot;&quot;</span>)</span>
 <span id="cb50-22"><a href="#cb50-22" tabindex="-1"></a>      out <span class="ot">&lt;-</span> <span class="fu">paste0</span>(x, suffix)</span>
-<span id="cb50-23"><a href="#cb50-23" tabindex="-1"></a>      out <span class="ot">&lt;-</span> out[x <span class="sc">!=</span> 0L]</span>
+<span id="cb50-23"><a href="#cb50-23" tabindex="-1"></a>      out <span class="ot">&lt;-</span> out[x <span class="sc">!=</span> <span class="dv">0</span><span class="dt">L</span>]</span>
 <span id="cb50-24"><a href="#cb50-24" tabindex="-1"></a>      <span class="fu">paste0</span>(out, <span class="at">collapse =</span> <span class="st">&quot; + &quot;</span>)</span>
 <span id="cb50-25"><a href="#cb50-25" tabindex="-1"></a>    }</span>
 <span id="cb50-26"><a href="#cb50-26" tabindex="-1"></a>  }</span>
@@ -1312,7 +1312,7 @@ method:</p>
 <span id="cb59-6"><a href="#cb59-6" tabindex="-1"></a>  n <span class="ot">&lt;-</span> <span class="fu">max</span>(<span class="fu">vapply</span>(x_raw, length, <span class="fu">integer</span>(<span class="dv">1</span>)))</span>
 <span id="cb59-7"><a href="#cb59-7" tabindex="-1"></a></span>
 <span id="cb59-8"><a href="#cb59-8" tabindex="-1"></a>  <span class="co"># Then expand all vectors to this length by filling in with zeros</span></span>
-<span id="cb59-9"><a href="#cb59-9" tabindex="-1"></a>  full <span class="ot">&lt;-</span> <span class="fu">lapply</span>(x_raw, <span class="cf">function</span>(x) <span class="fu">c</span>(<span class="fu">rep</span>(0L, n <span class="sc">-</span> <span class="fu">length</span>(x)), x))</span>
+<span id="cb59-9"><a href="#cb59-9" tabindex="-1"></a>  full <span class="ot">&lt;-</span> <span class="fu">lapply</span>(x_raw, <span class="cf">function</span>(x) <span class="fu">c</span>(<span class="fu">rep</span>(<span class="dv">0</span><span class="dt">L</span>, n <span class="sc">-</span> <span class="fu">length</span>(x)), x))</span>
 <span id="cb59-10"><a href="#cb59-10" tabindex="-1"></a></span>
 <span id="cb59-11"><a href="#cb59-11" tabindex="-1"></a>  <span class="co"># Then turn into a data frame</span></span>
 <span id="cb59-12"><a href="#cb59-12" tabindex="-1"></a>  <span class="fu">as.data.frame</span>(<span class="fu">do.call</span>(rbind, full))</span>
